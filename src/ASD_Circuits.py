@@ -24,10 +24,10 @@ from scipy.stats import ttest_ind
 from scipy.stats import mannwhitneyu
 from scipy.stats import binom_test
 import itertools
-import mygene
+#import mygene
 import igraph as ig
 
-plt.rcParams['figure.dpi'] = 120
+plt.rcParams['figure.dpi'] = 80
 
 ConnFil = "/Users/jiayao/Work/ASD_Circuits/dat/allen-mouse-conn/connectome-log.csv"
 MajorBrainDivisions = "/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map" 
@@ -41,7 +41,7 @@ def quantileNormalize(df_input):
     #compute rank
     dic = {}
     for col in df:
-        dic.update({col : sorted(df[col])})
+        dic.update({col : np.sort(df[col])})
     sorted_df = pd.DataFrame(dic)
     rank = sorted_df.mean(axis = 1).tolist()
     #sort
@@ -49,6 +49,16 @@ def quantileNormalize(df_input):
         t = np.searchsorted(np.sort(df[col]), df[col])
         df[col] = [rank[i] for i in t]
     return df
+
+def ZscoreConverting(values):
+    real_values = [x for x in values if x==x]
+    mean = np.mean(real_values)
+    std = np.std(real_values)
+    zscores = []
+    for x in values:
+        z = (x - mean)/std
+        zscores.append(z)
+    return np.array(zscores)
 
 def ContGeneSet(prefix, outfil, Ntrail=100):
     res = []
@@ -327,6 +337,73 @@ def QuantileAVGScoring(ExpZscoreMat, DZgenes, csv_fil="quantile.rank.tsv", alpha
         df.to_csv(csv_fil, index=False)
     return df
 
+###################################################################################################################
+# Expression Specificity Bias Simple
+###################################################################################################################
+# ExpZscoreMat: z score matrix of expression
+# DZgenes: gene set
+# RefGenes: reference gene set that sampling from, like brian expressed genes or sibling genes. 
+# Nsampling: number of samping from reference gene set. Larger the better estimation but slower
+def ZOneSTR(STR, ZscoreMat, DZgenes):
+    DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
+    DZzscore = [x for x in DZzscore if x==x]
+    return np.mean(DZzscore)
+def ZscoreAVGWithExpMatch(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    DZgenes = list(set(DZgenes).intersection(set(ExpZscoreMat.index.values)))
+    EFFECTS = []
+    EFF_Z = []
+    for i, STR in enumerate(structures):
+        mean_z = ZOneSTR(STR, ExpZscoreMat, DZgenes)
+        Match_mean_Zs = []
+        for c in Match_DF.columns:
+            match_genes = Match_DF[c].values
+            match_z = ZOneSTR(STR, ExpZscoreMat, match_genes)
+            Match_mean_Zs.append(match_z)
+        est_mean_z = np.mean(Match_mean_Zs)
+        effect_z = mean_z - est_mean_z
+        EFF_Z.append(effect_z); 
+        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
+        EFFECTS.append(ZZ)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z})
+    df = df.sort_values("EFFECT", ascending=False)
+    if csv_fil != None:
+        df.to_csv(csv_fil, index=False)
+    return df
+def ZscoreAVGWithExpMatch_SingleGene(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    STRS, data = [], []
+    for i, STR in enumerate(structures):
+        EFFECTS = []
+        Mean_Z, Match_Z = [],[]
+        for j, g in enumerate(DZgenes):
+            #print(i, j)
+            DZzscore = ExpZscoreMat.loc[g, STR]
+            Match_mean_Zs = []
+            if not DZzscore == DZzscore:
+                continue
+            for k, c in enumerate(Match_DF.columns):
+                match_gene = Match_DF.loc[g, c]
+                match_z = ExpZscoreMat.loc[match_gene, STR]
+                if not match_z == match_z:
+                        continue
+                Match_mean_Zs.append(match_z)
+            est_mean_z = np.mean(Match_mean_Zs)
+            ZZ = (DZzscore - est_mean_z) / np.std(Match_mean_Zs)
+            EFFECTS.append(ZZ)
+            if ZZ != ZZ:
+                print(STR, g, ZZ)
+        data.append(EFFECTS)
+        STRS.append(STR)
+    #df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS})
+    df = pd.DataFrame(data=data, columns=DZgenes)
+    df.index=STRS
+    return df
+
+
+###################################################################################################################
+# Expression Specificity Bias
+###################################################################################################################
 # ExpZscoreMat: z score matrix of expression
 # DZgenes: gene set
 # RefGenes: reference gene set that sampling from, like brian expressed genes or sibling genes. 
@@ -338,7 +415,7 @@ def QuantileAVGScoringWithModifiedEffectSize(ExpZscoreMat, DZgenes, RefGenes, Ns
         s
     return df
 
-def ZscoreAVGWithExpMatch(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+def ZscoreAVGWithExpMatch2(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
     structures = ExpZscoreMat.columns.values
     EFF_Z, EFF_Q = [], []
     Pval_Z, Pval_Q = [], []
@@ -371,30 +448,29 @@ def ZscoreAVGWithExpMatch(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.
     df["Match_Z"] = Match_Z
     return df
 
-def ZscoreAVGWithExpMatch_SingleGene(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+def ZscoreAVGWithExpMatch_SingleGene2(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
     structures = ExpZscoreMat.columns.values
     STRS, data = [], []
     for i, STR in enumerate(structures):
         EFFECTS = []
         Mean_Z, Match_Z = [],[]
         for j, g in enumerate(DZgenes):
-            print(i, j)
-            DZzscore, Quantiles = QuantileOneSTR(STR, ExpZscoreMat, [g])
-            mean_z, mean_q = np.mean(DZzscore), np.mean(Quantiles)
+            #print(i, j)
+            DZzscore = ExpZscoreMat.loc[g, STR]
             Match_mean_Zs = []
+            if not DZzscore == DZzscore:
+                continue
             for k, c in enumerate(Match_DF.columns):
-                try:
-                    match_genes = Match_DF.loc[g, c]
-                    match_z, match_q = QuantileOneSTR(STR, ExpZscoreMat, [match_genes])
-                    mean_match_z, mean_match_q = np.mean(match_z), np.mean(match_q)
-                    Match_mean_Zs.append(mean_match_z)
-                except:
-                    continue
+                match_gene = Match_DF.loc[g, c]
+                match_z = ExpZscoreMat.loc[match_gene, STR]
+                if not match_z == match_z:
+                        continue
+                Match_mean_Zs.append(match_z)
             est_mean_z = np.mean(Match_mean_Zs)
-            effect_z = mean_z - est_mean_z
-            Mean_Z.append(mean_z); Match_Z.append(est_mean_z)
-            ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
+            ZZ = (DZzscore - est_mean_z) / np.std(Match_mean_Zs)
             EFFECTS.append(ZZ)
+            if ZZ != ZZ:
+                print(STR, g, ZZ)
         data.append(EFFECTS)
         STRS.append(STR)
     #df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS})
@@ -402,9 +478,40 @@ def ZscoreAVGWithExpMatch_SingleGene(ExpZscoreMat, DZgenes, Match_DF, csv_fil="s
     df.index=STRS
     return df
 
-#def Frac_of_cortical( mMm4mmm4m4444szbhqjdef Frac_of_cortical()
-#        <F5>)
+###################################################################################################################
 
+###################################################################################################################
+# Expression Level Bias with Constraint
+###################################################################################################################
+def ZscoreOneSTR_Constraint(STR, ZscoreMat, DZgenes, Gene2LoFZ):
+    DZgene_Zs = ZscoreMat[STR].loc[np.array(DZgenes)].values
+    DZgene_cons = [Gene2LoFZ.get(g, 1) for g in DZgenes]
+    DZgene_Z_cons = [x*y for x,y in zip(DZgene_Zs, DZgene_cons)]
+    DZgene_Z_cons = [x for x in DZgene_Z_cons if x==x]
+    return np.mean(DZgene_Z_cons)
+
+def ZscoreAVGWithExpMatch_Constraint(ExpZscoreMat, DZgenes, Match_DF, Gene2LoFZ, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    EFFECTS = []; EFF_Z = []
+    for i, STR in enumerate(structures):
+        mean_z = ZscoreOneSTR_Constraint(STR, ExpZscoreMat, DZgenes, Gene2LoFZ)
+        Match_mean_Zs = []; 
+        for c in Match_DF.columns:
+            match_genes = Match_DF[c].values
+            match_z = ZscoreOneSTR_Constraint(STR, ExpZscoreMat, match_genes, Gene2LoFZ)
+            Match_mean_Zs.append(match_z)
+        est_mean_z = np.mean(Match_mean_Zs)
+        effect_z = mean_z - est_mean_z
+        EFF_Z.append(effect_z); 
+        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
+        EFFECTS.append(ZZ)
+        #print(i,)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z})
+    return df
+
+###################################################################################################################
+# Expression Level Bias
+###################################################################################################################
 def ExpLevelOneSTR(STR, ExpMat, DZgenes, Matchgenes):
     #exp_levels = ExpMat[STR].values
     #exp_levels = exp_levels[~np.isnan(exp_levels)]
@@ -426,7 +533,6 @@ def ExpLevelOneSTR(STR, ExpMat, DZgenes, Matchgenes):
         g_exp_level_zs.append(g_exp_level_z)
     avg_exp_level_z = np.mean(g_exp_level_zs)
     return avg_exp_level_z
-
 ## Match_DF: rows as genes, columns as trails
 def ExpAVGWithExpMatch(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
     structures = ExpMat.columns.values
@@ -436,16 +542,63 @@ def ExpAVGWithExpMatch(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
         EFFs.append(avg_exp_level_z)
     df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFs})
     df = df.sort_values("EFFECT", ascending=False)
+    df.to_csv(csv_fil, index=False)
+    return df
+
+###################################################################################################################
+# Expression Level Bias with Constraint
+###################################################################################################################
+def ExpLevelOneSTR_Constraint(STR, ExpMat, DZgenes, Matchgenes, Gene2LoFZ):
+    g_exp_level_zs = []
+    err_gen = 0
+    for i, g in enumerate(DZgenes):
+        try:
+            g_exp_level = ExpMat.loc[g, STR]
+            assert g_exp_level == g_exp_level
+            g_exp_level_cons = g_exp_level * Gene2LoFZ.get(g, 1)
+        except:
+            err_gen += 1
+            continue
+        g_matches = Matchgenes.loc[g, :].values
+        g_matches_cons = [Gene2LoFZ.get(g, 1) for g in g_matches]
+        g_matches_exps = ExpMat.loc[g_matches, STR].values
+        g_matches_exps_cons = [x*y for x,y in zip(g_matches_cons, g_matches_exps)]
+        #print(g_matches_exps_cons)
+        #g_matches_exps_cons = g_matches_exps_cons[~np.isnan(g_matches_exps_cons)]
+        g_matches_exps_cons = [x for x in g_matches_exps_cons if x==x]
+        g_exp_level_z = (g_exp_level_cons - np.mean(g_matches_exps_cons))/np.std(g_matches_exps_cons)
+        g_exp_level_zs.append(g_exp_level_z)
+    avg_exp_level_z = np.mean(g_exp_level_zs)
+    return avg_exp_level_z
+## Match_DF: rows as genes, columns as trails
+def ExpAVGWithExpMatch_Constraint(ExpMat, DZgenes, Match_DF, Gene2LoFZ, csv_fil="explevel.rank.tsv"):
+    structures = ExpMat.columns.values
+    EFFs = []
+    for i, STR in enumerate(structures):
+        avg_exp_level_z = ExpLevelOneSTR_Constraint(STR, ExpMat, DZgenes, Match_DF, Gene2LoFZ)
+        EFFs.append(avg_exp_level_z)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFs})
+    df = df.sort_values("EFFECT", ascending=False)
+    df.to_csv(csv_fil, index=False)
     return df
 
 def ExpAVGWithExpMatch_SingleGene(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
     structures = ExpMat.columns.values
     EFFs = []
     for i, STR in enumerate(structures):
-        avg_exp_level_z = ExpLevelOneSTR(STR, ExpMat, DZgenes, Match_DF)
-        EFFs.append(avg_exp_level_z)
-    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFs})
-    df = df.sort_values("EFFECT", ascending=False)
+        g_exp_str = []
+        for j, g in enumerate(DZgenes):
+            g_exp_level = ExpMat.loc[g, STR]
+            g_matches = Match_DF.loc[g, :].values
+            g_matches_exps = ExpMat.loc[g_matches, STR].values
+            g_matches_exps = g_matches_exps[~np.isnan(g_matches_exps)]
+            g_exp_level_z = (g_exp_level - np.mean(g_matches_exps))/np.std(g_matches_exps)
+            g_exp_str.append(g_exp_level_z)
+        #avg_exp_level_z = ExpLevelOneSTR(STR, ExpMat, DZgenes, Match_DF)
+        #EFFs.append(avg_exp_level_z)
+        EFFs.append(g_exp_str)
+    df = pd.DataFrame(data=EFFs, columns=DZgenes)
+    df.index = structures
     return df
 
 def QuntileAVGSelectN(BiasDF, name = "STR", plot=False):
@@ -540,12 +693,66 @@ def ExpressionMatchGeneSet(geneset, match_feature, savefil = None, interval_len 
         df.to_csv(savefil)
     return df
 
+def ExpressionMatchGeneSetwithpLI(geneset, match_feature_HIS, match_feature_HS, savefil = None, interval_len = 500, sample_size=1000): 
+    genes_to_match = [] # genes, used for giving index of final DF
+    dat = [] # To Store match genes
+    xx_genes = [] # Remove Duplicated genes in genes to match 
+    for i, gene in enumerate(geneset):
+        #try:
+        #    gene_exp = match_feature.loc[gene, "EXP"]
+        #except:
+        #    print("Unmathed:%d"%gene)
+        #    continue
+        #print(i, gene)
+        if gene in xx_genes:
+            continue
+        if gene in match_feature_HIS.index.values:
+            match_feature = match_feature_HIS
+        elif gene in match_feature_HS.index.values:
+            match_feature = match_feature_HS
+        else:
+            print(gene)
+            continue
+        genes_to_match.append(gene)
+        gene_rank = match_feature.loc[gene, "Rank"]
+        Interval = match_feature[(match_feature["Rank"] >= gene_rank - interval_len) &
+                                 (match_feature["Rank"] <= gene_rank + interval_len) & 
+                                 (~match_feature.index.isin(geneset))       ]
+        Interval_genes = Interval.index.values
+        Interval_exps = Interval["EXP"].values
+        Interval_genes_probs = assignProb(Interval_exps)
+        match_genes = np.random.choice(Interval_genes, size = sample_size, replace=True, p = Interval_genes_probs) # N(sample_size)genes that expression matching with particular gene in gene set
+        dat.append(match_genes) 
+        xx_genes.append(gene)
+    df = pd.DataFrame(data=dat, columns = [x+1 for x in range(sample_size)]) # rows are sampleing of different genes, columns are N sampling
+    df.index = genes_to_match
+    if savefil != None:
+        df.to_csv(savefil)
+    return df
+
 def write_match(gene, matches, Dir):
     if not os.path.exists(Dir):
         os.makedirs(Dir)
     writer = csv.writer(open("%s/%d.match.csv"%(Dir, gene), 'wt'))
     for match in matches:
         writer.writerow([match["GENE"]])
+
+
+def RegionDistributions(DF, topN=50):
+    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = str2reg_df.sort_values("REG")
+    str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
+    Regions = list(set(str2reg.values()))
+    RegionCount = {}
+    for region in Regions:
+        RegionCount[region] = []
+    for x in DF.head(topN).index:
+        region = str2reg[x]
+        RegionCount[region].append(x)
+    for k,v in RegionCount.items():
+        if len(v) == 0:
+            continue
+        print(k, "\t", len(v), "\t", "; ".join(v))
 
 
 #####################################################################################
@@ -587,7 +794,6 @@ def LoadConnectome2(ConnFil = ConnFil,  Bin = False):
     g = ig.Graph.Adjacency((A > 0).tolist())
     g.es['weight'] = A[A.nonzero()]
     g.vs['label'] = node_names  
-
     return g 
 
 def EdgePermutation(g, top50nodes, edge_permute_stat, Npermute=1000):
@@ -802,6 +1008,26 @@ def Cohesiveness(g, STRList, TopN=1):
         res += max_
     return res/D 
 
+def InOutCohesiveSingleNode(g, g_, STR):
+    d,d_ = 0, 0
+    for idx, v in enumerate(g.vs):
+        if v["label"] == STR:
+            d = v.degree()
+            break
+    for idx_, v_ in enumerate(g_.vs):
+        if v_["label"] == STR:
+            d_ = v_.degree()
+            break
+    return d_/d
+
+def InOutCohesiveAVG(g, g_):
+    cohesives = []
+    for v in g_.vs:
+        coh = InOutCohesiveSingleNode(g, g_, v["label"])
+        cohesives.append(coh)
+    cohesive = np.mean(cohesives)
+    return cohesive
+
 def fromSameRegion(str1, str2, STR2REG):
     return STR2REG[str1] == STR2REG[str2] 
 
@@ -859,7 +1085,6 @@ def MWU_topN_conns(case_rank, cont_rank, expMatFil, topN=50, mode="connectivity"
         cont_cohe = CohesivenessSingleNode(g, cont_top50_idx)
         return case_cohe, cont_cohe
 
-
 def ShowConn(ConnMatFil, ssc_rank, spark_rank, tada_rank, cont_rank, mode="connectivity", labels=["SSC","SPARK","TADA","SIB"]):
     slices = range(10, 255, 5)
     ssc_dat = []
@@ -910,7 +1135,8 @@ def argmax_optimize_stat(graph, complate_graph, optimize_stat="in_n_out"):
     for v in graph.vs:
         tmp_graph = graph.copy()
         tmp_graph.delete_vertices(v)
-        stat = optimize_stat_in_n_out(tmp_graph, complate_graph)
+        #stat = optimize_stat_in_n_out(tmp_graph, complate_graph)
+        stat = InOutCohesiveAVG(complate_graph, tmp_graph)
         opt_stats.append(stat)
         graphs.append(tmp_graph)
     idx = np.argmax(opt_stats)
@@ -928,6 +1154,75 @@ def CircuitTrimming(graph, complate_graph, optimize_stat="in_n_out"):
         graph_size.append(i)
     return graph_size, stats, graphs
 
+def Bias_vs_Cohesiveness(g, df, topN=50, conn="AvgCohesive", title="bias vs cohesiveness"):
+    assert conn in ["AvgCohesive", "TotalCohesive", "Top5Edges"]
+    topN_STRs = df.head(topN).index.values
+    g_ = g.subgraph(g.vs.select(label_in=topN_STRs))
+    cohesives = []
+    bias = []
+    for v in g_.vs:
+        if conn == "AvgCohesive":
+            coh = InOutCohesiveSingleNode(g, g_, v["label"])
+        elif conn == "Top5Edges":
+            coh = TopNConn(g, g_)
+        cohesives.append(coh)
+        bias.append(df.loc[v["label"], "EFFECT"])
+    #cohesive = np.mean(cohesives)
+    plt.scatter(bias, cohesives)
+    r, p = pearsonr(bias, cohesives)
+    plt.text(x = min(bias), y = max(cohesives)*0.8, s="r=%.2f, p=%.2e"%(r, p))
+    plt.title(title)
+    plt.xlabel("bias")
+    plt.ylabel("Cohesiveness")
+    plt.show()
+    return 
+
+def Agg_vs_Indv_gene_Binomial_Test_Cohesiveness(g, agg_df, indv_df, topN=50, conn="TotalCohesive"):
+    # Get P_0 from indv res
+    if conn == "TotalCohesive":
+        #cohesives = []
+        Nedge_Inside = 0
+        Nedge_Total = 0
+        for c in indv_df.columns.values:
+            dat = indv_df[c]
+            top50 = dat.sort_values(ascending=False).index[:topN]
+            g_ = g.subgraph(g.vs.select(label_in=top50))
+            d = 0
+            for v in g.vs:
+                if v["label"] in g_.vs["label"]:
+                    d += v.degree()
+            Nedge_Inside += g_.ecount()
+            Nedge_Total += d
+        P_0 = Nedge_Inside / Nedge_Total #np.mean(cohesives)
+        top50 = agg_df.head(topN).index.values
+        g_agg = g.subgraph(g.vs.select(label_in=top50))
+        n = 0
+        for v in g.vs:
+            if v["label"] in g_agg.vs["label"]:
+                n += v.degree()
+            x = g_agg.ecount()
+        p = binom_test(x, n ,P_0)
+        return p, x/n, P_0
+
+def Agg_vs_Indv_gene_PermutationLikeCohesiveness(g, agg_df, indv_df, topN=50):
+    cohesives = []
+    top50_str = agg_df.head(topN).index.values
+    g_ = g.subgraph(g.vs.select(label_in=top50_str))
+    for v in g_.vs:
+        coh = InOutCohesiveSingleNode(g, g_, v["label"])
+        cohesives.append(coh)
+    cohesive = np.mean(cohesives)
+    cohesives = []
+    for c in indv_df.columns.values:
+        dat = indv_df[c]
+        top50 = dat.sort_values(ascending=False).index[:topN]
+        g_ = g.subgraph(g.vs.select(label_in=top50))
+        cohs = []
+        for v in g_.vs:
+            coh = InOutCohesiveSingleNode(g, g_, v["label"])
+            cohs.append(coh)
+        cohesives.append(np.mean(cohs))
+    PlotPermutationP(cohesives, cohesive)
 
 #####################################################################################
 # Other Methods
