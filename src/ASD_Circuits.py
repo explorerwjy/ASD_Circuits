@@ -81,7 +81,9 @@ def WriteGeneList(genelist, filname):
         fout.write(str(int(gen)) + "\n")
 
 #####################################################################################
-# Expression Bias
+#####################################################################################
+#### Expression Bias
+#####################################################################################
 #####################################################################################
 
 def TraceSTR(df, structures, see=None):
@@ -647,7 +649,9 @@ def PlotBiasDistandP(ssc, spark, tada, sib, topN = 50, labels=["ssc", "spark", "
         print("%20s\t%.3f\t%.3f\t%.3f\t%.3e"%(labels[idx], u1, u2, (u1-u2), p))
     plt.show()
 
-#### Matching related functions
+###################################################################################################################
+# Matching genes by overal brain expression level 
+###################################################################################################################
 def TricubeKernal(u, _min, _mid, _max):
     #_u = np.clip(2*(u-_mid)/(_max - _min), 0, 1)
     _u = 2*(u-_mid)/(_max - _min)
@@ -737,7 +741,6 @@ def write_match(gene, matches, Dir):
     for match in matches:
         writer.writerow([match["GENE"]])
 
-
 def RegionDistributions(DF, topN=50):
     str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
@@ -755,8 +758,141 @@ def RegionDistributions(DF, topN=50):
         print(k, "\t", len(v), "\t", "; ".join(v))
 
 
+def RegionDistributionsList(List, topN=50):
+    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = str2reg_df.sort_values("REG")
+    str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
+    Regions = list(set(str2reg.values()))
+    RegionCount = {}
+    for region in Regions:
+        RegionCount[region] = []
+    for x in List:
+        region = str2reg[x]
+        RegionCount[region].append(x)
+    for k,v in RegionCount.items():
+        if len(v) == 0:
+            continue
+        print(k, "\t", len(v), "\t", "; ".join(v))
+
+###################################################################################################################
+# Gene Weights (impact)
+###################################################################################################################
+def ASC_Gene_Weights(MutFil, gnomad_cons, FDR=0.1):
+    MutFil = pd.read_csv(MutFil)
+    if FDR != None:
+        MutFil = MutFil[MutFil["qval_dnccPTV"]<FDR]
+    gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons = {}, {}, {}, {}, {}
+    for i, row in MutFil.iterrows():
+        g = int(row["entrez_id"])
+        gene2None[g] = 1
+        gene2RR[g] = row["LGD_RR"]*5 + row["misa_RR"]*1 + row["misb_RR"]*2    # Relative Risk is sum over LGD and Missense
+        gene2MutN[g] = row["dn.ptv"]*5 + row["dn.misa"]*1 + row["dn.misb"]*2
+        gene2Cons[g] = gnomad_cons.loc[row["gene"], "lof_z"]*5 + gnomad_cons.loc[row["gene"], "mis_z"]
+        gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
+    return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
+
+def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
+    MutFil = pd.read_csv(MutFil)
+    if FDR != None:
+        MutFil = MutFil[MutFil["Qvalue"]<FDR]
+    gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons = {}, {}, {}, {}, {} 
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["Entrez"])
+        except:
+            continue
+        gene2None[g] = 1
+        gene2RR[g] = row["LGD_RR"]*5 + row["Dmis_RR"]*1    # Relative Risk is sum over LGD and Missense
+        gene2MutN[g] = row["dnLGD"]*5 + row["dnDmis"]*1
+        try:
+            gene2Cons[g] = gnomad_cons.loc[row["HGNC"], "lof_z"]*5 + gnomad_cons.loc[row["HGNC"], "mis_z"]
+        except:
+            gene2Cons[g] = 1
+        gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
+    return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
+
+###################################################################################################################
+# Weighted Bias Calculattion
+###################################################################################################################
+# Expression Specificity
+def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights):
+    #DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
+    #DZzscore = [x for x in DZzscore if x==x]
+    res = []
+    for gene, weight in Gene2Weights.items():
+        if gene not in ExpZscoreMat.index.values:
+            continue
+        score = weight * ExpZscoreMat.loc[gene, STR]
+        if score == score:
+            res.append(score)
+    return np.mean(res)
+def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Match_DF=0, BS_Weights=False, csv_fil="AvgSTRZ.weighted.csv"):
+    STRs = ExpZscoreMat.columns.values
+    EFFECTS = []; Normed_EFFECTS = []
+    for i, STR in enumerate(STRs):
+        mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights)
+        EFFECTS.append(mean_z)
+        #if Match_DF.isinstance(Match_DF, pd.core.frame.DataFrame):
+        if type(Match_DF) != int:
+            Match_mean_Zs = [];
+            for g in Match_DF.columns:
+                match_genes = Match_DF[g].values
+                if BS_Weights:
+                    weights = np.random.choice(list(Gene2Weights.values()), len(match_genes))
+                    BS_MG2Weights = dict(zip(match_genes, weights))
+                else:
+                    BS_MG2Weights = dict(zip(match_genes, [1]*len(match_genes)))
+                match_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, BS_MG2Weights)
+                Match_mean_Zs.append(match_z)
+            match_mean_z = np.mean(Match_mean_Zs)
+            normed_effect = (mean_z - match_mean_z) / np.std(Match_mean_Zs)
+            Normed_EFFECTS.append(normed_effect) 
+    if type(Match_DF) != int:
+        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "NormedEFFECT":Normed_EFFECTS})
+    else:
+        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS})
+    df = df.sort_values("EFFECT", ascending=False)
+    df.to_csv(csv_fil, index=False)
+    return df
+
+# Expression Level
+def ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF):
+    g_exp_level_zs = []
+    err_gen = 0
+    for g, weights in Gene2Weights.items(): 
+        if not g in ExpMat.index.values:
+            continue
+        g_exp_level = ExpMat.loc[g, STR]
+        #assert g_exp_level == g_exp_level
+        if g_exp_level != g_exp_level:
+            continue
+        g_matches = Match_DF.loc[g, :].values
+        g_matches_exps = ExpMat.loc[g_matches, STR].values
+        g_matches_exps = g_matches_exps[~np.isnan(g_matches_exps)]
+        g_exp_level_z = (g_exp_level - np.mean(g_matches_exps))/np.std(g_matches_exps)
+        g_exp_level_weighted_z = g_exp_level_z * weights 
+        if g_exp_level_weighted_z == g_exp_level_weighted_z:
+            g_exp_level_zs.append(g_exp_level_weighted_z)
+    avg_exp_level_z = np.mean(g_exp_level_zs)
+    #print(err_gen)
+    return avg_exp_level_z
+## Match_DF: rows as genes, columns as trails
+def ExpAVGWithExpMatch(ExpMat, Gene2Weights, Match_DF, csv_fil="ExpLevel.weighted.csv"):
+    STRs = ExpMat.columns.values
+    EFFs = []
+    for i, STR in enumerate(STRs):
+        avg_exp_level_z = ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF)
+        EFFs.append(avg_exp_level_z)
+    df = pd.DataFrame(data={"STR":STRs, "EFFECT":EFFs})
+    df = df.sort_values("EFFECT", ascending=False)
+    df.to_csv(csv_fil, index=False)
+    return df
+
+
 #####################################################################################
-# Circuits
+#####################################################################################
+#### Circuits
+#####################################################################################
 #####################################################################################
 
 def LoadConnectome(RankFil, ConnFil = ConnFil, TopN = 50, Bin = False, columns=["Structure", "Bias"]):
@@ -1253,3 +1389,7 @@ def QQplot(pvalues, title="QQ plot"):
     plt.ylabel('Obs Q')
     plt.show()
 
+
+#####################################################################################
+# Depricated Methods
+#####################################################################################

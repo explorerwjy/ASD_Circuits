@@ -20,7 +20,8 @@ def main():
     match_feature = match_feature.sort_values("EXP")
     match_feature["Rank"] = [1+x for x in range(match_feature.shape[0])]
     if args.bias == "specificity":
-        ExpZscoreMat = "../dat/allen-mouse-exp/energy-zscore-conn-model.csv"
+        #ExpZscoreMat = "../dat/allen-mouse-exp/energy-zscore-conn-model.csv"
+        ExpZscoreMat = "../dat/allen-mouse-exp/energy-zscore-neuronorm.csv"
         ExpZscoreMat = pd.read_csv(ExpZscoreMat, index_col="ROW")
         ## Match gene set with exp-match genes
         gene_list = loadgenelist(args.input)
@@ -28,7 +29,15 @@ def main():
             match_df = ExpressionMatchGeneSet(gene_list, match_feature)
         else:
             match_df = pd.read_csv(args.match, index_col="GENE")
-        eff_df = ZscoreAVGWithExpMatch(ExpZscoreMat, gene_list, match_df)
+        #eff_df = ZscoreAVGWithExpMatch(ExpZscoreMat, gene_list, match_df)
+        gnomad_cons = pd.read_csv("/Users/jiayao/Work/Resources/gnomad.v2.1.1.lof_metrics.by_gene.txt", delimiter="\t")
+        Gene2LoFZ = {}
+        for i, row in gnomad_cons.iterrows():
+            try:
+                Gene2LoFZ[GeneSymbol2Entrez[row["gene"]]] = max(1, row["lof_z"] + 1)
+            except:
+                continue
+        eff_df = ZscoreAVGWithExpMatch_Constraint(ExpZscoreMat, gene_list, match_df, Gene2LoFZ)
 
         eff_df = eff_df.sort_values("EFFECT", ascending=False)
         eff_df = eff_df.reset_index()
