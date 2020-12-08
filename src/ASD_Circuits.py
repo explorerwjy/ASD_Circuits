@@ -790,6 +790,36 @@ def ASC_Gene_Weights(MutFil, gnomad_cons, FDR=0.1):
         gene2Cons[g] = gnomad_cons.loc[row["gene"], "lof_z"]*5 + gnomad_cons.loc[row["gene"], "mis_z"]
         gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
     return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
+def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
+    match_feature = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/match-features.csv", index_col="GENE")
+    asc = pd.read_csv(MutFil)
+    if FDR != None:
+        MutFil = asc[asc["qval_dnccPTV"]<FDR]
+    match_feature = match_feature.sort_values("LENGTH.LOG2")
+    Ndiciles = 10
+    interval = int(match_feature.shape[0]/Ndiciles)
+    Deciles = []
+    LengthCut = []
+    for i in range(Ndiciles):
+        Deciles.append(match_feature.index.values[i * interval:(i+1)*interval])
+        LengthCut.append(match_feature.loc[match_feature.index.values[(i+1)*interval-1], "LENGTH.LOG2"])
+    Percent_True_LGD = []
+    Enrichment_LGD = []
+    Percent_True_Mis = []
+    Enrichment_Mis = []
+    for i in range(Ndiciles):
+        test_genes = asc[asc["entrez_id"].isin(Deciles[i])]
+        N_LGD = sum(test_genes["dn.ptv"])
+        N_LGD_exp = sum(test_genes["mut.ptv"]) * 2 * ASC_NTrio
+        Percent_True_LGD.append((N_LGD - N_LGD_exp)/N_LGD)
+        Enrichment_LGD.append(N_LGD/N_LGD_exp)
+        N_Mis = sum(test_genes["dn.misa"]) + sum(test_genes["dn.misb"])
+        N_Mis_exp = sum(test_genes["mut.misa"]) * 2 * ASC_NTrio + sum(test_genes["mut.misb"]) * 2 * ASC_NTrio
+        Percent_True_Mis.append((N_Mis - N_Mis_exp)/N_Mis)
+        Enrichment_Mis.append(N_Mis/N_Mis_exp)
+    for i, row in MutFil.iterrows():
+        g = int(row["entrez_id"])
+        gene2MutN_Length = row["dn.ptv"] * Percent_True_LGD[]
 
 def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
     MutFil = pd.read_csv(MutFil)
