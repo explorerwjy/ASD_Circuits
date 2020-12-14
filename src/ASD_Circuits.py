@@ -781,18 +781,22 @@ def ASC_Gene_Weights(MutFil, gnomad_cons, FDR=0.1):
     MutFil = pd.read_csv(MutFil)
     if FDR != None:
         MutFil = MutFil[MutFil["qval_dnccPTV"]<FDR]
-    gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons = {}, {}, {}, {}, {}
+    gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue = {}, {}, {}, {}, {}, {}
     for i, row in MutFil.iterrows():
         g = int(row["entrez_id"])
         gene2None[g] = 1
         gene2RR[g] = row["LGD_RR"]*5 + row["misa_RR"]*1 + row["misb_RR"]*2    # Relative Risk is sum over LGD and Missense
-        gene2MutN[g] = row["dn.ptv"]*5 + row["dn.misa"]*1 + row["dn.misb"]*2
+        gene2MutN[g] = row["dn.ptv"]*0.375 + (row["dn.misa"] + row["dn.misb"]) * 0.145
         gene2Cons[g] = gnomad_cons.loc[row["gene"], "lof_z"]*5 + gnomad_cons.loc[row["gene"], "mis_z"]
         gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
-    return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
+        gene2MutNQValue[g] = gene2MutN[g] * row["qval_dnccPTV"]
+    return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue
 def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
-    match_feature = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/match-features.csv", index_col="GENE")
+    ASC_NTrio = 6430
+    match_feature = pd.read_csv(match_feature, index_col="GENE")
     asc = pd.read_csv(MutFil)
+    asc = asc[asc["entrez_id"]!="."]
+    asc["entrez_id"] = [int(x) for x in asc["entrez_id"].values]
     if FDR != None:
         MutFil = asc[asc["qval_dnccPTV"]<FDR]
     match_feature = match_feature.sort_values("LENGTH.LOG2")
@@ -800,26 +804,37 @@ def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
     interval = int(match_feature.shape[0]/Ndiciles)
     Deciles = []
     LengthCut = []
+    Gene2Decile = {}
     for i in range(Ndiciles):
         Deciles.append(match_feature.index.values[i * interval:(i+1)*interval])
         LengthCut.append(match_feature.loc[match_feature.index.values[(i+1)*interval-1], "LENGTH.LOG2"])
+    #Deciles[-1] = Deciles[-1].append(match_feature.index.values[(i+1)*interval:])
+    Deciles[-1] = np.append(Deciles[-1], match_feature.index.values[(i+1)*interval:])
     Percent_True_LGD = []
     Enrichment_LGD = []
     Percent_True_Mis = []
     Enrichment_Mis = []
     for i in range(Ndiciles):
         test_genes = asc[asc["entrez_id"].isin(Deciles[i])]
+        for g in test_genes["entrez_id"].values:
+            Gene2Decile[g] = i
         N_LGD = sum(test_genes["dn.ptv"])
         N_LGD_exp = sum(test_genes["mut.ptv"]) * 2 * ASC_NTrio
-        Percent_True_LGD.append((N_LGD - N_LGD_exp)/N_LGD)
+        Percent_True_LGD.append(max(0, (N_LGD - N_LGD_exp)/N_LGD))
         Enrichment_LGD.append(N_LGD/N_LGD_exp)
         N_Mis = sum(test_genes["dn.misa"]) + sum(test_genes["dn.misb"])
         N_Mis_exp = sum(test_genes["mut.misa"]) * 2 * ASC_NTrio + sum(test_genes["mut.misb"]) * 2 * ASC_NTrio
-        Percent_True_Mis.append((N_Mis - N_Mis_exp)/N_Mis)
+        Percent_True_Mis.append(max(0, (N_Mis - N_Mis_exp)/N_Mis))
         Enrichment_Mis.append(N_Mis/N_Mis_exp)
-    for i, row in MutFil.iterrows():
+    gene2MutN_Length = {}
+    for i, row in MutFil.iterrows(): # Counting Mutations
         g = int(row["entrez_id"])
-        gene2MutN_Length = row["dn.ptv"] * Percent_True_LGD[]
+        if g in Gene2Decile:
+            decile = Gene2Decile[g]
+            gene2MutN_Length[g] = row["dn.ptv"] * Percent_True_LGD[decile] + (row["dn.misa"] + row["dn.misb"]) * Percent_True_Mis[decile]
+        else:
+            print(g)
+    return gene2MutN_Length
 
 def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
     MutFil = pd.read_csv(MutFil)
@@ -833,13 +848,57 @@ def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
             continue
         gene2None[g] = 1
         gene2RR[g] = row["LGD_RR"]*5 + row["Dmis_RR"]*1    # Relative Risk is sum over LGD and Missense
-        gene2MutN[g] = row["dnLGD"]*5 + row["dnDmis"]*1
+        gene2MutN[g] = row["dnLGD"]*0.347 + row["dnDmis"]*0.194
         try:
             gene2Cons[g] = gnomad_cons.loc[row["HGNC"], "lof_z"]*5 + gnomad_cons.loc[row["HGNC"], "mis_z"]
         except:
             gene2Cons[g] = 1
         gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
     return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
+
+def SPARK_MutCountByLength(MutFil, match_feature, FDR=0.2):
+    SPARK_NTrio = 7015
+    match_feature = pd.read_csv(match_feature, index_col="GENE")
+    spark = pd.read_csv(MutFil)
+    spark = spark[spark["Entrez"]!="."]
+    spark["Entrez"] = [int(x) for x in spark["Entrez"].values]
+    if FDR != None:
+        MutFil = spark[spark["Qvalue"]<FDR]
+    match_feature = match_feature.sort_values("LENGTH.LOG2")
+    Ndiciles = 10
+    interval = int(match_feature.shape[0]/Ndiciles)
+    Deciles = []
+    LengthCut = []
+    Gene2Decile = {}
+    for i in range(Ndiciles):
+        Deciles.append(match_feature.index.values[i * interval:(i+1)*interval])
+        LengthCut.append(match_feature.loc[match_feature.index.values[(i+1)*interval-1], "LENGTH.LOG2"])
+    Deciles[-1] = np.append(Deciles[-1], match_feature.index.values[(i+1)*interval:])
+    Percent_True_LGD = []
+    Enrichment_LGD = []
+    Percent_True_Mis = []
+    Enrichment_Mis = []
+    for i in range(Ndiciles):
+        test_genes = spark[spark["Entrez"].isin(Deciles[i])]
+        for g in test_genes["Entrez"].values:
+            Gene2Decile[g] = i
+        N_LGD = sum(test_genes["dnLGD"])
+        N_LGD_exp = sum(test_genes["mutLGD"]) * 2 * SPARK_NTrio
+        Percent_True_LGD.append(max(0, (N_LGD - N_LGD_exp)/N_LGD))
+        Enrichment_LGD.append(N_LGD/N_LGD_exp)
+        N_Mis = sum(test_genes["dnDmis"])
+        N_Mis_exp = sum(test_genes["mutDmis"]) * 2 * SPARK_NTrio 
+        Percent_True_Mis.append(max(0, (N_Mis - N_Mis_exp)/N_Mis))
+        Enrichment_Mis.append(N_Mis/N_Mis_exp)
+    gene2MutN_Length = {}
+    for i, row in MutFil.iterrows(): # Counting Mutations
+        g = int(row["Entrez"])
+        if g in Gene2Decile:
+            decile = Gene2Decile[g]
+            gene2MutN_Length[g] = row["dnLGD"] * Percent_True_LGD[decile] + row["dnDmis"] * Percent_True_Mis[decile]
+        else:
+            print(g)
+    return gene2MutN_Length
 
 ###################################################################################################################
 # Weighted Bias Calculattion
