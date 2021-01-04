@@ -756,6 +756,7 @@ def RegionDistributions(DF, topN=50):
         if len(v) == 0:
             continue
         print(k, "\t", len(v), "\t", "; ".join(v))
+    return RegionCount
 
 
 def RegionDistributionsList(List, topN=50):
@@ -853,7 +854,7 @@ def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
     return gene2MutN_Length
 
 def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
-    MutFil = pd.read_csv(MutFil)
+    #MutFil = pd.read_csv(MutFil)
     if FDR != None:
         MutFil = MutFil[MutFil["Qvalue"]<FDR]
     gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons = {}, {}, {}, {}, {} 
@@ -870,7 +871,8 @@ def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
         except:
             gene2Cons[g] = 1
         gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
-    return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
+    #return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
+    return gene2MutN
 
 def SPARK_MutCountByLength(MutFil, match_feature, FDR=0.2):
     SPARK_NTrio = 7015
@@ -1498,6 +1500,7 @@ def QQplot(pvalues, title="QQ plot"):
 
 def AnnotateBiasWithCircuits(BiasDF, Connectome):
     
+    return
 
 def CompileMethods(DFs, names):
     Circuits = []
@@ -1515,7 +1518,38 @@ def CompileMethods(DFs, names):
                 DF_name[STR] = 1
             else:
                 DF_name[STR] = 0
-    
+
+def CountNDD(DF, TotalProband=5264):
+    LGD = ['splice_acceptor_variant','splice_donor_variant','stop_lost','frameshift_variant','splice_region_variant','start_lost','stop_gained','protein_altering_variant']
+    LGD_DF = DF[DF["VEP_functional_class_canonical"].isin(LGD)]
+    MIS_DF = DF[DF["VEP_functional_class_canonical"]=="missense_variant"]
+    DMIS = MIS_DF[MIS_DF["MPC"]>1]
+    GENES = list(set(DF["GENE_NAME"].values))
+    RES = {}
+    for gene in GENES:
+        gene_df_LGD = LGD_DF[LGD_DF["GENE_NAME"]==gene]
+        N_LGD = gene_df_LGD.shape[0]
+        gene_df_DMIS = DMIS[DMIS["GENE_NAME"]==gene]
+        N_DMIS = gene_df_DMIS.shape[0]
+        RES[gene] = {}
+        RES[gene]["LGD"] = N_LGD
+        RES[gene]["Dmis"] = N_DMIS
+        RES[gene]["All"] = N_LGD + N_DMIS
+    return RES
+
+def myASDNDDClassifier(NASD, NNDD, NASDProband=6430, NNDDProband=5264):
+    if NASD/NASDProband > NNDD/NNDDProband:
+        return "ASD_p"
+    else:
+        return "ASD_NDD"
+
+def CompareList(list1, list2):
+    set1 = set(list1)
+    set2 = set(list2)
+    print("Common: %d"%len(set1.intersection(set2)), set1.intersection(set2))
+    print("Present in 1: %d"%len(set1.difference(set2)), set1.difference(set2))
+    print("Present in 2: %d"%len(set2.difference(set1)), set2.difference(set1))
+
 #####################################################################################
 # Depricated Methods
 #####################################################################################
