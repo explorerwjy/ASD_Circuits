@@ -777,8 +777,23 @@ def RegionDistributionsList(List, topN=50):
 ###################################################################################################################
 # Gene Weights (impact)
 ###################################################################################################################
+def SSC_Gene_Weights(MutFil, gnomad_cons, FDR=0.8):
+    #MutFil = pd.read_csv(MutFil)
+    if FDR != None:
+        MutFil = MutFil[MutFil["FDR"]>FDR]
+    gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue = {}, {}, {}, {}, {}, {}
+    for i, row in MutFil.iterrows():
+        g = int(row["Entrez"])
+        gene2None[g] = 1
+        #gene2RR[g] = row["LGD_RR"]*5 + row["misa_RR"]*1 + row["misb_RR"]*2    # Relative Risk is sum over LGD and Missense
+        gene2MutN[g] = row["dnLGD"]*0.375 + (row["dnMis"]) * 0.145
+        #gene2Cons[g] = gnomad_cons.loc[row["gene"], "lof_z"]*5 + gnomad_cons.loc[row["gene"], "mis_z"]
+        #gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
+        #gene2MutNQValue[g] = gene2MutN[g] * row["qval_dnccPTV"]
+    #return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue
+    return gene2MutN
 def ASC_Gene_Weights(MutFil, gnomad_cons, FDR=0.1):
-    MutFil = pd.read_csv(MutFil)
+    #MutFil = pd.read_csv(MutFil)
     if FDR != None:
         MutFil = MutFil[MutFil["qval_dnccPTV"]<FDR]
     gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue = {}, {}, {}, {}, {}, {}
@@ -790,7 +805,8 @@ def ASC_Gene_Weights(MutFil, gnomad_cons, FDR=0.1):
         gene2Cons[g] = gnomad_cons.loc[row["gene"], "lof_z"]*5 + gnomad_cons.loc[row["gene"], "mis_z"]
         gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
         gene2MutNQValue[g] = gene2MutN[g] * row["qval_dnccPTV"]
-    return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue
+    #return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue
+    return gene2MutN
 def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
     ASC_NTrio = 6430
     match_feature = pd.read_csv(match_feature, index_col="GENE")
@@ -950,6 +966,8 @@ def ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF):
     err_gen = 0
     for g, weights in Gene2Weights.items(): 
         if not g in ExpMat.index.values:
+            continue
+        if not g in Match_DF.index.values:
             continue
         g_exp_level = ExpMat.loc[g, STR]
         #assert g_exp_level == g_exp_level
@@ -1478,7 +1496,26 @@ def QQplot(pvalues, title="QQ plot"):
     plt.ylabel('Obs Q')
     plt.show()
 
+def AnnotateBiasWithCircuits(BiasDF, Connectome):
+    
 
+def CompileMethods(DFs, names):
+    Circuits = []
+    STRs = []
+    for DF in DFs:
+        STRs.extend(DF.index.values)
+        Cirtuit = None
+    STRs = list(set(STRs))
+    Counts_Regions = {}
+    Counts_Circuits = {}
+    for STR in STRs:
+        for DF_name, DF in zip(DF_names, DFs):
+            if STR in DF.index.values:
+                Counts[STR] += 1
+                DF_name[STR] = 1
+            else:
+                DF_name[STR] = 0
+    
 #####################################################################################
 # Depricated Methods
 #####################################################################################
