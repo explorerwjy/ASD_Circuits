@@ -85,6 +85,23 @@ def WriteGeneList(genelist, filname):
 #### Expression Bias
 #####################################################################################
 #####################################################################################
+def LoadGeneINFO():
+    HGNC = pd.read_csv("/Users/jiayao/Work/Resources/protein-coding_gene.txt", delimiter="\t")
+    ENSID2Entrez = dict(zip(HGNC["ensembl_gene_id"].values, HGNC["entrez_id"].values))
+    GeneSymbol2Entrez = dict(zip(HGNC["symbol"].values, HGNC["entrez_id"].values))
+    Entrez2Symbol = dict(zip(HGNC["entrez_id"].values, HGNC["symbol"].values))
+    allen_mouse_genes = loadgenelist("../dat/allen-mouse-exp/allen-mouse-gene_entrez.txt")
+    return HGNC, ENSID2Entrez, GeneSymbol2Entrez, Entrez2Symbol, allen_mouse_genes
+
+def LoadExpressionMatrices(ExpMat = "../dat/allen-mouse-exp/energy-conn-model.csv", 
+                        ExpZscoreMat = "../dat/allen-mouse-exp/energy-zscore-conn-model.csv",
+                        ExpMatNorm = "../dat/allen-mouse-exp/energy-neuronorm.csv",
+                        ExpZscoreMatNorm = "../dat/allen-mouse-exp/energy-zscore-neuronorm.csv"):
+    ExpMat = pd.read_csv(ExpMat, index_col="ROW")
+    ExpZscoreMat = pd.read_csv(ExpZscoreMat, index_col="ROW")
+    ExpMatNorm = pd.read_csv(ExpMatNorm, index_col="ROW")
+    ExpZscoreMatNorm = pd.read_csv(ExpZscoreMatNorm, index_col="ROW")
+    return ExpMat, ExpZscoreMat, ExpMatNorm, ExpZscoreMatNorm
 
 def TraceSTR(df, structures, see=None):
     res = {} 
@@ -536,7 +553,7 @@ def ExpLevelOneSTR(STR, ExpMat, DZgenes, Matchgenes):
     avg_exp_level_z = np.mean(g_exp_level_zs)
     return avg_exp_level_z
 ## Match_DF: rows as genes, columns as trails
-def ExpAVGWithExpMatch(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
+def ExpAVGWithExpMatch_depricated(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
     structures = ExpMat.columns.values
     EFFs = []
     for i, STR in enumerate(structures):
@@ -741,7 +758,14 @@ def write_match(gene, matches, Dir):
     for match in matches:
         writer.writerow([match["GENE"]])
 
-def RegionDistributions(DF, topN=50):
+def STR2Region():
+    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = str2reg_df.sort_values("REG")
+    str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
+    return str2reg
+
+def RegionDistributions(DF, topN=50, show = False):
+    #ax = fig.add_axes([0,0,1,1])
     str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
@@ -752,12 +776,12 @@ def RegionDistributions(DF, topN=50):
     for x in DF.head(topN).index:
         region = str2reg[x]
         RegionCount[region].append(x)
-    for k,v in RegionCount.items():
-        if len(v) == 0:
-            continue
-        print(k, "\t", len(v), "\t", "; ".join(v))
+    if show:
+        for k,v in RegionCount.items():
+            if len(v) == 0:
+                continue
+            print(k, "\t", len(v), "\t", "; ".join(v))
     return RegionCount
-
 
 def RegionDistributionsList(List, topN=50):
     str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
@@ -793,7 +817,7 @@ def SSC_Gene_Weights(MutFil, gnomad_cons, FDR=0.8):
         #gene2MutNQValue[g] = gene2MutN[g] * row["qval_dnccPTV"]
     #return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue
     return gene2MutN
-def ASC_Gene_Weights(MutFil, gnomad_cons, FDR=0.1):
+def ASC_Gene_Weights(MutFil, gnomad_cons=None, FDR=0.1):
     #MutFil = pd.read_csv(MutFil)
     if FDR != None:
         MutFil = MutFil[MutFil["qval_dnccPTV"]<FDR]
@@ -802,11 +826,23 @@ def ASC_Gene_Weights(MutFil, gnomad_cons, FDR=0.1):
         g = int(row["entrez_id"])
         gene2None[g] = 1
         gene2RR[g] = row["LGD_RR"]*5 + row["misa_RR"]*1 + row["misb_RR"]*2    # Relative Risk is sum over LGD and Missense
-        gene2MutN[g] = row["dn.ptv"]*0.375 + (row["dn.misa"] + row["dn.misb"]) * 0.145
-        gene2Cons[g] = gnomad_cons.loc[row["gene"], "lof_z"]*5 + gnomad_cons.loc[row["gene"], "mis_z"]
-        gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
+        #gene2MutN[g] = row["dn.ptv"]*0.375 + (row["dn.misa"] + row["dn.misb"]) * 0.145
+        gene2MutN[g] = max(row["dn.ptv"]*0.375,  (row["dn.misa"] + row["dn.misb"]) * 0.145)
+        #gene2Cons[g] = gnomad_cons.loc[row["gene"], "lof_z"]*5 + gnomad_cons.loc[row["gene"], "mis_z"]
+        #gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
         gene2MutNQValue[g] = gene2MutN[g] * row["qval_dnccPTV"]
     #return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons, gene2MutNQValue
+    return gene2MutN
+def ASC_Gene_Weights_ByIQ(MutFil, FDR=0.2):
+    if FDR != None:
+        MutFil = MutFil[MutFil["Qvalue"]<FDR]
+    gene2MutN = {}
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["Entrez"])
+        except:
+            continue
+        gene2MutN[g] = row["dnLGD"]*0.375 + (row["dnDmis"]) * 0.145
     return gene2MutN
 def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
     ASC_NTrio = 6430
@@ -853,7 +889,7 @@ def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
             print(g)
     return gene2MutN_Length
 
-def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
+def SPARK_Gene_Weights(MutFil, gnomad_cons=None, FDR=0.2):
     #MutFil = pd.read_csv(MutFil)
     if FDR != None:
         MutFil = MutFil[MutFil["Qvalue"]<FDR]
@@ -866,11 +902,11 @@ def SPARK_Gene_Weights(MutFil, gnomad_cons, FDR=0.2):
         gene2None[g] = 1
         gene2RR[g] = row["LGD_RR"]*5 + row["Dmis_RR"]*1    # Relative Risk is sum over LGD and Missense
         gene2MutN[g] = row["dnLGD"]*0.347 + row["dnDmis"]*0.194
-        try:
-            gene2Cons[g] = gnomad_cons.loc[row["HGNC"], "lof_z"]*5 + gnomad_cons.loc[row["HGNC"], "mis_z"]
-        except:
-            gene2Cons[g] = 1
-        gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
+        #try:
+        #    gene2Cons[g] = gnomad_cons.loc[row["HGNC"], "lof_z"]*5 + gnomad_cons.loc[row["HGNC"], "mis_z"]
+        #except:
+        #    gene2Cons[g] = 1
+        #gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
     #return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
     return gene2MutN
 
@@ -936,6 +972,10 @@ def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights):
 def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Match_DF=0, BS_Weights=False, csv_fil="AvgSTRZ.weighted.csv"):
     STRs = ExpZscoreMat.columns.values
     EFFECTS = []; Normed_EFFECTS = []
+    Regions = []
+    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = str2reg_df.sort_values("REG")
+    str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     for i, STR in enumerate(STRs):
         mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights)
         EFFECTS.append(mean_z)
@@ -954,11 +994,29 @@ def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Match_DF=0, BS_Weights=False, c
             match_mean_z = np.mean(Match_mean_Zs)
             normed_effect = (mean_z - match_mean_z) / np.std(Match_mean_Zs)
             Normed_EFFECTS.append(normed_effect) 
+        Regions.append(str2reg[STR])
     if type(Match_DF) != int:
-        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "NormedEFFECT":Normed_EFFECTS})
+        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions, "NormedEFFECT":Normed_EFFECTS})
     else:
-        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS})
+        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions})
     df = df.sort_values("EFFECT", ascending=False)
+    df = df.reset_index(drop=True)
+    df["Rank"] = df.index + 1
+    # Trimming Circuit
+    g = LoadConnectome2()
+    top_structs = df.head(50)["STR"].values
+    top_nodes = g.vs.select(label_in=top_structs)
+    g2 = g.subgraph(top_nodes)
+    graph_size, exp_stats, exp_graphs, rm_vs = CircuitTrimming(g2, g)
+    idx = np.argmax(exp_stats[:40])
+    print(50-idx)
+    CIR_STRS = [v["label"] for v in exp_graphs[idx].vs]
+    df['InCircuit'] = 0
+    df["TrimRank"] = 1
+    df.index = df["STR"].values
+    for i, _str in enumerate([x["label"] for x in rm_vs]):
+        df.loc[_str, "TrimRank"] = 50-i
+        df.loc[_str, "InCircuit"] = 1 if _str in CIR_STRS else 0
     df.to_csv(csv_fil, index=False)
     return df
 
@@ -989,11 +1047,32 @@ def ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF):
 def ExpAVGWithExpMatch(ExpMat, Gene2Weights, Match_DF, csv_fil="ExpLevel.weighted.csv"):
     STRs = ExpMat.columns.values
     EFFs = []
+    Regions = []
+    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = str2reg_df.sort_values("REG")
+    str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     for i, STR in enumerate(STRs):
         avg_exp_level_z = ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF)
         EFFs.append(avg_exp_level_z)
+        Regions.append(str2reg[STR])
     df = pd.DataFrame(data={"STR":STRs, "EFFECT":EFFs})
     df = df.sort_values("EFFECT", ascending=False)
+    df.reset_index()
+    df["Rank"] = df.index + 1
+    g = LoadConnectome2()
+    top_structs = df.head(50)["STR"].values
+    top_nodes = g.vs.select(label_in=top_structs)
+    g2 = g.subgraph(top_nodes)
+    graph_size, exp_stats, exp_graphs, rm_vs = CircuitTrimming(g2, g)
+    idx = np.argmax(exp_stats[:-10])
+    print(idx)
+    CIR_STRS = [v["label"] for v in exp_graphs[idx].vs]
+    df['InCircuit'] = 0
+    df["TrimRank"] = 1
+    df.index = df["STR"].values
+    for i, _str in enumerate([x["label"] for x in rm_vs]):
+        df.loc[_str, "TrimRank"] = 50-i
+        df.loc[_str, "InCircuit"] = 1 if _str in CIR_STRS else 0
     df.to_csv(csv_fil, index=False)
     return df
 
@@ -1029,13 +1108,11 @@ def LoadConnectome(RankFil, ConnFil = ConnFil, TopN = 50, Bin = False, columns=[
         top_structs = struct_bias.head(TopN)["STRUC"].values
     return g, top_structs
 
-
 def LoadConnectome2(ConnFil = ConnFil,  Bin = False):
     adj_mat = pd.read_csv(ConnFil)
     node_names = adj_mat["ROW"].values
     adj_mat = adj_mat.drop("ROW", axis=1)
     A = adj_mat.values
-    #g = ig.Graph.Adjacency((A > 0).tolist(), mode="ADJ_DIRECTED")
     g = ig.Graph.Adjacency((A > 0).tolist())
     g.es['weight'] = A[A.nonzero()]
     g.vs['label'] = node_names  
@@ -1376,28 +1453,32 @@ def optimize_stat_in_n_out(graph, complate_graph):
     return graph.ecount() / d
 
 def argmax_optimize_stat(graph, complate_graph, optimize_stat="in_n_out"):
-    opt_stats, graphs = [], []
-    for v in graph.vs:
+    opt_stats, graphs, vs = [], [], []
+    for i, v in enumerate(graph.vs):
         tmp_graph = graph.copy()
         tmp_graph.delete_vertices(v)
         #stat = optimize_stat_in_n_out(tmp_graph, complate_graph)
         stat = InOutCohesiveAVG(complate_graph, tmp_graph)
         opt_stats.append(stat)
         graphs.append(tmp_graph)
+        vs.append(v)
     idx = np.argmax(opt_stats)
+    trimmed_v = vs[idx]
     stat = opt_stats[idx]
     graph = graphs[idx]
-    return graph, stat
+    return graph, stat, trimmed_v
 
 def CircuitTrimming(graph, complate_graph, optimize_stat="in_n_out"):
     trim_graph = graph.copy()
-    stats, graph_size, graphs = [], [], []
+    stats, graph_size, graphs, trimmed_Vs = [], [], [], []
     for i in range(len(graph.vs), 1, -1):
-        trim_graph, stat = argmax_optimize_stat(trim_graph, complate_graph, optimize_stat)
+        trim_graph, stat, trimmed_v = argmax_optimize_stat(trim_graph, complate_graph, optimize_stat)
         graphs.append(trim_graph.copy())
         stats.append(stat)
         graph_size.append(i)
-    return graph_size, stats, graphs
+        trimmed_Vs.append(trimmed_v)
+    trimmed_Vs.append(trim_graph.vs[0])
+    return graph_size, stats, graphs, trimmed_Vs
 
 def Bias_vs_Cohesiveness(g, df, topN=50, conn="AvgCohesive", title="bias vs cohesiveness"):
     assert conn in ["AvgCohesive", "TotalCohesive", "Top5Edges"]
@@ -1498,9 +1579,58 @@ def QQplot(pvalues, title="QQ plot"):
     plt.ylabel('Obs Q')
     plt.show()
 
-def AnnotateBiasWithCircuits(BiasDF, Connectome):
-    
-    return
+
+def CompareSTROverlap(DF1, DF2, name1, name2, topN=50):
+    RD1 = RegionDistributions(DF1.set_index("STR"))
+    RD2 = RegionDistributions(DF2.set_index("STR"))
+    Regions = list(set(list(RD1.keys()) + list(RD2.keys())))
+    Regions.sort()
+    CompareDat = [] # Region, STR_common, STR_only_DF1, STR_only_DF2, N_STR_common, N_STR_only_DF1, N_STR_only_DF2
+    for region in Regions:
+        STR1s = set(RD1[region])
+        STR2s = set(RD2[region])
+        if (len(STR1s) + len(STR2s)) == 0:
+            continue
+        common = list(STR1s.intersection(STR2s))
+        only1 = list(STR1s.difference(STR2s))
+        only2 = list(STR2s.difference(STR1s))
+        CompareDat.append([region, ", ".join(common), ", ".join(only1), ", ".join(only2), len(common), len(only1), len(only2)]) 
+    CompareDF = pd.DataFrame(data=CompareDat, columns=["Region", "STR.Common", "STR.only.in.{}".format(name1), "STR.only.in.{}".format(name2), "N.common", "N.only.{}".format(name1), "N.only.{}".format(name2)])
+    fig = plt.figure(dpi=200)
+    ax = fig.add_axes([0,0,1,1])
+    width = 0.3
+    commons = CompareDF["N.common"].values
+    only1s = CompareDF["N.only.{}".format(name1)].values
+    only2s = CompareDF["N.only.{}".format(name2)].values
+    #print(commons, only1s, only2s)
+    ind = np.arange(len(commons))
+    ax.barh(ind+width/2, commons, width, color='b', label="common")
+    ax.barh(ind+width/2, only1s, width, left=commons, color='r', label="only.in.{}".format(name1))
+    ax.barh(ind-width/2, commons, width, color='b')
+    ax.barh(ind-width/2, only2s, width, left=commons, color='yellow', label="only.in.{}".format(name2))
+    ax.set_yticks(ind)
+    ax.set_yticklabels(CompareDF["Region"].values)
+    ax.legend()
+    ax.grid(True)
+    plt.title("Top{} STRs in {} and {}".format(topN, name1, name2))
+    plt.show()
+    return CompareDF
+
+def ShowTrimmingProfile(DFs, Names, topN=50):
+    g = LoadConnectome2()
+    fig, ax = plt.subplots(dpi=120)
+    for df, name in zip(DFs, Names):
+        g_ = g.copy()
+        top_structs = df.head(topN)["STR"]
+        top_nodes = g_.vs.select(label_in=top_structs)
+        g2 = g_.subgraph(top_nodes)
+        graph_size, exp_stats, exp_graphs, trimmed_Vs = CircuitTrimming(g2, g_)
+        idx = np.argmax(exp_stats[:topN-10])
+        ax.scatter(topN-idx, exp_stats[idx], marker='x', color="black")
+        ax.plot(graph_size, exp_stats, marker="o", label=name, alpha=0.7)
+    ax.set_xlim(50, 0)
+    plt.legend()
+    plt.show()
 
 def CompileMethods(DFs, names):
     Circuits = []
@@ -1519,11 +1649,16 @@ def CompileMethods(DFs, names):
             else:
                 DF_name[STR] = 0
 
-def CountNDD(DF, TotalProband=5264):
-    LGD = ['splice_acceptor_variant','splice_donor_variant','stop_lost','frameshift_variant','splice_region_variant','start_lost','stop_gained','protein_altering_variant']
+def CountNDD(DF, Dmis="REVEL", TotalProband=5264):
+    #LGD = ['splice_acceptor_variant','splice_donor_variant','stop_lost','frameshift_variant','splice_region_variant','start_lost','stop_gained','protein_altering_variant']
+    LGD = ['splice_acceptor_variant','splice_donor_variant','stop_lost','frameshift_variant','start_lost','stop_gained']
     LGD_DF = DF[DF["VEP_functional_class_canonical"].isin(LGD)]
     MIS_DF = DF[DF["VEP_functional_class_canonical"]=="missense_variant"]
-    DMIS = MIS_DF[MIS_DF["MPC"]>1]
+    #DMIS = MIS_DF[MIS_DF["MPC"]>0]
+    if Dmis == "MPC":
+        DMIS = MIS_DF[MIS_DF["MPC"]>1]
+    elif Dmis == "REVEL":
+        DMIS = MIS_DF[MIS_DF["REVEL"]>0.5]
     GENES = list(set(DF["GENE_NAME"].values))
     RES = {}
     for gene in GENES:
