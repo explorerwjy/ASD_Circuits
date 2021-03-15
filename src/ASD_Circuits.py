@@ -29,8 +29,8 @@ import igraph as ig
 
 plt.rcParams['figure.dpi'] = 80
 
-ConnFil = "/Users/jiayao/Work/ASD_Circuits/dat/allen-mouse-conn/connectome-log.csv"
-MajorBrainDivisions = "/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map" 
+ConnFil = "../dat/allen-mouse-conn/connectome-log.csv"
+MajorBrainDivisions = "./dat/structure2region.map" 
 
 
 #####################################################################################
@@ -78,7 +78,10 @@ def filtergenelist(genelist, allgenelist):
 def WriteGeneList(genelist, filname):
     fout = open(filname, "wt")
     for gen in genelist:
-        fout.write(str(int(gen)) + "\n")
+        try:
+            fout.write(str(int(gen)) + "\n")
+        except:
+            continue
 
 #####################################################################################
 #####################################################################################
@@ -86,7 +89,7 @@ def WriteGeneList(genelist, filname):
 #####################################################################################
 #####################################################################################
 def LoadGeneINFO():
-    HGNC = pd.read_csv("/Users/jiayao/Work/Resources/protein-coding_gene.txt", delimiter="\t")
+    HGNC = pd.read_csv("../dat/genes/protein-coding_gene.txt", delimiter="\t")
     ENSID2Entrez = dict(zip(HGNC["ensembl_gene_id"].values, HGNC["entrez_id"].values))
     GeneSymbol2Entrez = dict(zip(HGNC["symbol"].values, HGNC["entrez_id"].values))
     Entrez2Symbol = dict(zip(HGNC["entrez_id"].values, HGNC["symbol"].values))
@@ -103,568 +106,6 @@ def LoadExpressionMatrices(ExpMat = "../dat/allen-mouse-exp/energy-conn-model.cs
     ExpZscoreMatNorm = pd.read_csv(ExpZscoreMatNorm, index_col="ROW")
     return ExpMat, ExpZscoreMat, ExpMatNorm, ExpZscoreMatNorm
 
-def TraceSTR(df, structures, see=None):
-    res = {} 
-    Coarse = df[df["coarse"]=="X"]["id"].values
-    for i, STR in enumerate(structures):
-        _df = df[df["KEY"]==STR]
-        parent_id = int(_df["parent_structure_id"].values[0])
-        parent_df = df[df["id"]==parent_id]
-        while 1:
-            #_df = df[df["parent_structure_id"]]
-            if parent_id == 997: # Root ID = 997
-                print("Can't find %s"%STR)
-                break
-            elif parent_id in Coarse:
-                res[STR] = parent_df["KEY"].values[0]
-                break
-            else:
-                parent_id = int(parent_df["parent_structure_id"].values[0])
-                parent_df = df[df["id"]==parent_id]
-                #if STR == see:
-                #    print(parent_df)
-    return res
-
-def StructureGeneSetBias(Structure, CaseSubsetDF, ControlSubsetDF, method="mean"):
-    Case_Values = CaseSubsetDF[Structure].values
-    Case_Values = [x for x in Case_Values if x==x]
-    Control_Values = ControlSubsetDF[Structure].values
-    Control_Values = [x for x in Control_Values if x==x]
-    if method == "mean":
-        return np.mean(Case_Values) - np.mean(Control_Values)
-    elif method == "median":
-        return np.median(Case_Values) - np.median(Control_Values)
-
-def StructureGeneListBias(Structure, ZscoreMat, CaseGeneList, ControlGeneList, method="median"):
-    Case_Values = []; Control_Values = [];
-    for entrez_id in CaseGeneList:
-        try:
-            v = ZscoreMat.loc[entrez_id, Structure]
-            if v == v:
-                Case_Values.append(v)
-        except:
-            pass
-    for entrez_id in ControlGeneList:
-        v = ZscoreMat.loc[entrez_id, Structure]
-        if v == v:
-            Control_Values.append(v)
-    t, p = scipy.stats.mannwhitneyu(Case_Values, Control_Values, alternative='greater')
-    if method == "mean":
-        return np.mean(Case_Values) - np.mean(Control_Values), p
-    elif method == "median":
-        return np.median(Case_Values) - np.median(Control_Values), p
-
-def ComputeExpressionBias(method, ExpMat, CaseGeneSet, ContGeneSet=None, outfil="region.rank.tsv"):
-    assert method in ["zscore", "absolute", "decile"]
-    if method == "zscore":
-        ExpMat = pd.read_csv(ExpMat, index_col="ROW")
-        Structures = list(ExpMat.columns.values)
-        Biases_median = {}
-        for struc in Structures:
-            bias_median, p = StructureGeneListBias(struc, ExpMat, CaseGeneSet, ContGeneSet, method="median")
-            Biases_median[struc] = (bias_median, p)
-        res = sorted(Biases_median.items(), key=lambda k:k[1], reverse=True)
-        fout = open(outfil, 'wt')
-        fout.write("STR\tbias\tpvalue\n")
-        for k,(bias, p) in res:
-            #print(k,v)
-            fout.write("%s\t%.3f\t%.3e\n"%(k, bias, p))
-    return
-
-def search_decile(gene_str_z, percentile_values):
-    for i, v in enumerate(percentile_values):
-        if i == len(percentile_values)-1:
-            return i
-        elif gene_str_z > percentile_values[i] and gene_str_z < percentile_values[i+1]:
-            return i
-
-def count_slice(N, values):
-    res = []
-    for i in range(N):
-        res.append(values.count(i))
-    return res
-
-#### Decile Correlation Related Functions
-def DecileCorrelation(ExpZscoreMat, DZgenes, percentile_slices=np.array(range(0, 100, 10)), pdf_fil="decile.pdf", csv_fil="decile.rank.tsv"):
-    structures = ExpZscoreMat.columns.values
-    STR_Deciles = {}
-    for STR in structures:
-        STR_Deciles[STR] = []
-        str_zscores = ExpZscoreMat[STR].values
-        str_zscores = [x for x in str_zscores if x==x]
-        percentile_values = np.percentile(str_zscores, q=percentile_slices)
-        for gene in DZgenes:
-            try:
-                gene_str_z = ExpZscoreMat.loc[gene, STR]
-            except:
-                continue
-            idx = search_decile(gene_str_z, percentile_values)
-            STR_Deciles[STR].append(idx)
-    if pdf_fil != None:
-        pdf = matplotlib.backends.backend_pdf.PdfPages(pdf_fil)
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    res = []
-    for i, STR in enumerate(structures):
-        counts = count_slice(len(percentile_values), STR_Deciles[STR])
-        r, p = spearmanr(percentile_slices, counts)
-        res.append([STR, r, p])
-        if pdf_fil != None:
-            fig = plt.figure(dpi=120)
-            plt.plot(percentile_slices, counts, '--r', marker=".", markersize=15)
-            plt.text(0.7*max(percentile_slices), 0.95*max(counts), "spearmanr=%.2f\npvalue=%.3f"%(r, p), fontsize=8,
-                verticalalignment='top', bbox=props)
-            #plt.title("SCZ genes {} percentiles in {}".format((len(percentile_values)-1), STR))
-            plt.title("{}".format(STR))
-            plt.xlabel("percentile")
-            plt.ylabel("num of genes in each precentile")
-            plt.grid(True)
-            plt.axhline(y=(len(DZgenes)/(len(percentile_values))), color="black",ls="--")
-            pdf.savefig(fig)
-        #if i == 1:
-        #    break
-    if pdf_fil != None:
-        pdf.close()
-    res = sorted(res, key=lambda x:x[1], reverse=True)
-    
-    if csv_fil != None:
-        writer = csv.writer(open(csv_fil, 'wt'), delimiter="\t")
-        writer.writerow(["STR", "Spearmanr", "pvalue.spearman"])
-        for STR, r, p in res:
-            writer.writerow([STR, r, p])
-    top50 = res[:50]
-    return top50
-
-def DecileNull(NGenes, Ndecile, Npermute, Weights):
-    SET = [x for x in range(Ndecile)]
-    res = []
-    for i in range(Npermute):
-        onerun = np.random.choice(SET, size=NGenes, replace=True)
-        onerun = count_slice(Ndecile, list(onerun))
-        Score = DecileWeightedScore(onerun, Weights)
-        res.append(Score)
-    return res
-
-def DecileWeightedScore(DecileValues, Weights):
-    assert len(DecileValues) == len(Weights)
-    Score = 0
-    for V, W in zip(DecileValues, Weights):
-        Score += V * W
-    return Score/sum(DecileValues)
-
-def DecileOneSTR(STR, ExpZscoreMat, DZGenes, Weights, percentile_slices):
-    str_zscores = ExpZscoreMat[STR].values
-    str_zscores = [x for x in str_zscores if x==x]
-    percentile_values = np.percentile(str_zscores, q=percentile_slices)
-    res = []
-    for gene in DZGenes:
-        try:
-            gene_str_z = ExpZscoreMat.loc[gene, STR]
-        except:
-            continue
-        idx = search_decile(gene_str_z, percentile_values)
-        res.append(idx)
-
-    counts = count_slice(len(percentile_values), res)
-    #print(counts)
-    return DecileWeightedScore(counts, Weights)
-    
-def DecileRankScoring(ExpZscoreMat, DZgenes, Weights, NullDist, percentile_slices=np.array(range(0, 100, 10)), pdf_fil="decile.pdf", csv_fil="decile.rank.tsv"):
-    structures = ExpZscoreMat.columns.values
-    res = []
-    for STR in structures:
-        STR_Score = DecileOneSTR(STR, ExpZscoreMat, DZgenes, Weights, percentile_slices)
-        P = GetPermutationP(NullDist, STR_Score)
-        #STR_Deciles[STR] = (STR_Score, P)
-        res.append([STR, STR_Score, P])
-    res = sorted(res, key=lambda x:x[1], reverse=True)
-    if csv_fil != None:
-        writer = csv.writer(open(csv_fil, 'wt'), delimiter="\t")
-        writer.writerow(["STR", "Score", "pvalue"])
-        for STR, r, p in res:   
-            writer.writerow([STR, r, p])
-
-#### Quantile AVG Related Functions
-def QuantileNull(NGenes, Npermute, ttest=False):
-    slice = 1/18000
-    SET = list(range(1, 18000))
-    bias, p = [], []
-    for i in range(Npermute):
-        onerun = np.random.choice(SET, size=NGenes, replace=False)
-        onerun = [x/18000 for x in onerun]
-        bias.append(np.mean(onerun))
-        p.append(ttest_1samp(onerun, 0.5)[1])
-    res = pd.DataFrame(data={'Bias':bias, 'P':p})
-    res = res.sort_values("Bias", ascending=False)
-    return res
-
-def QuantileOneSTR(STR, ZscoreMat, DZgenes):
-    zscores = ZscoreMat[STR].values
-    zscores = zscores[~np.isnan(zscores)]
-    sorted_z = sorted(zscores)
-    DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
-    res = []
-    count = 0
-    DZzscore = set(DZzscore)
-    TotalLen = len(sorted_z)
-    Z = []
-    Quantiles = []
-    for i,z in enumerate(sorted_z):
-        if z==z and z in DZzscore:
-            count += 1
-            quantile = i/TotalLen
-            res.append(quantile)
-            Z.append(z)
-    return Z, res
-
-def QuantileAVGShowDist(ExpZscoreMat, DZgenes, csv_fil="quantile.rank.tsv", alpha=0.01):
-    structures = ExpZscoreMat.columns.values 
-    AVGQ, AVGZ, Qs, Zs = [], [], [], []
-    for STR in structures:
-        DZzscore, Quantiles = QuantileOneSTR(STR, ExpZscoreMat, DZgenes)
-        quant_avg = np.mean(Quantiles)
-        zscore_avg = np.mean(DZzscore)
-        AVGQ.append(quant_avg)
-        AVGZ.append(zscore_avg)
-        Qs.append(Quantiles)
-        Zs.append(DZzscore)
-    df = pd.DataFrame(data={"STR":structures, "AVG_Q":AVGQ, "AVG_Z":AVGZ, "Quantiles": Qs, "Zscores":Zs})
-    top50_zscores = df.sort_values("AVG_Q", ascending=False).head(50) 
-    top50_quantiles = df.sort_values("AVG_Z", ascending=False).head(50)
-    return top50_zscores, top50_quantiles
-
-def QuantileAVGScoring(ExpZscoreMat, DZgenes, csv_fil="quantile.rank.tsv", alpha=0.01):
-    structures = ExpZscoreMat.columns.values
-    res = []
-    STRs = []
-    Bias = []
-    T = []
-    P = []
-    for STR in structures:
-        DZzscore, Quantiles = QuantileOneSTR(STR, ExpZscoreMat, DZgenes) 
-        STR_Score = np.mean(Quantiles)
-        STRs.append(STR)
-        Bias.append(STR_Score)
-        #w, p = wilcoxon(DZzscore)
-        t, p = ttest_1samp(Quantiles, 0.5)
-        T.append(t)
-        P.append(p)
-    acc, qvalues = stats.multitest.fdrcorrection(P, alpha=alpha)
-    df = pd.DataFrame(data={"STR":STRs, "Bias":Bias, "T-stat":T, "P":P, "FDR":qvalues})
-    df = df.sort_values("Bias", ascending=False)
-    df.index = np.arange(1, len(df) + 1)
-    if csv_fil != None:
-        df.to_csv(csv_fil, index=False)
-    return df
-
-###################################################################################################################
-# Expression Specificity Bias Simple
-###################################################################################################################
-# ExpZscoreMat: z score matrix of expression
-# DZgenes: gene set
-# RefGenes: reference gene set that sampling from, like brian expressed genes or sibling genes. 
-# Nsampling: number of samping from reference gene set. Larger the better estimation but slower
-def ZOneSTR(STR, ZscoreMat, DZgenes):
-    DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
-    DZzscore = [x for x in DZzscore if x==x]
-    return np.mean(DZzscore)
-def ZscoreAVGWithExpMatch(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
-    structures = ExpZscoreMat.columns.values
-    DZgenes = list(set(DZgenes).intersection(set(ExpZscoreMat.index.values)))
-    EFFECTS = []
-    EFF_Z = []
-    for i, STR in enumerate(structures):
-        mean_z = ZOneSTR(STR, ExpZscoreMat, DZgenes)
-        Match_mean_Zs = []
-        for c in Match_DF.columns:
-            match_genes = Match_DF[c].values
-            match_z = ZOneSTR(STR, ExpZscoreMat, match_genes)
-            Match_mean_Zs.append(match_z)
-        est_mean_z = np.mean(Match_mean_Zs)
-        effect_z = mean_z - est_mean_z
-        EFF_Z.append(effect_z); 
-        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
-        EFFECTS.append(ZZ)
-    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z})
-    df = df.sort_values("EFFECT", ascending=False)
-    if csv_fil != None:
-        df.to_csv(csv_fil, index=False)
-    return df
-def ZscoreAVGWithExpMatch_SingleGene(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
-    structures = ExpZscoreMat.columns.values
-    STRS, data = [], []
-    for i, STR in enumerate(structures):
-        EFFECTS = []
-        Mean_Z, Match_Z = [],[]
-        for j, g in enumerate(DZgenes):
-            #print(i, j)
-            DZzscore = ExpZscoreMat.loc[g, STR]
-            Match_mean_Zs = []
-            if not DZzscore == DZzscore:
-                continue
-            for k, c in enumerate(Match_DF.columns):
-                match_gene = Match_DF.loc[g, c]
-                match_z = ExpZscoreMat.loc[match_gene, STR]
-                if not match_z == match_z:
-                        continue
-                Match_mean_Zs.append(match_z)
-            est_mean_z = np.mean(Match_mean_Zs)
-            ZZ = (DZzscore - est_mean_z) / np.std(Match_mean_Zs)
-            EFFECTS.append(ZZ)
-            if ZZ != ZZ:
-                print(STR, g, ZZ)
-        data.append(EFFECTS)
-        STRS.append(STR)
-    #df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS})
-    df = pd.DataFrame(data=data, columns=DZgenes)
-    df.index=STRS
-    return df
-
-
-###################################################################################################################
-# Expression Specificity Bias
-###################################################################################################################
-# ExpZscoreMat: z score matrix of expression
-# DZgenes: gene set
-# RefGenes: reference gene set that sampling from, like brian expressed genes or sibling genes. 
-# Nsampling: number of samping from reference gene set. Larger the better estimation but slower
-def QuantileAVGScoringWithModifiedEffectSize(ExpZscoreMat, DZgenes, RefGenes, Nsamping = 100, csv_fil="quantile.rank.tsv"):
-    DF_DZ = QuantileAVGScoring(ExpZscoreMat, DZgenes)
-    
-    for i in range(Nsampling):
-        s
-    return df
-
-def ZscoreAVGWithExpMatch2(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
-    structures = ExpZscoreMat.columns.values
-    EFF_Z, EFF_Q = [], []
-    Pval_Z, Pval_Q = [], []
-    Mean_Z, Match_Z = [], []
-    Mean_Q, Match_Q = [], []
-    EFFECTS = []
-    for i, STR in enumerate(structures):
-        DZzscore, Quantiles = QuantileOneSTR(STR, ExpZscoreMat, DZgenes)
-        mean_z, mean_q = np.mean(DZzscore), np.mean(Quantiles)
-        Match_mean_Zs, Match_mean_Qs = [], []
-        for c in Match_DF.columns:
-            match_genes = Match_DF[c].values
-            match_z, match_q = QuantileOneSTR(STR, ExpZscoreMat, match_genes)
-            mean_match_z, mean_match_q = np.mean(match_z), np.mean(match_q)
-            Match_mean_Zs.append(mean_match_z)
-            Match_mean_Qs.append(mean_match_q)
-        est_mean_z = np.mean(Match_mean_Zs)
-        est_mean_q = np.mean(Match_mean_Qs)
-        effect_z = mean_z - est_mean_z
-        effect_q = mean_q - est_mean_q
-        EFF_Z.append(effect_z); EFF_Q.append(effect_q)
-        Pval_Z.append(ttest_1samp(Match_mean_Zs, mean_z)[1])
-        Pval_Q.append(ttest_1samp(Match_mean_Qs, mean_q)[1])
-        Mean_Z.append(mean_z); Match_Z.append(est_mean_z); Mean_Q.append(mean_q); Match_Q.append(est_mean_q)
-        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
-        EFFECTS.append(ZZ)
-        #print(i,)
-    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z, "Pval_Z":Pval_Z})
-    df["Mean_Z"] = Mean_Z
-    df["Match_Z"] = Match_Z
-    return df
-
-def ZscoreAVGWithExpMatch_SingleGene2(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
-    structures = ExpZscoreMat.columns.values
-    STRS, data = [], []
-    for i, STR in enumerate(structures):
-        EFFECTS = []
-        Mean_Z, Match_Z = [],[]
-        for j, g in enumerate(DZgenes):
-            #print(i, j)
-            DZzscore = ExpZscoreMat.loc[g, STR]
-            Match_mean_Zs = []
-            if not DZzscore == DZzscore:
-                continue
-            for k, c in enumerate(Match_DF.columns):
-                match_gene = Match_DF.loc[g, c]
-                match_z = ExpZscoreMat.loc[match_gene, STR]
-                if not match_z == match_z:
-                        continue
-                Match_mean_Zs.append(match_z)
-            est_mean_z = np.mean(Match_mean_Zs)
-            ZZ = (DZzscore - est_mean_z) / np.std(Match_mean_Zs)
-            EFFECTS.append(ZZ)
-            if ZZ != ZZ:
-                print(STR, g, ZZ)
-        data.append(EFFECTS)
-        STRS.append(STR)
-    #df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS})
-    df = pd.DataFrame(data=data, columns=DZgenes)
-    df.index=STRS
-    return df
-
-###################################################################################################################
-
-###################################################################################################################
-# Expression Level Bias with Constraint
-###################################################################################################################
-def ZscoreOneSTR_Constraint(STR, ZscoreMat, DZgenes, Gene2LoFZ):
-    DZgene_Zs = ZscoreMat[STR].loc[np.array(DZgenes)].values
-    DZgene_cons = [Gene2LoFZ.get(g, 1) for g in DZgenes]
-    DZgene_Z_cons = [x*y for x,y in zip(DZgene_Zs, DZgene_cons)]
-    DZgene_Z_cons = [x for x in DZgene_Z_cons if x==x]
-    return np.mean(DZgene_Z_cons)
-
-def ZscoreAVGWithExpMatch_Constraint(ExpZscoreMat, DZgenes, Match_DF, Gene2LoFZ, csv_fil="specificity.expmatch.rank.tsv"):
-    structures = ExpZscoreMat.columns.values
-    EFFECTS = []; EFF_Z = []
-    for i, STR in enumerate(structures):
-        mean_z = ZscoreOneSTR_Constraint(STR, ExpZscoreMat, DZgenes, Gene2LoFZ)
-        Match_mean_Zs = []; 
-        for c in Match_DF.columns:
-            match_genes = Match_DF[c].values
-            match_z = ZscoreOneSTR_Constraint(STR, ExpZscoreMat, match_genes, Gene2LoFZ)
-            Match_mean_Zs.append(match_z)
-        est_mean_z = np.mean(Match_mean_Zs)
-        effect_z = mean_z - est_mean_z
-        EFF_Z.append(effect_z); 
-        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
-        EFFECTS.append(ZZ)
-        #print(i,)
-    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z})
-    return df
-
-###################################################################################################################
-# Expression Level Bias
-###################################################################################################################
-def ExpLevelOneSTR(STR, ExpMat, DZgenes, Matchgenes):
-    #exp_levels = ExpMat[STR].values
-    #exp_levels = exp_levels[~np.isnan(exp_levels)]
-    g_exp_level_zs = []
-    err_gen = 0
-    for i, g in enumerate(DZgenes):
-        try:
-            g_exp_level = ExpMat.loc[g, STR]
-            assert g_exp_level == g_exp_level
-        except:
-            err_gen += 1
-            continue
-        #print(Matchgenes.head(2))
-        g_matches = Matchgenes.loc[g, :].values
-        #print(g, g_matches)
-        g_matches_exps = ExpMat.loc[g_matches, STR].values
-        g_matches_exps = g_matches_exps[~np.isnan(g_matches_exps)]
-        g_exp_level_z = (g_exp_level - np.mean(g_matches_exps))/np.std(g_matches_exps)
-        g_exp_level_zs.append(g_exp_level_z)
-    avg_exp_level_z = np.mean(g_exp_level_zs)
-    return avg_exp_level_z
-## Match_DF: rows as genes, columns as trails
-def ExpAVGWithExpMatch_depricated(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
-    structures = ExpMat.columns.values
-    EFFs = []
-    for i, STR in enumerate(structures):
-        avg_exp_level_z = ExpLevelOneSTR(STR, ExpMat, DZgenes, Match_DF)
-        EFFs.append(avg_exp_level_z)
-    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFs})
-    df = df.sort_values("EFFECT", ascending=False)
-    df.to_csv(csv_fil, index=False)
-    return df
-
-###################################################################################################################
-# Expression Level Bias with Constraint
-###################################################################################################################
-def ExpLevelOneSTR_Constraint(STR, ExpMat, DZgenes, Matchgenes, Gene2LoFZ):
-    g_exp_level_zs = []
-    err_gen = 0
-    for i, g in enumerate(DZgenes):
-        try:
-            g_exp_level = ExpMat.loc[g, STR]
-            assert g_exp_level == g_exp_level
-            g_exp_level_cons = g_exp_level * Gene2LoFZ.get(g, 1)
-        except:
-            err_gen += 1
-            continue
-        g_matches = Matchgenes.loc[g, :].values
-        g_matches_cons = [Gene2LoFZ.get(g, 1) for g in g_matches]
-        g_matches_exps = ExpMat.loc[g_matches, STR].values
-        g_matches_exps_cons = [x*y for x,y in zip(g_matches_cons, g_matches_exps)]
-        #print(g_matches_exps_cons)
-        #g_matches_exps_cons = g_matches_exps_cons[~np.isnan(g_matches_exps_cons)]
-        g_matches_exps_cons = [x for x in g_matches_exps_cons if x==x]
-        g_exp_level_z = (g_exp_level_cons - np.mean(g_matches_exps_cons))/np.std(g_matches_exps_cons)
-        g_exp_level_zs.append(g_exp_level_z)
-    avg_exp_level_z = np.mean(g_exp_level_zs)
-    return avg_exp_level_z
-## Match_DF: rows as genes, columns as trails
-def ExpAVGWithExpMatch_Constraint(ExpMat, DZgenes, Match_DF, Gene2LoFZ, csv_fil="explevel.rank.tsv"):
-    structures = ExpMat.columns.values
-    EFFs = []
-    for i, STR in enumerate(structures):
-        avg_exp_level_z = ExpLevelOneSTR_Constraint(STR, ExpMat, DZgenes, Match_DF, Gene2LoFZ)
-        EFFs.append(avg_exp_level_z)
-    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFs})
-    df = df.sort_values("EFFECT", ascending=False)
-    df.to_csv(csv_fil, index=False)
-    return df
-
-def ExpAVGWithExpMatch_SingleGene(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
-    structures = ExpMat.columns.values
-    EFFs = []
-    for i, STR in enumerate(structures):
-        g_exp_str = []
-        for j, g in enumerate(DZgenes):
-            g_exp_level = ExpMat.loc[g, STR]
-            g_matches = Match_DF.loc[g, :].values
-            g_matches_exps = ExpMat.loc[g_matches, STR].values
-            g_matches_exps = g_matches_exps[~np.isnan(g_matches_exps)]
-            g_exp_level_z = (g_exp_level - np.mean(g_matches_exps))/np.std(g_matches_exps)
-            g_exp_str.append(g_exp_level_z)
-        #avg_exp_level_z = ExpLevelOneSTR(STR, ExpMat, DZgenes, Match_DF)
-        #EFFs.append(avg_exp_level_z)
-        EFFs.append(g_exp_str)
-    df = pd.DataFrame(data=EFFs, columns=DZgenes)
-    df.index = structures
-    return df
-
-def QuntileAVGSelectN(BiasDF, name = "STR", plot=False):
-    medians = []
-    idx = []
-    i = 0
-    while i<100:
-        idx.append(i)
-        tmp_df = BiasDF.iloc[i:,:]
-        median = np.median(tmp_df["Bias"].values)
-        medians.append(median)
-        if median <= 0.5:
-            N = i-1
-            break
-        i += 1
-    while i<100:
-        idx.append(i)
-        tmp_df = BiasDF.iloc[i:,:]
-        median = np.median(tmp_df["Bias"].values)
-        medians.append(median)
-        i += 1
-    if plot:
-        plt.figure(dpi=120)
-        plt.hlines(y=0.5, xmin=0, xmax = 100, linestyles="dashed", alpha=0.5, color="grey")
-        plt.plot(idx, medians)
-        plt.title("%s Median Bias"%name)
-        plt.xlabel("Num Removed STRs")
-        plt.ylabel("Median Expression Bias")
-    return N
-
-def StureturesOverlap(set1, set2, Ntop=50):
-    return list(set(set1["STR"].values[:Ntop]).intersection(set2["STR"].values[:Ntop]))
-
-def PlotBiasDistandP(ssc, spark, tada, sib, topN = 50, labels=["ssc", "spark", "tada"]):
-    fig, axs = plt.subplots(2, 2, dpi=120)
-    dfs = [ssc, spark, tada]
-    for idx, ax in enumerate([(0,0), (0,1), (1,0)]):
-        i,j = ax
-        Case_Values = dfs[idx]["Score"].values[:topN]
-        Control_Values = sib["Score"].values[:topN]
-        t, p = scipy.stats.mannwhitneyu(Case_Values, Control_Values, alternative='greater')
-        u1, u2 = np.mean(Case_Values), np.mean(Control_Values)
-        axs[i,j].hist(Case_Values, label=labels[idx], color="red", alpha=0.5, density=1)
-        axs[i,j].hist(Control_Values, label=labels[3], color="blue", alpha=0.5, density=1)
-        axs[i,j].legend()
-        print("%20s\t%.3f\t%.3f\t%.3f\t%.3e"%(labels[idx], u1, u2, (u1-u2), p))
-    plt.show()
 
 ###################################################################################################################
 # Matching genes by overal brain expression level 
@@ -684,13 +125,31 @@ def assignProb(xlist):
     res[-1] = 1 - sum(res[:-1])
     return np.array(res)
 
-def ExpressionMatchGeneSet(geneset, match_feature, savefil = None, interval_len = 500, sample_size=1000): 
+def ExpressionMatchOneGene(Gene, match_feature, ExpText="Exp.Volume.Weighted.Mean", savefil = None, interval_len = 500, sample_size = 1000):
+    gene_rank = match_feature.loc[Gene, "Rank"]
+    Interval = match_feature[(match_feature["Rank"] >= gene_rank - interval_len) &
+                             (match_feature["Rank"] <= gene_rank + interval_len) &
+                             (~match_feature.index.isin([Gene]))]
+    Interval_genes = Interval.index.values
+    Interval_exps = Interval[ExpText].values
+    Interval_genes_probs = assignProb(Interval_exps)
+    match_genes = np.random.choice(Interval_genes, size = sample_size, replace=True, p = Interval_genes_probs)
+    if savefil != None:
+        fout = open(savefil, "wt")
+    else:
+        return
+    for g in match_genes:
+        fout.write(g+"\n")
+    fout.close()
+    return
+
+def ExpressionMatchGeneSet(geneset, match_feature, ExpText="Exp.Volume.Weighted.Mean", savefil = None, interval_len = 500, sample_size=1000): 
     genes_to_match = [] # genes
     dat = []
     xx_genes = []
     for i, gene in enumerate(geneset):
         try:
-            gene_exp = match_feature.loc[gene, "EXP"]
+            gene_exp = match_feature.loc[gene, ExpText]
         except:
             #print("Unmathed:%d"%gene)
             continue
@@ -703,7 +162,7 @@ def ExpressionMatchGeneSet(geneset, match_feature, savefil = None, interval_len 
                                  (match_feature["Rank"] <= gene_rank + interval_len) & 
                                  (~match_feature.index.isin(geneset))       ]
         Interval_genes = Interval.index.values
-        Interval_exps = Interval["EXP"].values
+        Interval_exps = Interval[ExpText].values
         Interval_genes_probs = assignProb(Interval_exps)
         match_genes = np.random.choice(Interval_genes, size = sample_size, replace=True, p = Interval_genes_probs) # N(sample_size)genes that expression matching with particular gene in gene set
         dat.append(match_genes) 
@@ -759,14 +218,14 @@ def write_match(gene, matches, Dir):
         writer.writerow([match["GENE"]])
 
 def STR2Region():
-    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     return str2reg
 
 def RegionDistributions(DF, topN=50, show = False):
     #ax = fig.add_axes([0,0,1,1])
-    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     Regions = list(set(str2reg.values()))
@@ -784,7 +243,7 @@ def RegionDistributions(DF, topN=50, show = False):
     return RegionCount
 
 def RegionDistributionsList(List, topN=50):
-    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     Regions = list(set(str2reg.values()))
@@ -954,34 +413,90 @@ def SPARK_MutCountByLength(MutFil, match_feature, FDR=0.2):
             print(g)
     return gene2MutN_Length
 
+def Aggregate_top_Genes(MutFil):
+    Agg_DWest = MutFil[MutFil["pDenovoWEST"]<1.33e-6]
+    Agg_TADA_Rank = MutFil.sort_values("Qvalue").head(100)
+    MutFil = pd.concat([Agg_DWest,Agg_TADA_Rank]).drop_duplicates().reset_index(drop=True)
+    return MutFil
+
+def Aggregate_Gene_Weights(MutFil, FDR="Candidate", out=None):
+    if FDR == "Candidate":
+        Agg_DWest = MutFil[MutFil["pDenovoWEST"]<1.33e-6]
+        Agg_TADA_Rank = MutFil.sort_values("Qvalue").head(100)
+        #print(max(Agg_TADA_Rank["Qvalue"].values))
+        MutFil = pd.concat([Agg_DWest,Agg_TADA_Rank]).drop_duplicates().reset_index(drop=True)
+    elif FDR == None:
+        pass 
+    else:
+        MutFil = MutFil[MutFil["Qvalue"]<FDR]
+        #MutFil = MutFil[MutFil["pDenovoWEST"]<FDR]
+    gene2None, gene2MutN = {}, {}
+    #print(MutFil.shape)
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+        except:
+            continue
+        gene2None[g] = 1
+        gene2MutN[g] = row["dnLGD"]*0.357 + row["dnDmis"]*0.231
+        #gene2MutN[g] = row["dnLGD"]*0.457 + row["dnDmis"]*0.231
+    if out != None:
+        writer = csv.writer(open(out, 'wt'))
+        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
+           writer.writerow([k,v]) 
+    return gene2None, gene2MutN
+
 ###################################################################################################################
 # Weighted Bias Calculattion
 ###################################################################################################################
 # Expression Specificity
-def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights):
+def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, Match_DF = None):
     #DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
     #DZzscore = [x for x in DZzscore if x==x]
+    assert Method in [1, 2]
     res = []
-    for gene, weight in Gene2Weights.items():
-        if gene not in ExpZscoreMat.index.values:
-            continue
-        score = weight * ExpZscoreMat.loc[gene, STR]
-        if score == score:
-            res.append(score)
-    return np.mean(res)
-def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Match_DF=0, BS_Weights=False, csv_fil="AvgSTRZ.weighted.csv"):
+    sum_weight = 0
+    if Method == 1:
+        for gene, weight in Gene2Weights.items():
+            if gene not in ExpZscoreMat.index.values:
+                continue
+            #score = weight * max(0, ExpZscoreMat.loc[gene, STR])
+            score = weight * ExpZscoreMat.loc[gene, STR]
+            if score == score:
+                res.append(score)
+                sum_weight += weight
+        return np.sum(res)/sum_weight
+    elif Method == 2:
+        for gene, weight in Gene2Weights.items():
+            if gene not in ExpZscoreMat.index.values:
+                continue
+            z_gene = ExpZscoreMat.loc[gene, STR]
+            g_matches = Match_DF.loc[gene, :].values 
+            z_matches = [ExpZscoreMat.loc[g, STR] for g in g_matches]
+            b = (z_gene - np.mean(z_matches)) / np.std(z_matches) 
+            score = weight * b
+            if score == score:
+                res.append(score)
+                sum_weight += weight
+        return np.sum(res)/sum_weight
+def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Method = 1, Match_DF=0, BS_Weights=True, csv_fil=None, ConnFil=ConnFil):
+    assert Method in [1,2,3] # 1: AvgZ; 2: gene Z normed by Matched gene Z; 3: gene set avgZ normed by Matched set Z;
     STRs = ExpZscoreMat.columns.values
     EFFECTS = []; Normed_EFFECTS = []
     Regions = []
-    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = pd.read_csv("./dat/structure2region.map", delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     for i, STR in enumerate(STRs):
-        mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights)
-        EFFECTS.append(mean_z)
-        #if Match_DF.isinstance(Match_DF, pd.core.frame.DataFrame):
-        if type(Match_DF) != int:
-            Match_mean_Zs = [];
+        if Method == 1:
+            mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1)
+            STR_Bias = mean_z
+        if Method == 2:
+            mean_b = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Match_DF=Match_DF, Method = 2)
+            STR_Bias = mean_b
+        if Method == 3: 
+            mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1)
+            Match_mean_Zs = []
             for g in Match_DF.columns:
                 match_genes = Match_DF[g].values
                 if BS_Weights:
@@ -991,25 +506,22 @@ def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Match_DF=0, BS_Weights=False, c
                     BS_MG2Weights = dict(zip(match_genes, [1]*len(match_genes)))
                 match_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, BS_MG2Weights)
                 Match_mean_Zs.append(match_z)
-            match_mean_z = np.mean(Match_mean_Zs)
-            normed_effect = (mean_z - match_mean_z) / np.std(Match_mean_Zs)
-            Normed_EFFECTS.append(normed_effect) 
+            normed_effect = (mean_z - np.mean(Match_mean_Zs)) / np.std(Match_mean_Zs)
+            STR_Bias = normed_effect
+        EFFECTS.append(STR_Bias)
         Regions.append(str2reg[STR])
-    if type(Match_DF) != int:
-        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions, "NormedEFFECT":Normed_EFFECTS})
-    else:
-        df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions})
+    df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions})
     df = df.sort_values("EFFECT", ascending=False)
     df = df.reset_index(drop=True)
     df["Rank"] = df.index + 1
     # Trimming Circuit
-    g = LoadConnectome2()
+    g = LoadConnectome2(ConnFil=ConnFil)
     top_structs = df.head(50)["STR"].values
     top_nodes = g.vs.select(label_in=top_structs)
     g2 = g.subgraph(top_nodes)
     graph_size, exp_stats, exp_graphs, rm_vs = CircuitTrimming(g2, g)
     idx = np.argmax(exp_stats[:40])
-    print(50-idx)
+    #print(50-idx)
     CIR_STRS = [v["label"] for v in exp_graphs[idx].vs]
     df['InCircuit'] = 0
     df["TrimRank"] = 1
@@ -1017,13 +529,15 @@ def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Match_DF=0, BS_Weights=False, c
     for i, _str in enumerate([x["label"] for x in rm_vs]):
         df.loc[_str, "TrimRank"] = 50-i
         df.loc[_str, "InCircuit"] = 1 if _str in CIR_STRS else 0
-    df.to_csv(csv_fil, index=False)
+    if csv_fil != None:
+        df.to_csv(csv_fil, index=False)
     return df
 
 # Expression Level
 def ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF):
     g_exp_level_zs = []
     err_gen = 0
+    sum_weight = 0
     for g, weights in Gene2Weights.items(): 
         if not g in ExpMat.index.values:
             continue
@@ -1040,32 +554,33 @@ def ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF):
         g_exp_level_weighted_z = g_exp_level_z * weights 
         if g_exp_level_weighted_z == g_exp_level_weighted_z:
             g_exp_level_zs.append(g_exp_level_weighted_z)
-    avg_exp_level_z = np.mean(g_exp_level_zs)
+            sum_weight += weights
+    avg_exp_level_z = np.sum(g_exp_level_zs)/sum_weight
     #print(err_gen)
     return avg_exp_level_z
 ## Match_DF: rows as genes, columns as trails
-def ExpAVGWithExpMatch(ExpMat, Gene2Weights, Match_DF, csv_fil="ExpLevel.weighted.csv"):
+def ExpAVGWithExpMatch(ExpMat, Gene2Weights, Match_DF, csv_fil="ExpLevel.weighted.csv", ConnFil=ConnFil):
     STRs = ExpMat.columns.values
     EFFs = []
     Regions = []
-    str2reg_df = pd.read_csv("/Users/jiayao/Work/ASD_Circuits/src/dat/structure2region.map", delimiter="\t")
+    str2reg_df = pd.read_csv("./dat/structure2region.map", delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     for i, STR in enumerate(STRs):
         avg_exp_level_z = ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF)
         EFFs.append(avg_exp_level_z)
         Regions.append(str2reg[STR])
-    df = pd.DataFrame(data={"STR":STRs, "EFFECT":EFFs})
+    df = pd.DataFrame(data={"STR":STRs, "EFFECT":EFFs, "Region":Regions})
     df = df.sort_values("EFFECT", ascending=False)
     df.reset_index()
-    df["Rank"] = df.index + 1
-    g = LoadConnectome2()
+    #df["Rank"] = df.index + 1
+    g = LoadConnectome2(ConnFil=ConnFil)
     top_structs = df.head(50)["STR"].values
     top_nodes = g.vs.select(label_in=top_structs)
     g2 = g.subgraph(top_nodes)
     graph_size, exp_stats, exp_graphs, rm_vs = CircuitTrimming(g2, g)
     idx = np.argmax(exp_stats[:-10])
-    print(idx)
+    #print(idx)
     CIR_STRS = [v["label"] for v in exp_graphs[idx].vs]
     df['InCircuit'] = 0
     df["TrimRank"] = 1
@@ -1076,6 +591,15 @@ def ExpAVGWithExpMatch(ExpMat, Gene2Weights, Match_DF, csv_fil="ExpLevel.weighte
     df.to_csv(csv_fil, index=False)
     return df
 
+def sibling_gene_weight(df):
+    gene2MutN = {}
+    for i, row in df.iterrows():
+        try:
+            g = GeneSymbol2Entrez[row["gene"]]
+            gene2MutN[g] = row["dnv_LGDs_sib"]*0.375 + (row["dnv_missense_sib"]) * 0.145
+        except:
+            continue
+    return gene2MutN
 
 #####################################################################################
 #####################################################################################
@@ -1249,11 +773,15 @@ def NodePermutation2(g, Nnodes = 50, Npermute=1000):
         Nulls.append(Cohesiveness(g_, idx_nodes))
     return Nulls
 
-def GetPermutationP(null, obs):
+def GetPermutationP(null, obs, gt=True):
     count = 0
     for i,v in enumerate(null):
-        if obs >= v:
-            count += 1
+        if gt:
+            if obs >= v:
+                count += 1
+        else:
+            if obs <= v:
+                count += 1
     return 1-float(count)/(len(null)+1)
 
 def PlotPermutationP(Null, Obs):
@@ -1579,7 +1107,6 @@ def QQplot(pvalues, title="QQ plot"):
     plt.ylabel('Obs Q')
     plt.show()
 
-
 def CompareSTROverlap(DF1, DF2, name1, name2, topN=50):
     RD1 = RegionDistributions(DF1.set_index("STR"))
     RD2 = RegionDistributions(DF2.set_index("STR"))
@@ -1621,7 +1148,7 @@ def ShowTrimmingProfile(DFs, Names, topN=50):
     fig, ax = plt.subplots(dpi=120)
     for df, name in zip(DFs, Names):
         g_ = g.copy()
-        top_structs = df.head(topN)["STR"]
+        top_structs = df.head(topN).index
         top_nodes = g_.vs.select(label_in=top_structs)
         g2 = g_.subgraph(top_nodes)
         graph_size, exp_stats, exp_graphs, trimmed_Vs = CircuitTrimming(g2, g_)
@@ -1685,6 +1212,588 @@ def CompareList(list1, list2):
     print("Present in 1: %d"%len(set1.difference(set2)), set1.difference(set2))
     print("Present in 2: %d"%len(set2.difference(set1)), set2.difference(set1))
 
+def PlotEffectDist(BiasDF, title="Effect size Distribution"):
+    Min, Max = min(BiasDF["EFFECT"].values), max(BiasDF["EFFECT"].values)
+    bins = np.arange(Min, Max,  (Max-Min)/20)
+
+    plt.hist(BiasDF["EFFECT"].values[:50], color="red", label="Top50", bins=bins, rwidth=0.7)
+    plt.hist(BiasDF["EFFECT"].values[50:], color="blue", label="Rest", bins=bins, rwidth=0.7)
+    plt.xlabel("EFFECT")
+    plt.ylabel("Freq")
+    plt.legend()
+    plt.title(title)
+    plt.show()
+
 #####################################################################################
-# Depricated Methods
 #####################################################################################
+#####################################################################################
+### Depricated Methods
+### Depricated Methods
+### Depricated Methods
+#####################################################################################
+#####################################################################################
+#####################################################################################
+"""
+def TraceSTR(df, structures, see=None):
+    res = {} 
+    Coarse = df[df["coarse"]=="X"]["id"].values
+    for i, STR in enumerate(structures):
+        _df = df[df["KEY"]==STR]
+        parent_id = int(_df["parent_structure_id"].values[0])
+        parent_df = df[df["id"]==parent_id]
+        while 1:
+            #_df = df[df["parent_structure_id"]]
+            if parent_id == 997: # Root ID = 997
+                print("Can't find %s"%STR)
+                break
+            elif parent_id in Coarse:
+                res[STR] = parent_df["KEY"].values[0]
+                break
+            else:
+                parent_id = int(parent_df["parent_structure_id"].values[0])
+                parent_df = df[df["id"]==parent_id]
+                #if STR == see:
+                #    print(parent_df)
+    return res
+
+def StructureGeneSetBias(Structure, CaseSubsetDF, ControlSubsetDF, method="mean"):
+    Case_Values = CaseSubsetDF[Structure].values
+    Case_Values = [x for x in Case_Values if x==x]
+    Control_Values = ControlSubsetDF[Structure].values
+    Control_Values = [x for x in Control_Values if x==x]
+    if method == "mean":
+        return np.mean(Case_Values) - np.mean(Control_Values)
+    elif method == "median":
+        return np.median(Case_Values) - np.median(Control_Values)
+
+def StructureGeneListBias(Structure, ZscoreMat, CaseGeneList, ControlGeneList, method="median"):
+    Case_Values = []; Control_Values = [];
+    for entrez_id in CaseGeneList:
+        try:
+            v = ZscoreMat.loc[entrez_id, Structure]
+            if v == v:
+                Case_Values.append(v)
+        except:
+            pass
+    for entrez_id in ControlGeneList:
+        v = ZscoreMat.loc[entrez_id, Structure]
+        if v == v:
+            Control_Values.append(v)
+    t, p = scipy.stats.mannwhitneyu(Case_Values, Control_Values, alternative='greater')
+    if method == "mean":
+        return np.mean(Case_Values) - np.mean(Control_Values), p
+    elif method == "median":
+        return np.median(Case_Values) - np.median(Control_Values), p
+
+def ComputeExpressionBias(method, ExpMat, CaseGeneSet, ContGeneSet=None, outfil="region.rank.tsv"):
+    assert method in ["zscore", "absolute", "decile"]
+    if method == "zscore":
+        ExpMat = pd.read_csv(ExpMat, index_col="ROW")
+        Structures = list(ExpMat.columns.values)
+        Biases_median = {}
+        for struc in Structures:
+            bias_median, p = StructureGeneListBias(struc, ExpMat, CaseGeneSet, ContGeneSet, method="median")
+            Biases_median[struc] = (bias_median, p)
+        res = sorted(Biases_median.items(), key=lambda k:k[1], reverse=True)
+        fout = open(outfil, 'wt')
+        fout.write("STR\tbias\tpvalue\n")
+        for k,(bias, p) in res:
+            #print(k,v)
+            fout.write("%s\t%.3f\t%.3e\n"%(k, bias, p))
+    return
+
+def search_decile(gene_str_z, percentile_values):
+    for i, v in enumerate(percentile_values):
+        if i == len(percentile_values)-1:
+            return i
+        elif gene_str_z > percentile_values[i] and gene_str_z < percentile_values[i+1]:
+            return i
+
+def count_slice(N, values):
+    res = []
+    for i in range(N):
+        res.append(values.count(i))
+    return res
+
+#### Decile Correlation Related Functions
+def DecileCorrelation(ExpZscoreMat, DZgenes, percentile_slices=np.array(range(0, 100, 10)), pdf_fil="decile.pdf", csv_fil="decile.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    STR_Deciles = {}
+    for STR in structures:
+        STR_Deciles[STR] = []
+        str_zscores = ExpZscoreMat[STR].values
+        str_zscores = [x for x in str_zscores if x==x]
+        percentile_values = np.percentile(str_zscores, q=percentile_slices)
+        for gene in DZgenes:
+            try:
+                gene_str_z = ExpZscoreMat.loc[gene, STR]
+            except:
+                continue
+            idx = search_decile(gene_str_z, percentile_values)
+            STR_Deciles[STR].append(idx)
+    if pdf_fil != None:
+        pdf = matplotlib.backends.backend_pdf.PdfPages(pdf_fil)
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    res = []
+    for i, STR in enumerate(structures):
+        counts = count_slice(len(percentile_values), STR_Deciles[STR])
+        r, p = spearmanr(percentile_slices, counts)
+        res.append([STR, r, p])
+        if pdf_fil != None:
+            fig = plt.figure(dpi=120)
+            plt.plot(percentile_slices, counts, '--r', marker=".", markersize=15)
+            plt.text(0.7*max(percentile_slices), 0.95*max(counts), "spearmanr=%.2f\npvalue=%.3f"%(r, p), fontsize=8,
+                verticalalignment='top', bbox=props)
+            #plt.title("SCZ genes {} percentiles in {}".format((len(percentile_values)-1), STR))
+            plt.title("{}".format(STR))
+            plt.xlabel("percentile")
+            plt.ylabel("num of genes in each precentile")
+            plt.grid(True)
+            plt.axhline(y=(len(DZgenes)/(len(percentile_values))), color="black",ls="--")
+            pdf.savefig(fig)
+        #if i == 1:
+        #    break
+    if pdf_fil != None:
+        pdf.close()
+    res = sorted(res, key=lambda x:x[1], reverse=True)
+    
+    if csv_fil != None:
+        writer = csv.writer(open(csv_fil, 'wt'), delimiter="\t")
+        writer.writerow(["STR", "Spearmanr", "pvalue.spearman"])
+        for STR, r, p in res:
+            writer.writerow([STR, r, p])
+    top50 = res[:50]
+    return top50
+
+def DecileNull(NGenes, Ndecile, Npermute, Weights):
+    SET = [x for x in range(Ndecile)]
+    res = []
+    for i in range(Npermute):
+        onerun = np.random.choice(SET, size=NGenes, replace=True)
+        onerun = count_slice(Ndecile, list(onerun))
+        Score = DecileWeightedScore(onerun, Weights)
+        res.append(Score)
+    return res
+
+def DecileWeightedScore(DecileValues, Weights):
+    assert len(DecileValues) == len(Weights)
+    Score = 0
+    for V, W in zip(DecileValues, Weights):
+        Score += V * W
+    return Score/sum(DecileValues)
+
+def DecileOneSTR(STR, ExpZscoreMat, DZGenes, Weights, percentile_slices):
+    str_zscores = ExpZscoreMat[STR].values
+    str_zscores = [x for x in str_zscores if x==x]
+    percentile_values = np.percentile(str_zscores, q=percentile_slices)
+    res = []
+    for gene in DZGenes:
+        try:
+            gene_str_z = ExpZscoreMat.loc[gene, STR]
+        except:
+            continue
+        idx = search_decile(gene_str_z, percentile_values)
+        res.append(idx)
+
+    counts = count_slice(len(percentile_values), res)
+    #print(counts)
+    return DecileWeightedScore(counts, Weights)
+    
+def DecileRankScoring(ExpZscoreMat, DZgenes, Weights, NullDist, percentile_slices=np.array(range(0, 100, 10)), pdf_fil="decile.pdf", csv_fil="decile.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    res = []
+    for STR in structures:
+        STR_Score = DecileOneSTR(STR, ExpZscoreMat, DZgenes, Weights, percentile_slices)
+        P = GetPermutationP(NullDist, STR_Score)
+        #STR_Deciles[STR] = (STR_Score, P)
+        res.append([STR, STR_Score, P])
+    res = sorted(res, key=lambda x:x[1], reverse=True)
+    if csv_fil != None:
+        writer = csv.writer(open(csv_fil, 'wt'), delimiter="\t")
+        writer.writerow(["STR", "Score", "pvalue"])
+        for STR, r, p in res:   
+            writer.writerow([STR, r, p])
+
+#### Quantile AVG Related Functions
+def QuantileNull(NGenes, Npermute, ttest=False):
+    slice = 1/18000
+    SET = list(range(1, 18000))
+    bias, p = [], []
+    for i in range(Npermute):
+        onerun = np.random.choice(SET, size=NGenes, replace=False)
+        onerun = [x/18000 for x in onerun]
+        bias.append(np.mean(onerun))
+        p.append(ttest_1samp(onerun, 0.5)[1])
+    res = pd.DataFrame(data={'Bias':bias, 'P':p})
+    res = res.sort_values("Bias", ascending=False)
+    return res
+
+def QuantileOneSTR(STR, ZscoreMat, DZgenes):
+    zscores = ZscoreMat[STR].values
+    zscores = zscores[~np.isnan(zscores)]
+    sorted_z = sorted(zscores)
+    DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
+    res = []
+    count = 0
+    DZzscore = set(DZzscore)
+    TotalLen = len(sorted_z)
+    Z = []
+    Quantiles = []
+    for i,z in enumerate(sorted_z):
+        if z==z and z in DZzscore:
+            count += 1
+            quantile = i/TotalLen
+            res.append(quantile)
+            Z.append(z)
+    return Z, res
+
+def QuantileAVGShowDist(ExpZscoreMat, DZgenes, csv_fil="quantile.rank.tsv", alpha=0.01):
+    structures = ExpZscoreMat.columns.values 
+    AVGQ, AVGZ, Qs, Zs = [], [], [], []
+    for STR in structures:
+        DZzscore, Quantiles = QuantileOneSTR(STR, ExpZscoreMat, DZgenes)
+        quant_avg = np.mean(Quantiles)
+        zscore_avg = np.mean(DZzscore)
+        AVGQ.append(quant_avg)
+        AVGZ.append(zscore_avg)
+        Qs.append(Quantiles)
+        Zs.append(DZzscore)
+    df = pd.DataFrame(data={"STR":structures, "AVG_Q":AVGQ, "AVG_Z":AVGZ, "Quantiles": Qs, "Zscores":Zs})
+    top50_zscores = df.sort_values("AVG_Q", ascending=False).head(50) 
+    top50_quantiles = df.sort_values("AVG_Z", ascending=False).head(50)
+    return top50_zscores, top50_quantiles
+
+def QuantileAVGScoring(ExpZscoreMat, DZgenes, csv_fil="quantile.rank.tsv", alpha=0.01):
+    structures = ExpZscoreMat.columns.values
+    res = []
+    STRs = []
+    Bias = []
+    T = []
+    P = []
+    for STR in structures:
+        DZzscore, Quantiles = QuantileOneSTR(STR, ExpZscoreMat, DZgenes) 
+        STR_Score = np.mean(Quantiles)
+        STRs.append(STR)
+        Bias.append(STR_Score)
+        #w, p = wilcoxon(DZzscore)
+        t, p = ttest_1samp(Quantiles, 0.5)
+        T.append(t)
+        P.append(p)
+    acc, qvalues = stats.multitest.fdrcorrection(P, alpha=alpha)
+    df = pd.DataFrame(data={"STR":STRs, "Bias":Bias, "T-stat":T, "P":P, "FDR":qvalues})
+    df = df.sort_values("Bias", ascending=False)
+    df.index = np.arange(1, len(df) + 1)
+    if csv_fil != None:
+        df.to_csv(csv_fil, index=False)
+    return df
+###################################################################################################################
+# Expression Specificity Bias Simple
+###################################################################################################################
+# ExpZscoreMat: z score matrix of expression
+# DZgenes: gene set
+# RefGenes: reference gene set that sampling from, like brian expressed genes or sibling genes. 
+# Nsampling: number of samping from reference gene set. Larger the better estimation but slower
+def ZOneSTR(STR, ZscoreMat, DZgenes):
+    DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
+    DZzscore = [x for x in DZzscore if x==x]
+    return np.mean(DZzscore)
+def ZscoreAVGWithExpMatch(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    DZgenes = list(set(DZgenes).intersection(set(ExpZscoreMat.index.values)))
+    EFFECTS = []
+    EFF_Z = []
+    for i, STR in enumerate(structures):
+        mean_z = ZOneSTR(STR, ExpZscoreMat, DZgenes)
+        Match_mean_Zs = []
+        for c in Match_DF.columns:
+            match_genes = Match_DF[c].values
+            match_z = ZOneSTR(STR, ExpZscoreMat, match_genes)
+            Match_mean_Zs.append(match_z)
+        est_mean_z = np.mean(Match_mean_Zs)
+        effect_z = mean_z - est_mean_z
+        EFF_Z.append(effect_z); 
+        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
+        EFFECTS.append(ZZ)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z})
+    df = df.sort_values("EFFECT", ascending=False)
+    if csv_fil != None:
+        df.to_csv(csv_fil, index=False)
+    return df
+def ZscoreAVGWithExpMatch_SingleGene(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    STRS, data = [], []
+    for i, STR in enumerate(structures):
+        EFFECTS = []
+        Mean_Z, Match_Z = [],[]
+        for j, g in enumerate(DZgenes):
+            #print(i, j)
+            DZzscore = ExpZscoreMat.loc[g, STR]
+            Match_mean_Zs = []
+            if not DZzscore == DZzscore:
+                continue
+            for k, c in enumerate(Match_DF.columns):
+                match_gene = Match_DF.loc[g, c]
+                match_z = ExpZscoreMat.loc[match_gene, STR]
+                if not match_z == match_z:
+                        continue
+                Match_mean_Zs.append(match_z)
+            est_mean_z = np.mean(Match_mean_Zs)
+            ZZ = (DZzscore - est_mean_z) / np.std(Match_mean_Zs)
+            EFFECTS.append(ZZ)
+            if ZZ != ZZ:
+                print(STR, g, ZZ)
+        data.append(EFFECTS)
+        STRS.append(STR)
+    #df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS})
+    df = pd.DataFrame(data=data, columns=DZgenes)
+    df.index=STRS
+    return df
+
+
+###################################################################################################################
+# Expression Specificity Bias
+###################################################################################################################
+# ExpZscoreMat: z score matrix of expression
+# DZgenes: gene set
+# RefGenes: reference gene set that sampling from, like brian expressed genes or sibling genes. 
+# Nsampling: number of samping from reference gene set. Larger the better estimation but slower
+def QuantileAVGScoringWithModifiedEffectSize(ExpZscoreMat, DZgenes, RefGenes, Nsamping = 100, csv_fil="quantile.rank.tsv"):
+    DF_DZ = QuantileAVGScoring(ExpZscoreMat, DZgenes)
+    
+    for i in range(Nsampling):
+        s
+    return df
+
+def ZscoreAVGWithExpMatch2(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    EFF_Z, EFF_Q = [], []
+    Pval_Z, Pval_Q = [], []
+    Mean_Z, Match_Z = [], []
+    Mean_Q, Match_Q = [], []
+    EFFECTS = []
+    for i, STR in enumerate(structures):
+        DZzscore, Quantiles = QuantileOneSTR(STR, ExpZscoreMat, DZgenes)
+        mean_z, mean_q = np.mean(DZzscore), np.mean(Quantiles)
+        Match_mean_Zs, Match_mean_Qs = [], []
+        for c in Match_DF.columns:
+            match_genes = Match_DF[c].values
+            match_z, match_q = QuantileOneSTR(STR, ExpZscoreMat, match_genes)
+            mean_match_z, mean_match_q = np.mean(match_z), np.mean(match_q)
+            Match_mean_Zs.append(mean_match_z)
+            Match_mean_Qs.append(mean_match_q)
+        est_mean_z = np.mean(Match_mean_Zs)
+        est_mean_q = np.mean(Match_mean_Qs)
+        effect_z = mean_z - est_mean_z
+        effect_q = mean_q - est_mean_q
+        EFF_Z.append(effect_z); EFF_Q.append(effect_q)
+        Pval_Z.append(ttest_1samp(Match_mean_Zs, mean_z)[1])
+        Pval_Q.append(ttest_1samp(Match_mean_Qs, mean_q)[1])
+        Mean_Z.append(mean_z); Match_Z.append(est_mean_z); Mean_Q.append(mean_q); Match_Q.append(est_mean_q)
+        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
+        EFFECTS.append(ZZ)
+        #print(i,)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z, "Pval_Z":Pval_Z})
+    df["Mean_Z"] = Mean_Z
+    df["Match_Z"] = Match_Z
+    return df
+
+def ZscoreAVGWithExpMatch_SingleGene2(ExpZscoreMat, DZgenes, Match_DF, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    STRS, data = [], []
+    for i, STR in enumerate(structures):
+        EFFECTS = []
+        Mean_Z, Match_Z = [],[]
+        for j, g in enumerate(DZgenes):
+            #print(i, j)
+            DZzscore = ExpZscoreMat.loc[g, STR]
+            Match_mean_Zs = []
+            if not DZzscore == DZzscore:
+                continue
+            for k, c in enumerate(Match_DF.columns):
+                match_gene = Match_DF.loc[g, c]
+                match_z = ExpZscoreMat.loc[match_gene, STR]
+                if not match_z == match_z:
+                        continue
+                Match_mean_Zs.append(match_z)
+            est_mean_z = np.mean(Match_mean_Zs)
+            ZZ = (DZzscore - est_mean_z) / np.std(Match_mean_Zs)
+            EFFECTS.append(ZZ)
+            if ZZ != ZZ:
+                print(STR, g, ZZ)
+        data.append(EFFECTS)
+        STRS.append(STR)
+    #df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS})
+    df = pd.DataFrame(data=data, columns=DZgenes)
+    df.index=STRS
+    return df
+
+###################################################################################################################
+
+###################################################################################################################
+# Expression Level Bias with Constraint
+###################################################################################################################
+def ZscoreOneSTR_Constraint(STR, ZscoreMat, DZgenes, Gene2LoFZ):
+    DZgene_Zs = ZscoreMat[STR].loc[np.array(DZgenes)].values
+    DZgene_cons = [Gene2LoFZ.get(g, 1) for g in DZgenes]
+    DZgene_Z_cons = [x*y for x,y in zip(DZgene_Zs, DZgene_cons)]
+    DZgene_Z_cons = [x for x in DZgene_Z_cons if x==x]
+    return np.mean(DZgene_Z_cons)
+
+def ZscoreAVGWithExpMatch_Constraint(ExpZscoreMat, DZgenes, Match_DF, Gene2LoFZ, csv_fil="specificity.expmatch.rank.tsv"):
+    structures = ExpZscoreMat.columns.values
+    EFFECTS = []; EFF_Z = []
+    for i, STR in enumerate(structures):
+        mean_z = ZscoreOneSTR_Constraint(STR, ExpZscoreMat, DZgenes, Gene2LoFZ)
+        Match_mean_Zs = []; 
+        for c in Match_DF.columns:
+            match_genes = Match_DF[c].values
+            match_z = ZscoreOneSTR_Constraint(STR, ExpZscoreMat, match_genes, Gene2LoFZ)
+            Match_mean_Zs.append(match_z)
+        est_mean_z = np.mean(Match_mean_Zs)
+        effect_z = mean_z - est_mean_z
+        EFF_Z.append(effect_z); 
+        ZZ = (mean_z - est_mean_z) / np.std(Match_mean_Zs)
+        EFFECTS.append(ZZ)
+        #print(i,)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFECTS, "EFF_Z":EFF_Z})
+    return df
+
+###################################################################################################################
+# Expression Level Bias
+###################################################################################################################
+def ExpLevelOneSTR(STR, ExpMat, DZgenes, Matchgenes):
+    #exp_levels = ExpMat[STR].values
+    #exp_levels = exp_levels[~np.isnan(exp_levels)]
+    g_exp_level_zs = []
+    err_gen = 0
+    for i, g in enumerate(DZgenes):
+        try:
+            g_exp_level = ExpMat.loc[g, STR]
+            assert g_exp_level == g_exp_level
+        except:
+            err_gen += 1
+            continue
+        #print(Matchgenes.head(2))
+        g_matches = Matchgenes.loc[g, :].values
+        #print(g, g_matches)
+        g_matches_exps = ExpMat.loc[g_matches, STR].values
+        g_matches_exps = g_matches_exps[~np.isnan(g_matches_exps)]
+        g_exp_level_z = (g_exp_level - np.mean(g_matches_exps))/np.std(g_matches_exps)
+        g_exp_level_zs.append(g_exp_level_z)
+    avg_exp_level_z = np.mean(g_exp_level_zs)
+    return avg_exp_level_z
+## Match_DF: rows as genes, columns as trails
+def ExpAVGWithExpMatch_depricated(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
+    structures = ExpMat.columns.values
+    EFFs = []
+    for i, STR in enumerate(structures):
+        avg_exp_level_z = ExpLevelOneSTR(STR, ExpMat, DZgenes, Match_DF)
+        EFFs.append(avg_exp_level_z)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFs})
+    df = df.sort_values("EFFECT", ascending=False)
+    df.to_csv(csv_fil, index=False)
+    return df
+
+###################################################################################################################
+# Expression Level Bias with Constraint
+###################################################################################################################
+def ExpLevelOneSTR_Constraint(STR, ExpMat, DZgenes, Matchgenes, Gene2LoFZ):
+    g_exp_level_zs = []
+    err_gen = 0
+    for i, g in enumerate(DZgenes):
+        try:
+            g_exp_level = ExpMat.loc[g, STR]
+            assert g_exp_level == g_exp_level
+            g_exp_level_cons = g_exp_level * Gene2LoFZ.get(g, 1)
+        except:
+            err_gen += 1
+            continue
+        g_matches = Matchgenes.loc[g, :].values
+        g_matches_cons = [Gene2LoFZ.get(g, 1) for g in g_matches]
+        g_matches_exps = ExpMat.loc[g_matches, STR].values
+        g_matches_exps_cons = [x*y for x,y in zip(g_matches_cons, g_matches_exps)]
+        #print(g_matches_exps_cons)
+        #g_matches_exps_cons = g_matches_exps_cons[~np.isnan(g_matches_exps_cons)]
+        g_matches_exps_cons = [x for x in g_matches_exps_cons if x==x]
+        g_exp_level_z = (g_exp_level_cons - np.mean(g_matches_exps_cons))/np.std(g_matches_exps_cons)
+        g_exp_level_zs.append(g_exp_level_z)
+    avg_exp_level_z = np.mean(g_exp_level_zs)
+    return avg_exp_level_z
+## Match_DF: rows as genes, columns as trails
+def ExpAVGWithExpMatch_Constraint(ExpMat, DZgenes, Match_DF, Gene2LoFZ, csv_fil="explevel.rank.tsv"):
+    structures = ExpMat.columns.values
+    EFFs = []
+    for i, STR in enumerate(structures):
+        avg_exp_level_z = ExpLevelOneSTR_Constraint(STR, ExpMat, DZgenes, Match_DF, Gene2LoFZ)
+        EFFs.append(avg_exp_level_z)
+    df = pd.DataFrame(data={"STR":structures, "EFFECT":EFFs})
+    df = df.sort_values("EFFECT", ascending=False)
+    df.to_csv(csv_fil, index=False)
+    return df
+
+def ExpAVGWithExpMatch_SingleGene(ExpMat, DZgenes, Match_DF, csv_fil="explevel.rank.tsv"):
+    structures = ExpMat.columns.values
+    EFFs = []
+    for i, STR in enumerate(structures):
+        g_exp_str = []
+        for j, g in enumerate(DZgenes):
+            g_exp_level = ExpMat.loc[g, STR]
+            g_matches = Match_DF.loc[g, :].values
+            g_matches_exps = ExpMat.loc[g_matches, STR].values
+            g_matches_exps = g_matches_exps[~np.isnan(g_matches_exps)]
+            g_exp_level_z = (g_exp_level - np.mean(g_matches_exps))/np.std(g_matches_exps)
+            g_exp_str.append(g_exp_level_z)
+        #avg_exp_level_z = ExpLevelOneSTR(STR, ExpMat, DZgenes, Match_DF)
+        #EFFs.append(avg_exp_level_z)
+        EFFs.append(g_exp_str)
+    df = pd.DataFrame(data=EFFs, columns=DZgenes)
+    df.index = structures
+    return df
+
+def QuntileAVGSelectN(BiasDF, name = "STR", plot=False):
+    medians = []
+    idx = []
+    i = 0
+    while i<100:
+        idx.append(i)
+        tmp_df = BiasDF.iloc[i:,:]
+        median = np.median(tmp_df["Bias"].values)
+        medians.append(median)
+        if median <= 0.5:
+            N = i-1
+            break
+        i += 1
+    while i<100:
+        idx.append(i)
+        tmp_df = BiasDF.iloc[i:,:]
+        median = np.median(tmp_df["Bias"].values)
+        medians.append(median)
+        i += 1
+    if plot:
+        plt.figure(dpi=120)
+        plt.hlines(y=0.5, xmin=0, xmax = 100, linestyles="dashed", alpha=0.5, color="grey")
+        plt.plot(idx, medians)
+        plt.title("%s Median Bias"%name)
+        plt.xlabel("Num Removed STRs")
+        plt.ylabel("Median Expression Bias")
+    return N
+
+def StureturesOverlap(set1, set2, Ntop=50):
+    return list(set(set1["STR"].values[:Ntop]).intersection(set2["STR"].values[:Ntop]))
+
+def PlotBiasDistandP(ssc, spark, tada, sib, topN = 50, labels=["ssc", "spark", "tada"]):
+    fig, axs = plt.subplots(2, 2, dpi=120)
+    dfs = [ssc, spark, tada]
+    for idx, ax in enumerate([(0,0), (0,1), (1,0)]):
+        i,j = ax
+        Case_Values = dfs[idx]["Score"].values[:topN]
+        Control_Values = sib["Score"].values[:topN]
+        t, p = scipy.stats.mannwhitneyu(Case_Values, Control_Values, alternative='greater')
+        u1, u2 = np.mean(Case_Values), np.mean(Control_Values)
+        axs[i,j].hist(Case_Values, label=labels[idx], color="red", alpha=0.5, density=1)
+        axs[i,j].hist(Control_Values, label=labels[3], color="blue", alpha=0.5, density=1)
+        axs[i,j].legend()
+        print("%20s\t%.3f\t%.3f\t%.3f\t%.3e"%(labels[idx], u1, u2, (u1-u2), p))
+    plt.show()
+
+"""
