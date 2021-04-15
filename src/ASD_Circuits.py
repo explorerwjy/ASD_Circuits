@@ -26,6 +26,7 @@ from scipy.stats import binom_test
 import itertools
 #import mygene
 import igraph as ig
+import gzip as gz
 
 plt.rcParams['figure.dpi'] = 80
 
@@ -70,7 +71,10 @@ def ContGeneSet(prefix, outfil, Ntrail=100):
         fout.write(str(gen)+"\n")
 
 def loadgenelist(fil):
-    return [int(x.strip()) for x in open(fil, "rt")]
+    if fil.endswith(".gz"):
+        return [int(x.strip()) for x in gz.open(fil, "rt")]
+    else:
+        return [int(x.strip()) for x in open(fil, "rt")]
 
 def filtergenelist(genelist, allgenelist):
     return [x for x in genelist if x in allgenelist]
@@ -601,6 +605,19 @@ def sibling_gene_weight(df):
             continue
     return gene2MutN
 
+def sim_denovo_row2gweight(row, n_gene=101, LGD_Weight = 0.357, DMIS_Weight = 0.231):
+    dat = []
+    for index, value in row.items():
+        N_lgd, N_dmis = map(int, value.split(","))
+        #print(index, N_lgd, N_dmis)
+        if N_lgd + N_dmis == 0:
+            continue
+        dat.append([index, N_lgd, N_dmis, N_lgd * LGD_Weight + N_dmis * DMIS_Weight])
+    df = pd.DataFrame(data=dat, columns=["Entrez", "NLGD", "NDmis", "Weight"])
+    df = df.sort_values("Weight", ascending=False)
+    top = df.head(n_gene)
+    return dict(zip([int(x) for x in top["Entrez"].values], top["Weight"].values))
+
 #####################################################################################
 #####################################################################################
 #### Circuits
@@ -642,9 +659,20 @@ def LoadConnectome2(ConnFil = ConnFil,  Bin = False):
     g.vs['label'] = node_names  
     return g 
 
-def EdgePermutation(g, top50nodes, edge_permute_stat, Npermute=1000):
+def GetConnectivity_Edge(g, BiasDF, topN=50):
+    g_ = g.copy()
+    top_structs = BiasDF.head(topN).index.values
+    top_nodes = g_.vs.select(label_in=top_structs)
+    g2 = g_.subgraph(top_nodes)
+    return g2.ecount(), InOutCohesiveAVG(g_, g2)
+
+def EdgePermutation(g, BiasDF, topN=50, Npermute=1000):
     g2_ecounts = []
+    g2_cohe = []
     NodeList = np.array(range(0, 213))
+    g_ = g.copy()
+    top_structs = BiasDF.head(topN).index.values
+    top_nodes = g_.vs.select(label_in=top_structs)
     for i in range(Npermute):
         g_ = g.copy()
         for idx_node in NodeList:
@@ -658,9 +686,10 @@ def EdgePermutation(g, top50nodes, edge_permute_stat, Npermute=1000):
             #new_in = np.random.choice(in_pool, len(in_list))
             g_.delete_edges(out_edges)
             g_.add_edges([(idx_node, x) for x in new_out])
-        g2_ = g_.subgraph(top50nodes)
+        g2_ = g_.subgraph(top_nodes)
         g2_ecounts.append(g2_.ecount())
-    return g2_ecounts
+        g2_cohe.append(InOutCohesiveAVG(g_, g2_))
+    return g2_ecounts, g2_cohe
 
 def LoadSTR2REG():
     df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
@@ -674,14 +703,18 @@ def LoadSTR2REG():
     return STR2REG, REG2STR
 
 # Keep N.structures from same region the same
-def NodePermutation(g, topNodes, node_permute_stat, Npermute=100, tstat = "conn"):
+def NodePermutation(g, BiasDF, topN=50, Npermute=1000, tstat = "conn"):
+    g_ = g.copy()
+    top_structs = BiasDF.head(topN).index.values
+    top_nodes = g_.vs.select(label_in=top_structs)
     STR2REG, REG2STR = LoadSTR2REG()
     REGs = REG2STR.keys()
     REGCounts = dict(zip(REGs, [0]*len(REGs)))
-    for node in topNodes:
+    for node in top_nodes:
         reg = STR2REG[node["label"]]
         REGCounts[reg] += 1
-    Nulls = []
+    g2_ecounts = []
+    g2_cohe = []
     for i in range(Npermute):
         _nodes = []
         g_ = g.copy()
@@ -691,11 +724,14 @@ def NodePermutation(g, topNodes, node_permute_stat, Npermute=100, tstat = "conn"
         _nodes = g_.vs.select(label_in=_nodes)
         idx_nodes = [x.index for x in _nodes]
         g2_ = g_.subgraph(idx_nodes)
-        if tstat == "cohesive":
-            Nulls.append(Cohesiveness(g_, idx_nodes))
-        else:
-            Nulls.append(g2_.ecount())
-    return Nulls
+        #if tstat == "cohesive":
+        #    Nulls.append(Cohesiveness(g_, idx_nodes))
+        #else:
+        #    Nulls.append(g2_.ecount())
+    #return Nulls
+        g2_ecounts.append(g2_.ecount())
+        g2_cohe.append(InOutCohesiveAVG(g_, g2_))
+    return g2_ecounts, g2_cohe
 
 # 
 def NodePermutationBinom(g, topNodes, g2, Npermute=100, mode="Region"):
@@ -784,12 +820,14 @@ def GetPermutationP(null, obs, gt=True):
                 count += 1
     return 1-float(count)/(len(null)+1)
 
-def PlotPermutationP(Null, Obs):
+def PlotPermutationP(Null, Obs, title="", xlabel=""):
     Z = (Obs - np.mean(Null)) / np.std(Null)
     n, bins, patches = plt.hist(Null, bins=20, histtype = "barstacked", align = 'mid', facecolor='black', alpha=0.8)
     p = GetPermutationP(Null, Obs)
     plt.vlines(x=Obs, ymin=0, ymax=max(n))
     plt.text(x=Obs, y=max(n), s="p=%.3f, z=%.3f"%(p,Z))
+    plt.title(title)
+    plt.xlabel(xlabel)
     plt.show()
     return
 
@@ -1143,8 +1181,8 @@ def CompareSTROverlap(DF1, DF2, name1, name2, topN=50):
     plt.show()
     return CompareDF
 
-def ShowTrimmingProfile(DFs, Names, topN=50):
-    g = LoadConnectome2()
+def ShowTrimmingProfile(DFs, Names, topN=50, ConnFil="../dat/allen-mouse-conn/jw-conn-al1.csv"):
+    g = LoadConnectome2(ConnFil=ConnFil)
     fig, ax = plt.subplots(dpi=120)
     for df, name in zip(DFs, Names):
         g_ = g.copy()
@@ -1155,7 +1193,7 @@ def ShowTrimmingProfile(DFs, Names, topN=50):
         idx = np.argmax(exp_stats[:topN-10])
         ax.scatter(topN-idx, exp_stats[idx], marker='x', color="black")
         ax.plot(graph_size, exp_stats, marker="o", label=name, alpha=0.7)
-    ax.set_xlim(50, 0)
+    ax.set_xlim(topN, 0)
     plt.legend()
     plt.show()
 
@@ -1223,6 +1261,30 @@ def PlotEffectDist(BiasDF, title="Effect size Distribution"):
     plt.legend()
     plt.title(title)
     plt.show()
+
+def sim_denovo_row2gweight(row, n_gene=101, LGD_Weight = 0.357, DMIS_Weight = 0.231):
+    dat = []
+    for index, value in row.items():
+        N_lgd, N_dmis = map(int, value.split(","))
+        #print(index, N_lgd, N_dmis)
+        if N_lgd + N_dmis == 0:
+            continue
+        dat.append([index, N_lgd, N_dmis, N_lgd * LGD_Weight + N_dmis * DMIS_Weight])
+    df = pd.DataFrame(data=dat, columns=["Entrez", "NLGD", "NDmis", "Weight"])
+    df = df.sort_values("Weight", ascending=False)
+    top = df.head(n_gene)
+    return dict(zip([int(x) for x in top["Entrez"].values], top["Weight"].values))
+
+def Loading_sim_denovo_dat(DIRi, N_sim=1000):
+    EFFECT = {}
+    for i in range(N_sim):
+        tmp_df = pd.read_csv("{}/dnv_sm.{}.csv".format(DIR, i), index_col="STR")
+        for STR, row in tmp_df.iterrows():
+            #print(STR, EFFECT)
+            if STR in EXP_LEVEL_EFFECT:
+                EFFECT[STR].append(row["EFFECT"])
+            else:
+                EFFECT[STR] = [row["EFFECT"]]
 
 #####################################################################################
 #####################################################################################
