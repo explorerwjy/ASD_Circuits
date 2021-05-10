@@ -27,6 +27,7 @@ import itertools
 #import mygene
 import igraph as ig
 import gzip as gz
+from SA import *
 
 plt.rcParams['figure.dpi'] = 80
 
@@ -872,6 +873,7 @@ def CohesivenessSingleNode(g, STRList, TopN=1):
             res.append(max(res))
     return res
 
+
 def Cohesiveness(g, STRList, TopN=1):
     NodeList = np.array(range(0, 213))
     D = len(STRList)
@@ -908,10 +910,35 @@ def InOutCohesiveSingleNode(g, g_, STR):
             break
     return d_/d
 
+def CohesivenessSingleNodeMaxInOut(g, g_, STR):
+    Whole_EdgeList = []
+    Cir_EdgeList = []
+    Node = g.vs.find(label=STR)
+    CircuitLables = set(g_.vs["label"])
+    Total_Out,Circuit_Out = 0,0
+    for _node in Node.successors():
+        #print(_node["label"])
+        Total_Out += 1
+        if _node["label"] in CircuitLables:
+            Circuit_Out += 1
+    #print()
+    Frac_Out = Circuit_Out/Total_Out
+    Total_In, Circuit_In = 0,0
+    for _node in Node.predecessors():
+        #print(_node["label"])
+        Total_In += 1
+        if _node["label"] in CircuitLables:
+            Circuit_In += 1
+    Frac_In = Circuit_In/Total_In
+    #print(STR, "N_In {}, C_in {}, N_out {}, C_out {}".format(Total_In, Circuit_In, Total_Out, Circuit_Out))
+    #print(STR, Frac_In, Frac_Out)
+    return max(Frac_In, Frac_Out)
+
 def InOutCohesiveAVG(g, g_):
     cohesives = []
     for v in g_.vs:
-        coh = InOutCohesiveSingleNode(g, g_, v["label"])
+        #coh = InOutCohesiveSingleNode(g, g_, v["label"])
+        coh = CohesivenessSingleNodeMaxInOut(g, g_, v["label"])
         cohesives.append(coh)
     cohesive = np.mean(cohesives)
     return cohesive
@@ -1116,6 +1143,31 @@ def Agg_vs_Indv_gene_PermutationLikeCohesiveness(g, agg_df, indv_df, topN=50):
         cohesives.append(np.mean(cohs))
     PlotPermutationP(cohesives, cohesive)
 
+
+class MostCohesiveCirtuis(Annealer):
+    def __init__(self, state, Graph, CandidateNodes):
+        self.Graph = Graph
+        self.CandidateNodes = CandidateNodes
+        super(MostCohesiveCirtuis, self).__init__(state)  # important!
+    def move(self):
+        # Add node or Remove node
+        initial_energy = self.energy()
+        idx_change = random.randint(0, len(self.CandidateNodes) - 1)
+        self.state[idx_change] = 1 - self.state[idx_change]
+        return (self.energy() - initial_energy) 
+    def energy(self):
+        InCirtuitNodes = self.CandidateNodes[np.where(self.state==1)[0]]
+        top_nodes = self.Graph.vs.select(label_in=InCirtuitNodes)
+        g2 = self.Graph.copy()
+        g2 = g2.subgraph(top_nodes)
+        cohesives = []
+        for v in g2.vs:
+            #coh = InOutCohesiveSingleNode(self.Graph, g2, v["label"])
+            coh = CohesivenessSingleNodeMaxInOut(self.Graph, g2, v["label"]) 
+            cohesives.append(coh)
+        cohesive = np.mean(cohesives)
+        return 1 - cohesive
+
 #####################################################################################
 # Other Methods
 #####################################################################################
@@ -1191,11 +1243,13 @@ def ShowTrimmingProfile(DFs, Names, topN=50, ConnFil="../dat/allen-mouse-conn/jw
         g2 = g_.subgraph(top_nodes)
         graph_size, exp_stats, exp_graphs, trimmed_Vs = CircuitTrimming(g2, g_)
         idx = np.argmax(exp_stats[:topN-10])
+        print(idx, exp_stats[idx])
         ax.scatter(topN-idx, exp_stats[idx], marker='x', color="black")
         ax.plot(graph_size, exp_stats, marker="o", label=name, alpha=0.7)
     ax.set_xlim(topN, 0)
     plt.legend()
     plt.show()
+    return graph_size, exp_stats, exp_graphs, trimmed_Vs
 
 def CompileMethods(DFs, names):
     Circuits = []
