@@ -88,6 +88,17 @@ def WriteGeneList(genelist, filname):
         except:
             continue
 
+def modify_str(x):
+    x = re.sub("[()]", "", x)
+    x = re.sub("-", "_", x)
+    x = re.sub("reunions", "reuniens", x)
+    x = "_".join(x.split(" "))
+    return x
+
+def NeuronDensityNorm():
+    STRs = [x.strip() for x in open("/Users/jiayao/Work/ASD_Circuits/dat/allen-mouse-exp/Structures.txt", 'rt')]
+    STR_cell_comp = cell_comp[cell_comp.index.isin(STRs)]
+    
 #####################################################################################
 #####################################################################################
 #### Expression Bias
@@ -102,7 +113,7 @@ def LoadGeneINFO():
     return HGNC, ENSID2Entrez, GeneSymbol2Entrez, Entrez2Symbol, allen_mouse_genes
 
 def LoadExpressionMatrices(ExpMat = "../dat/allen-mouse-exp/energy-conn-model.csv", 
-                        ExpZscoreMat = "../dat/allen-mouse-exp/energy-zscore-conn-model.csv",
+                        ExpZscoreMat = "../dat/allen-mouse-exp/energy-zscore-conn-model.0524.csv",
                         ExpMatNorm = "../dat/allen-mouse-exp/energy-neuronorm.csv",
                         ExpZscoreMatNorm = "../dat/allen-mouse-exp/energy-zscore-neuronorm.csv"):
     ExpMat = pd.read_csv(ExpMat, index_col="ROW")
@@ -451,6 +462,23 @@ def Aggregate_Gene_Weights(MutFil, FDR="Candidate", out=None):
            writer.writerow([k,v]) 
     return gene2None, gene2MutN
 
+def SCZOwen_Gene_Weights(MutFil, FDR=0.05, out=None):
+    MutFil = MutFil[MutFil["Pvalue"]<FDR]
+    gene2None, gene2MutN = {}, {}
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+        except:
+            continue
+        gene2None[g] = 1
+        gene2MutN[g] = row["N_LGD"]
+        #gene2MutN[g] = row["dnLGD"]*0.357 + row["dnDmis"]*0.231
+    if out != None:
+        writer = csv.writer(open(out, 'wt'))
+        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
+           writer.writerow([k,v]) 
+    return gene2None, gene2MutN
+
 ###################################################################################################################
 # Weighted Bias Calculattion
 ###################################################################################################################
@@ -478,8 +506,11 @@ def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, Match_DF 
             z_gene = ExpZscoreMat.loc[gene, STR]
             g_matches = Match_DF.loc[gene, :].values 
             z_matches = [ExpZscoreMat.loc[g, STR] for g in g_matches]
+            z_matches = [x for x in z_matches if x==x]
             b = (z_gene - np.mean(z_matches)) / np.std(z_matches) 
+            #b = z_gene - np.mean(z_matches)
             score = weight * b
+            #print(gene, score, weight)
             if score == score:
                 res.append(score)
                 sum_weight += weight
@@ -493,6 +524,8 @@ def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Method = 1, Match_DF=0, BS_Weig
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     for i, STR in enumerate(STRs):
+        #if STR != "Parataenial_nucleus": ### DEBUG
+        #    continue ### DEBUG
         if Method == 1:
             mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1)
             STR_Bias = mean_z
@@ -519,6 +552,7 @@ def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Method = 1, Match_DF=0, BS_Weig
     df = df.sort_values("EFFECT", ascending=False)
     df = df.reset_index(drop=True)
     df["Rank"] = df.index + 1
+    """
     # Trimming Circuit
     g = LoadConnectome2(ConnFil=ConnFil)
     top_structs = df.head(50)["STR"].values
@@ -534,11 +568,31 @@ def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Method = 1, Match_DF=0, BS_Weig
     for i, _str in enumerate([x["label"] for x in rm_vs]):
         df.loc[_str, "TrimRank"] = 50-i
         df.loc[_str, "InCircuit"] = 1 if _str in CIR_STRS else 0
+    """
     if csv_fil != None:
         df.to_csv(csv_fil, index=False)
     return df
 
-# Expression Level
+def AvgSTRZ_Weighted_TwoSet(ExpZscoreMat, GeneSet1, GeneSet2, csv_fil=None):
+    STRs = ExpZscoreMat.columns.values
+    str2reg_df = pd.read_csv("./dat/structure2region.map", delimiter="\t")
+    str2reg_df = str2reg_df.sort_values("REG")
+    str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
+    for i, STR in enumerate(STRs):
+        Z1 = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, GeneSet1, Method = 1)
+        Z2 = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, GeneSet2, Method = 1)
+        Diff = Z1-Z2
+        EFFECTS.append(Diff)
+        Regions.append(str2reg[STR])
+    df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions})
+    df = df.sort_values("EFFECT", ascending=False)
+    df = df.reset_index(drop=True)
+    df["Rank"] = df.index + 1
+    if csv_fil != None:
+        df.to_csv(csv_fil, index=False)
+    return df
+
+# Expression Level (Not Used May2021)
 def ExpLevelOneSTR_Weighted(STR, ExpMat, Gene2Weights, Match_DF):
     g_exp_level_zs = []
     err_gen = 0
@@ -619,6 +673,21 @@ def sim_denovo_row2gweight(row, n_gene=101, LGD_Weight = 0.357, DMIS_Weight = 0.
     top = df.head(n_gene)
     return dict(zip([int(x) for x in top["Entrez"].values], top["Weight"].values))
 
+def MakeMatchDF(GeneWeightDict, N=1000, DIR = "/Users/jiayao/Work/ASD_Circuits/src/dat/Jon_data/match-exp_avg"):
+    Dat = []
+    Index = []
+    for k, v in list(GeneWeightDict.items()):
+        try:
+            match_genes = loadgenelist(DIR+"/"+str(k)+".txt")
+            Dat.append(match_genes[1:N+1])
+            Index.append(k)
+        except:
+            print(DIR+"/"+str(k)+".txt")
+            print(k, "Not Found in Dataset")
+            GeneWeightDict.pop(k)
+    df = pd.DataFrame(data=Dat, index=Index)
+    return df
+
 #####################################################################################
 #####################################################################################
 #### Circuits
@@ -651,9 +720,13 @@ def LoadConnectome(RankFil, ConnFil = ConnFil, TopN = 50, Bin = False, columns=[
     return g, top_structs
 
 def LoadConnectome2(ConnFil = ConnFil,  Bin = False):
-    adj_mat = pd.read_csv(ConnFil)
-    node_names = adj_mat["ROW"].values
-    adj_mat = adj_mat.drop("ROW", axis=1)
+    if type(ConnFil) == str:
+        adj_mat = pd.read_csv(ConnFil)
+        node_names = adj_mat["ROW"].values
+        adj_mat = adj_mat.drop("ROW", axis=1)
+    else:
+        adj_mat = ConnFil
+        node_names = adj_mat.index.values
     A = adj_mat.values
     g = ig.Graph.Adjacency((A > 0).tolist())
     g.es['weight'] = A[A.nonzero()]
@@ -898,7 +971,7 @@ def Cohesiveness(g, STRList, TopN=1):
         res += max_
     return res/D 
 
-def InOutCohesiveSingleNode(g, g_, STR):
+def InOutCohesiveSingleNode(g, g_, STR, weighted_Dict):
     d,d_ = 0, 0
     for idx, v in enumerate(g.vs):
         if v["label"] == STR:
@@ -910,35 +983,83 @@ def InOutCohesiveSingleNode(g, g_, STR):
             break
     return d_/d
 
-def CohesivenessSingleNodeMaxInOut(g, g_, STR):
+def CohesivenessSingleNodeMaxInOut(g, g_, STR, weightDict, weighted=False, Direction=False):
     Whole_EdgeList = []
     Cir_EdgeList = []
     Node = g.vs.find(label=STR)
     CircuitLables = set(g_.vs["label"])
     Total_Out,Circuit_Out = 0,0
-    for _node in Node.successors():
-        #print(_node["label"])
-        Total_Out += 1
-        if _node["label"] in CircuitLables:
-            Circuit_Out += 1
-    #print()
-    Frac_Out = Circuit_Out/Total_Out
     Total_In, Circuit_In = 0,0
-    for _node in Node.predecessors():
-        #print(_node["label"])
-        Total_In += 1
-        if _node["label"] in CircuitLables:
-            Circuit_In += 1
-    Frac_In = Circuit_In/Total_In
-    #print(STR, "N_In {}, C_in {}, N_out {}, C_out {}".format(Total_In, Circuit_In, Total_Out, Circuit_Out))
-    #print(STR, Frac_In, Frac_Out)
-    return max(Frac_In, Frac_Out)
+    if Direction:
+        for _node in Node.successors():
+            if weighted:
+                weight = weightDict["{}-{}".format(STR, _node["label"])]
+            else:
+                weight = 1
+            Total_Out += weight
+            if _node["label"] in CircuitLables:
+                Circuit_Out += weight
+        if Total_Out == 0:
+            Frac_Out = 0
+        else:
+            Frac_Out = Circuit_Out/Total_Out
+        for _node in Node.predecessors():
+            if weighted:
+                weight = weightDict["{}-{}".format(_node["label"], STR)]
+            else:
+                weight = 1
+            Total_In += weight
+            if _node["label"] in CircuitLables:
+                Circuit_In += weight
+        if Total_In == 0:
+            Frac_In = 0
+        else:
+            Frac_In = Circuit_In/Total_In
+        if Frac_Out == 0:
+            ITR = np.inf
+        else:
+            ITR = Frac_In / Frac_Out
+        return max(Frac_In, Frac_Out), ITR
+    else:
+        for _node in Node.successors():
+            if weighted:
+                weight = weightDict["{}-{}".format(STR, _node["label"])]
+            else:
+                weight = 1
+            Total_Out += weight
+            if _node["label"] in CircuitLables:
+                Circuit_Out += weight
+        for _node in Node.predecessors():
+            if weighted:
+                weight = weightDict["{}-{}".format(_node["label"], STR)]
+            else:
+                weight = 1
+            Total_In += weight
+            if _node["label"] in CircuitLables:
+                Circuit_In += weight
+        if (Total_In+Total_Out) == 0:
+            return 0, None
+        else:
+            return ((Circuit_In+Circuit_Out)/(Total_In+Total_Out)), None
+
+def ScoreSTRSet(Graph, CandidateNodes, WeightDict, Weighted=False, Direction=False): ## Choesiveness
+    top_nodes = Graph.vs.select(label_in=CandidateNodes)
+    g2 = Graph.copy()
+    g2 = g2.subgraph(top_nodes)
+    cohesives = []
+    for v in g2.vs:
+        coh, ITR = CohesivenessSingleNodeMaxInOut(Graph, g2, v["label"], WeightDict, Direction=Direction, weighted=Weighted) 
+        cohesives.append(coh)
+    return cohesives
+    #cohesive = np.mean(cohesives)
+    #return cohesive
+
 
 def InOutCohesiveAVG(g, g_):
     cohesives = []
     for v in g_.vs:
-        #coh = InOutCohesiveSingleNode(g, g_, v["label"])
-        coh = CohesivenessSingleNodeMaxInOut(g, g_, v["label"])
+        coh = InOutCohesiveSingleNode(g, g_, v["label"])
+        #coh = CohesivenessSingleNodeMaxInOut(g, g_, v["label"])
         cohesives.append(coh)
     cohesive = np.mean(cohesives)
     return cohesive
@@ -1143,17 +1264,20 @@ def Agg_vs_Indv_gene_PermutationLikeCohesiveness(g, agg_df, indv_df, topN=50):
         cohesives.append(np.mean(cohs))
     PlotPermutationP(cohesives, cohesive)
 
-
 class MostCohesiveCirtuis(Annealer):
-    def __init__(self, state, Graph, CandidateNodes):
+    def __init__(self, state, Graph, CandidateNodes, WeightDict, Weighted=True, Direction=False):
         self.Graph = Graph
         self.CandidateNodes = CandidateNodes
+        self.WeightDict = WeightDict
+        self.Weighted = Weighted
+        self.Direction = Direction
         super(MostCohesiveCirtuis, self).__init__(state)  # important!
     def move(self):
         # Add node or Remove node
         initial_energy = self.energy()
-        idx_change = random.randint(0, len(self.CandidateNodes) - 1)
-        self.state[idx_change] = 1 - self.state[idx_change]
+        for i in range(3):
+            idx_change = random.randint(0, len(self.CandidateNodes) - 1)
+            self.state[idx_change] = 1 - self.state[idx_change]
         return (self.energy() - initial_energy) 
     def energy(self):
         InCirtuitNodes = self.CandidateNodes[np.where(self.state==1)[0]]
@@ -1162,11 +1286,45 @@ class MostCohesiveCirtuis(Annealer):
         g2 = g2.subgraph(top_nodes)
         cohesives = []
         for v in g2.vs:
-            #coh = InOutCohesiveSingleNode(self.Graph, g2, v["label"])
-            coh = CohesivenessSingleNodeMaxInOut(self.Graph, g2, v["label"]) 
+            coh, ITR = CohesivenessSingleNodeMaxInOut(self.Graph, g2, v["label"], self.WeightDict, Direction=self.Direction, weighted=self.Weighted) 
             cohesives.append(coh)
         cohesive = np.mean(cohesives)
         return 1 - cohesive
+    def cohesives(self):
+        InCirtuitNodes = self.CandidateNodes[np.where(self.state==1)[0]]
+        top_nodes = self.Graph.vs.select(label_in=InCirtuitNodes)
+        g2 = self.Graph.copy()
+        g2 = g2.subgraph(top_nodes)
+        cohesives = []
+        for v in g2.vs:
+            coh, TIR = CohesivenessSingleNodeMaxInOut(self.Graph, g2, v["label"], self.WeightDict)
+            cohesives.append(coh)
+        return cohesives
+
+def EdgeDict(graph, keyon='label'):
+    EdgeDict = {}
+    for idx in range(len(graph.vs)):
+        for edge in graph.es.select(_source=idx):
+            if keyon == 'index':
+                key = "{}-{}".format(edge.source, edge.target)
+            elif keyon == 'label':
+                key = "{}-{}".format(graph.vs[edge.source]["label"], graph.vs[edge.target]["label"]) 
+            EdgeDict[key] = edge["weight"]
+    return EdgeDict
+
+def CircuitOptimize(topN=100, Weighted = False, Direction = False, Weight_Dict = None):
+    CandidateNodes = np.random.choice(meta_jon.head(213).index.values, 100, replace=False)
+    Init_States = np.ones(len(CandidateNodes))
+    for idx in range(len(Init_States)):
+        if np.random.rand() > 0.5:
+            Init_States[idx] = 0
+    ins = MostCohesiveCirtuis(Init_States, g, CandidateNodes, None)
+    ins.copy_strategy = "deepcopy"
+    ins.Tmax=1
+    ins.Tmin=0.00001
+    ins.Steps=topN * 500
+    Tmps, Energys, state, e = ins.anneal()
+    return ins
 
 #####################################################################################
 # Other Methods
