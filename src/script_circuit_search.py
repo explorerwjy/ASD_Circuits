@@ -6,7 +6,7 @@ def run_CircuitOpt(g, EdgeWeightsDict, BiasDF):
     for idx in range(len(Init_States)):
         if np.random.rand() > 0.5:
             Init_States[idx] = 0
-    ins = MostCohesiveCirtuis(Init_States, g, CandidateNodes, EdgeWeightsDict, Direction=True, Weighted=True)
+    ins = MostCohesiveCirtuis(Init_States, g, CandidateNodes, EdgeWeightsDict)
     ins.copy_strategy = "deepcopy"
     ins.Tmax=1
     ins.Tmin=0.00001
@@ -24,7 +24,7 @@ def main():
     BiasDF.columns = ["STR", "EFFECT", "Rank", "NGene"]
     BiasDF = BiasDF.set_index("STR")
     
-    csv_out = csv.writer(open("dat/circuits/ASD_Pad1_SA.WD.csv", 'wt'))
+    csv_out = csv.writer(open("dat/circuits/ASD_Pad1_SA_3state.csv", 'wt'))
     csv_out.writerow(BiasDF.head(50).index.values)
     for i in range(100):
         state = run_CircuitOpt(g, EdgeWeightsDict, BiasDF)

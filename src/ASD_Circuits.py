@@ -31,7 +31,8 @@ from SA import *
 
 plt.rcParams['figure.dpi'] = 80
 
-ConnFil = "../dat/allen-mouse-conn/connectome-log.csv"
+#ConnFil = "../dat/allen-mouse-conn/connectome-log.csv"
+ConnFil = "../dat/allen-mouse-conn/norm_density-max_ipsi_contra-pval_0.05-deg_min_1-by_weight_pvalue.csv"
 MajorBrainDivisions = "./dat/structure2region.map" 
 
 
@@ -98,7 +99,35 @@ def modify_str(x):
 def NeuronDensityNorm():
     STRs = [x.strip() for x in open("/Users/jiayao/Work/ASD_Circuits/dat/allen-mouse-exp/Structures.txt", 'rt')]
     STR_cell_comp = cell_comp[cell_comp.index.isin(STRs)]
-    
+
+
+def clean_name(name):
+    name = re.sub('[()]', '', name)
+    name = re.sub('[-]', ' ', name)
+    name = "_".join(name.split())
+    return name
+
+def conver_cartesian_distance(adj_mat_distal):
+    Cartesian_distances = pd.read_excel("/Users/jiayao/Work/ASD_Circuits/dat/allen-mouse-conn/Dist_CartesianDistance.xlsx", index_col=0)
+    ontology = pd.read_csv("dat/ontology.csv")
+    acronym2name = {}
+    name2arconym = {}
+    for i, row in ontology.iterrows():
+        acronym2name[row["acronym"]] = clean_name(row["safe_name"])
+        name2arconym[clean_name(row["safe_name"])] = row["acronym"]
+    STRs = adj_mat_distal.index.values
+    Dat = []
+    for STR_i in STRs:
+        STR_acr_i = name2arconym[STR_i] + "_ipsi"
+        dat_row = []
+        for STR_j in STRs:
+            STR_acr_j = name2arconym[STR_j] + "_ipsi"
+            dist = Cartesian_distances.loc[STR_acr_i, STR_acr_j]
+            dat_row.append(dist)
+        Dat.append(dat_row)
+    Cartesian_dist_DF = pd.DataFrame(data=Dat, index = STRs, columns=STRs)
+    Cartesian_dist_DF.to_csv("../dat/allen-mouse-conn/Dist_CartesianDistance.csv")
+
 #####################################################################################
 #####################################################################################
 #### Expression Bias
@@ -366,24 +395,17 @@ def ASC_MutCountByLength(MutFil, match_feature, FDR=0.1):
 
 def SPARK_Gene_Weights(MutFil, gnomad_cons=None, FDR=0.2):
     #MutFil = pd.read_csv(MutFil)
-    if FDR != None:
-        MutFil = MutFil[MutFil["Qvalue"]<FDR]
+    #if FDR != None:
+    #    MutFil = MutFil[MutFil["Qvalue"]<FDR]
     gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons = {}, {}, {}, {}, {} 
     for i, row in MutFil.iterrows():
         try:
-            g = int(row["Entrez"])
+            g = int(row["EntrezID"])
         except:
             continue
         gene2None[g] = 1
-        gene2RR[g] = row["LGD_RR"]*5 + row["Dmis_RR"]*1    # Relative Risk is sum over LGD and Missense
         gene2MutN[g] = row["dnLGD"]*0.347 + row["dnDmis"]*0.194
-        #try:
-        #    gene2Cons[g] = gnomad_cons.loc[row["HGNC"], "lof_z"]*5 + gnomad_cons.loc[row["HGNC"], "mis_z"]
-        #except:
-        #    gene2Cons[g] = 1
-        #gene2MutNCons[g] = gene2MutN[g] * gene2Cons[g]
-    #return gene2None, gene2RR, gene2MutN, gene2Cons, gene2MutNCons
-    return gene2MutN
+    return gene2None, gene2MutN
 
 def SPARK_MutCountByLength(MutFil, match_feature, FDR=0.2):
     SPARK_NTrio = 7015
@@ -462,6 +484,22 @@ def Aggregate_Gene_Weights(MutFil, FDR="Candidate", out=None):
            writer.writerow([k,v]) 
     return gene2None, gene2MutN
 
+def Aggregate_Gene_Weights2(MutFil, out=None):
+    gene2None, gene2MutN = {}, {}
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+        except:
+            continue
+        gene2None[g] = 1
+        gene2MutN[g] = row["AutismMerged_LoF"]*0.357 + row["AutismMerged_Dmis_REVEL0.5"]*0.231
+        #gene2MutN[g] = row["dnLGD"]*0.457 + row["dnDmis"]*0.231
+    if out != None:
+        writer = csv.writer(open(out, 'wt'))
+        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
+           writer.writerow([k,v]) 
+    return gene2None, gene2MutN
+
 def SCZOwen_Gene_Weights(MutFil, FDR=0.05, out=None):
     MutFil = MutFil[MutFil["Pvalue"]<FDR]
     gene2None, gene2MutN = {}, {}
@@ -479,13 +517,55 @@ def SCZOwen_Gene_Weights(MutFil, FDR=0.05, out=None):
            writer.writerow([k,v]) 
     return gene2None, gene2MutN
 
+def Sibling_Gene_Weights(MutFil, out=None):
+    gene2None, gene2MutN = {}, {}
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+        except:
+            continue
+        gene2None[g] = 1
+        gene2MutN[g] = row["dnv_LGDs_sib"] + row["dnv_missense_sib"] 
+        #gene2MutN[g] = row["dnLGD"]*0.357 + row["dnDmis"]*0.231
+    if out != None:
+        writer = csv.writer(open(out, 'wt'))
+        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
+           writer.writerow([k,v]) 
+    return gene2None, gene2MutN
 ###################################################################################################################
 # Weighted Bias Calculattion
 ###################################################################################################################
 # Expression Specificity
+def ZscoreOneSTR_Weighted_Indv_Gene(STR, ExpZscoreMat, Gene2Weights, Method = 1, Match_DF = None):
+    assert Method in [1, 2]
+    res = []
+    sum_weight = 0
+    if Method == 1:
+        for gene, weight in Gene2Weights.items():
+            if gene not in ExpZscoreMat.index.values:
+                continue
+            #score = weight * max(0, ExpZscoreMat.loc[gene, STR])
+            score = weight * ExpZscoreMat.loc[gene, STR]
+            if score == score:
+                res.append(score)
+                sum_weight += weight
+        return res
+    elif Method == 2:
+        for gene, weight in Gene2Weights.items():
+            if gene not in ExpZscoreMat.index.values:
+                continue
+            z_gene = ExpZscoreMat.loc[gene, STR]
+            g_matches = Match_DF.loc[gene, :].values 
+            z_matches = [ExpZscoreMat.loc[g, STR] for g in g_matches]
+            z_matches = [x for x in z_matches if x==x]
+            b = (z_gene - np.mean(z_matches)) / np.std(z_matches) 
+            score = weight * b
+            if score == score:
+                res.append(score)
+                sum_weight += weight
+        return res
+
 def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, Match_DF = None):
-    #DZzscore = ZscoreMat[STR].loc[np.array(DZgenes)].values
-    #DZzscore = [x for x in DZzscore if x==x]
     assert Method in [1, 2]
     res = []
     sum_weight = 0
@@ -1326,9 +1406,95 @@ def CircuitOptimize(topN=100, Weighted = False, Direction = False, Weight_Dict =
     Tmps, Energys, state, e = ins.anneal()
     return ins
 
+def LocalDistal_Region():
+    adj_mat = pd.read_csv("../dat/allen-mouse-conn/norm_density-max_ipsi_contra-pval_0.05-deg_min_1-by_weight_pvalue.csv", index_col="ROW")
+    str2reg = STR2Region()
+    ALL_STRs = adj_mat.index.values
+    adj_mat_local = []
+    adj_mat_distal = []
+    for str_i in ALL_STRs:
+        tmp_local = []
+        tmp_distal = []
+        for str_j in ALL_STRs:
+            weight = adj_mat.loc[str_i, str_j]
+            if weight == 0:
+                tmp_local.append(0)
+                tmp_distal.append(0)
+            else:
+                rg_i = str2reg[str_i]
+                rg_j = str2reg[str_j]
+                if rg_i == rg_j:
+                    tmp_local.append(weight)
+                    tmp_distal.append(0)
+                else:
+                    tmp_local.append(0)
+                    tmp_distal.append(weight)
+        adj_mat_local.append(tmp_local)
+        adj_mat_distal.append(tmp_distal)
+    adj_mat_local = pd.DataFrame(data=adj_mat_local, index=ALL_STRs, columns=ALL_STRs)
+    adj_mat_distal = pd.DataFrame(data=adj_mat_distal, index=ALL_STRs, columns=ALL_STRs)
+    return adj_mat_local, adj_mat_distal
+
+def GetBestCoheSAFil(SAFil, Weighted, Direction, g, EdgeWeightsDict):
+    EdgeWeightsDict = EdgeDict(g, keyon="label")
+    sim = pd.read_csv(SAFil)
+    candidates = sim.columns.values
+    Cohes = []
+    for i, row in sim.iterrows():
+        state = row.values
+        InCirtuitNodes = candidates[np.where(state==1)[0]]
+        InCirtuitNodes_str = ",".join(InCirtuitNodes)
+        score = ScoreSTRSet(g, InCirtuitNodes, EdgeWeightsDict, Weighted=Weighted, Direction=Direction)
+        Cohes.append(score)
+    best_id = np.argmax(Cohes)
+    state = sim.loc[1, :].values
+    InCirtuitNodes = candidates[np.where(state==1)[0]]
+    return InCirtuitNodes
+
+def Complete_Local_Distal_Cohesivesness_TopN_Case(BiasDF, g, g_local_region, g_distal_region, EdgeWeightsDict, Weighted, Directed, topN=50):
+    CandidateSTRs = BiasDF.index.values[:topN]
+    complete_cohes = ScoreSTRSet(g, CandidateSTRs, EdgeWeightsDict, Weighted=Weighted, Direction=Directed)
+    local_cohes = ScoreSTRSet(g_local_region, CandidateSTRs, EdgeWeightsDict, Weighted=Weighted, Direction=Directed)
+    dist_cohes = ScoreSTRSet(g_distal_region, CandidateSTRs, EdgeWeightsDict, Weighted=Weighted, Direction=Directed)
+    return complete_cohes, local_cohes, dist_cohes
+
+def Complete_Local_Distal_Cohesiveness_TopN_Cont(InputDir, g, g_local_region, g_distal_region, EdgeWeightsDict, Weighted, Directed):
+    Complete, Local, Distal = [], [], []
+    for i in range(1000):
+        df = pd.read_csv(InputDir.format(i), index_col="STR")
+        InCirtuitNodes = df.index.values[:50]
+        complete = ScoreSTRSet(g, InCirtuitNodes, EdgeWeightsDict, Weighted, Directed)
+        local = ScoreSTRSet(g_local_region, InCirtuitNodes, EdgeWeightsDict, Weighted, Directed)
+        distal = ScoreSTRSet(g_distal_region, InCirtuitNodes, EdgeWeightsDict, Weighted, Directed)
+        Complete.append(np.mean(complete))
+        Local.append(np.mean(local))
+        Distal.append(np.mean(distal))
+    return Complete, Local, Distal
+
 #####################################################################################
 # Other Methods
 #####################################################################################
+def queryDist(adj_mat, Cartesian_distances_w_edge, dist_min, dist_max, directed=False):
+    str2reg = STR2Region()
+    REG2REG = []
+    STR2STR = []
+    for STR_i in adj_mat.index.values:
+        for STR_j in adj_mat.index.values:
+            if adj_mat.loc[STR_i, STR_j] == 0:
+                continue
+            dist = Cartesian_distances_w_edge.loc[STR_i, STR_j]
+            if dist > dist_min and dist < dist_max:
+                str2str = " - ".join([STR_i, STR_j])
+                region_i = str2reg[STR_i]
+                region_j = str2reg[STR_j]
+                STR2STR.append(str2str)
+                if directed:
+                    REG2REG.append(" - ".join([region_i, region_j]))
+                else:
+                    REG2REG.append(" - ".join(sorted([region_i, region_j])))
+    return STR2STR, REG2REG
+
+
 def QQplot(pvalues, title="QQ plot"):
     #pvalues.sort(reversed=True)
     pvalues = sorted(list(pvalues), reverse=True)
@@ -1356,8 +1522,10 @@ def QQplot(pvalues, title="QQ plot"):
     plt.show()
 
 def CompareSTROverlap(DF1, DF2, name1, name2, topN=50):
-    RD1 = RegionDistributions(DF1.set_index("STR"))
-    RD2 = RegionDistributions(DF2.set_index("STR"))
+    #RD1 = RegionDistributions(DF1.set_index("STR"))
+    #RD2 = RegionDistributions(DF2.set_index("STR"))
+    RD1 = RegionDistributions(DF1)
+    RD2 = RegionDistributions(DF2)
     Regions = list(set(list(RD1.keys()) + list(RD2.keys())))
     Regions.sort()
     CompareDat = [] # Region, STR_common, STR_only_DF1, STR_only_DF2, N_STR_common, N_STR_only_DF1, N_STR_only_DF2
