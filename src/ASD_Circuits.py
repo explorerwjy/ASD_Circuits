@@ -12,6 +12,7 @@ import seaborn as sns
 import random
 import bisect
 import collections
+from collections import Counter
 import scipy.stats 
 import re
 import statsmodels.api as sm
@@ -28,12 +29,14 @@ import itertools
 import igraph as ig
 import gzip as gz
 from SA import *
+import pickle as pk
+import copy
 
 plt.rcParams['figure.dpi'] = 80
 
 #ConnFil = "../dat/allen-mouse-conn/connectome-log.csv"
 ConnFil = "../dat/allen-mouse-conn/norm_density-max_ipsi_contra-pval_0.05-deg_min_1-by_weight_pvalue.csv"
-MajorBrainDivisions = "./dat/structure2region.map" 
+MajorBrainDivisions = "./dat/structure2region.tsv" 
 
 
 #####################################################################################
@@ -53,10 +56,12 @@ def quantileNormalize(df_input):
         df[col] = [rank[i] for i in t]
     return df
 
-def ZscoreConverting(values):
+def ZscoreConverting(values, mean = np.nan, std = np.nan):
     real_values = [x for x in values if x==x]
-    mean = np.mean(real_values)
-    std = np.std(real_values)
+    if mean != mean:
+        mean = np.mean(real_values)
+    if std != std:
+        std = np.std(real_values)
     zscores = []
     for x in values:
         z = (x - mean)/std
@@ -72,14 +77,29 @@ def ContGeneSet(prefix, outfil, Ntrail=100):
     for gen in res:
         fout.write(str(gen)+"\n")
 
-def loadgenelist(fil):
+def loadgenelist(fil, toint=True):
     if fil.endswith(".gz"):
-        return [int(x.strip()) for x in gz.open(fil, "rt")]
+        if toint:
+            return [int(x.strip()) for x in gz.open(fil, "rt")]
+        else:
+            return [x.strip() for x in gz.open(fil, "rt")]
     else:
-        return [int(x.strip()) for x in open(fil, "rt")]
+        if toint:
+            return [int(x.strip()) for x in open(fil, "rt")]
+        else:
+            return [x.strip() for x in open(fil, "rt")]
 
 def filtergenelist(genelist, allgenelist):
     return [x for x in genelist if x in allgenelist]
+
+def List2Fil(List, filename):
+    fout = open(filename, 'wt')
+    for x in List:
+        fout.write(str(x)+"\n")
+
+def LoadList(filename):
+    fin = open(filename, 'rt')
+    return [x.strip() for x in fin.readlines()]
 
 def WriteGeneList(genelist, filname):
     fout = open(filname, "wt")
@@ -128,13 +148,31 @@ def conver_cartesian_distance(adj_mat_distal):
     Cartesian_dist_DF = pd.DataFrame(data=Dat, index = STRs, columns=STRs)
     Cartesian_dist_DF.to_csv("../dat/allen-mouse-conn/Dist_CartesianDistance.csv")
 
+def Filt_LGD_Mis(DF, Dmis=True):
+    dat= []
+    for i, row in DF.iterrows():
+        GeneEff = row["GeneEff"].split(";")[0]
+        if GeneEff in ["frameshift", "splice_acceptor", "splice_donor", "start_lost", "stop_gained", "stop_lost"]:
+            dat.append(row.values)
+        elif GeneEff == "missense":
+            if Dmis:
+                if GeneEff == "missense":
+                    row["REVEL"] = row["REVEL"].split(";")[0]
+                    if row["REVEL"] != ".":
+                        if float(row["REVEL"]) > 0.5:
+                            dat.append(row.values)
+            else:
+                if GeneEff == "missense":
+                    dat.append(row.values)
+    return pd.DataFrame(dat, columns = DF.columns.values)
+
 #####################################################################################
 #####################################################################################
 #### Expression Bias
 #####################################################################################
 #####################################################################################
 def LoadGeneINFO():
-    HGNC = pd.read_csv("../dat/genes/protein-coding_gene.txt", delimiter="\t")
+    HGNC = pd.read_csv("../dat/genes/protein-coding_gene.txt", delimiter="\t", low_memory=False)
     ENSID2Entrez = dict(zip(HGNC["ensembl_gene_id"].values, HGNC["entrez_id"].values))
     GeneSymbol2Entrez = dict(zip(HGNC["symbol"].values, HGNC["entrez_id"].values))
     Entrez2Symbol = dict(zip(HGNC["entrez_id"].values, HGNC["symbol"].values))
@@ -169,24 +207,6 @@ def assignProb(xlist):
     res = density/norm
     res[-1] = 1 - sum(res[:-1])
     return np.array(res)
-
-def ExpressionMatchOneGene(Gene, match_feature, ExpText="Exp.Volume.Weighted.Mean", savefil = None, interval_len = 500, sample_size = 1000):
-    gene_rank = match_feature.loc[Gene, "Rank"]
-    Interval = match_feature[(match_feature["Rank"] >= gene_rank - interval_len) &
-                             (match_feature["Rank"] <= gene_rank + interval_len) &
-                             (~match_feature.index.isin([Gene]))]
-    Interval_genes = Interval.index.values
-    Interval_exps = Interval[ExpText].values
-    Interval_genes_probs = assignProb(Interval_exps)
-    match_genes = np.random.choice(Interval_genes, size = sample_size, replace=True, p = Interval_genes_probs)
-    if savefil != None:
-        fout = open(savefil, "wt")
-    else:
-        return
-    for g in match_genes:
-        fout.write(g+"\n")
-    fout.close()
-    return
 
 def ExpressionMatchGeneSet(geneset, match_feature, ExpText="Exp.Volume.Weighted.Mean", savefil = None, interval_len = 500, sample_size=1000): 
     genes_to_match = [] # genes
@@ -268,7 +288,11 @@ def STR2Region():
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     return str2reg
 
-def RegionDistributions(DF, topN=50, show = False):
+#def ModifySTR2REGTab():
+#    str/MajorBrainDivisions
+
+
+def RegionDistributions(DF, topN=50, show = False, states=np.zeros(5)):
     #ax = fig.add_axes([0,0,1,1])
     str2reg_df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
     str2reg_df = str2reg_df.sort_values("REG")
@@ -277,15 +301,29 @@ def RegionDistributions(DF, topN=50, show = False):
     RegionCount = {}
     for region in Regions:
         RegionCount[region] = []
-    for x in DF.head(topN).index:
-        region = str2reg[x]
-        RegionCount[region].append(x)
-    if show:
-        for k,v in RegionCount.items():
-            if len(v) == 0:
-                continue
-            print(k, "\t", len(v), "\t", "; ".join(v))
-    return RegionCount
+    if states.sum() == 0:
+        for x in DF.head(topN).index:
+            region = str2reg[x]
+            RegionCount[region].append(x)
+        if show:
+            for k,v in RegionCount.items():
+                if len(v) == 0:
+                    continue
+                print(k, "\t", len(v), "\t", "; ".join(v))
+        return RegionCount
+    else:
+        CandidateNodes = DF.head(topN).index.values
+        Cir_STRs = CandidateNodes[np.where(states==1)[0]]
+        for x in DF.head(topN).index:
+            if x in Cir_STRs:
+                region = str2reg[x]
+                RegionCount[region].append(x)
+        if show:
+            for k,v in RegionCount.items():
+                if len(v) == 0:
+                    continue
+                print(k, "\t", len(v), "\t", "; ".join(v))
+        return RegionCount
 
 def RegionDistributionsList(List, topN=50):
     str2reg_df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
@@ -484,16 +522,28 @@ def Aggregate_Gene_Weights(MutFil, FDR="Candidate", out=None):
            writer.writerow([k,v]) 
     return gene2None, gene2MutN
 
-def Aggregate_Gene_Weights2(MutFil, out=None):
+def Aggregate_Gene_Weights2(MutFil, allen_mouse_genes, pLI=True, out=None):
     gene2None, gene2MutN = {}, {}
     for i, row in MutFil.iterrows():
         try:
             g = int(row["EntrezID"])
+            if g not in allen_mouse_genes:
+                continue
         except:
             continue
         gene2None[g] = 1
-        gene2MutN[g] = row["AutismMerged_LoF"]*0.357 + row["AutismMerged_Dmis_REVEL0.5"]*0.231
-        #gene2MutN[g] = row["dnLGD"]*0.457 + row["dnDmis"]*0.231
+        #pLI = gnomad_cons.loc[row["HGNC"], "exac_pLI"]
+        if pLI:
+            try:
+                pLI = float(row["ExACpLI"])
+            except:
+                pLI = 0.0
+            if pLI >= 0.5:
+                gene2MutN[g] = row["AutismMerged_LoF"]*0.554 + row["AutismMerged_Dmis_REVEL0.5"]*0.333
+            else:
+                gene2MutN[g] = row["AutismMerged_LoF"]*0.138 + row["AutismMerged_Dmis_REVEL0.5"]*0.130
+        else:
+            gene2MutN[g] = row["AutismMerged_LoF"]*0.457 + row["AutismMerged_Dmis_REVEL0.5"]*0.231
     if out != None:
         writer = csv.writer(open(out, 'wt'))
         for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
@@ -517,21 +567,68 @@ def SCZOwen_Gene_Weights(MutFil, FDR=0.05, out=None):
            writer.writerow([k,v]) 
     return gene2None, gene2MutN
 
-def Sibling_Gene_Weights(MutFil, out=None):
+def Sibling_Gene_Weights(MutFil, GeneSymbol2Entrez, out=None):
     gene2None, gene2MutN = {}, {}
     for i, row in MutFil.iterrows():
         try:
-            g = int(row["EntrezID"])
+            #g = int(row["Entrez"])
+            g = int(GeneSymbol2Entrez[row["HGNC"]])
         except:
             continue
         gene2None[g] = 1
-        gene2MutN[g] = row["dnv_LGDs_sib"] + row["dnv_missense_sib"] 
+        #gene2MutN[g] = row["dnv_LGDs_sib"] + row["dnv_missense_sib"] 
+        gene2MutN[g] = row["N_LGD"] + row["N_Mis"] 
         #gene2MutN[g] = row["dnLGD"]*0.357 + row["dnDmis"]*0.231
     if out != None:
         writer = csv.writer(open(out, 'wt'))
         for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
            writer.writerow([k,v]) 
     return gene2None, gene2MutN
+
+def Mut2GeneDF(MutDF, GeneSymbol2Entrez, pLI=True):
+    Select_Genes = np.array(list(set(MutDF["HGNC"].values)))
+    dat = []
+    gene2MutN = {}
+    for g in Select_Genes:
+        try:
+            Entrez = int(GeneSymbol2Entrez[g])
+        except:
+            Entrez = -1
+            continue
+        Muts = MutDF[MutDF["HGNC"]==g]
+        N_LGD, N_Mis, N_Dmis, N_Syn = CountMut(Muts)
+        if pLI:
+            try:
+                pLI = float(Muts["ExACpLI"].values[0])
+            except:
+                pLI = 0.0
+            if pLI >= 0.5:
+                gene2MutN[Entrez] = N_LGD * 0.554 + N_Dmis * 0.333
+            else:
+                gene2MutN[Entrez] = N_LGD * 0.138 + N_Dmis * 0.130
+        #if Dmis:
+        #       gene2MutN[Entrez] = N_LGD * 1 + N_Dmis * 1
+        else:
+            gene2MutN[Entrez] = N_LGD * 0.357 + N_Dmis * 0.231
+    return gene2MutN
+
+
+def CountMut(DF, DmisSTR="REVEL", DmisCut=0.5):
+    N_LGD, N_mis, N_Dmis, N_syn = 0,0,0,0
+    for i, row in DF.iterrows():
+        GeneEff = row["GeneEff"].split(";")[0]
+        if GeneEff in ["frameshift", "splice_acceptor", "splice_donor", "start_lost", "stop_gained", "stop_lost"]:
+            N_LGD += 1
+        elif GeneEff == "missense":
+            N_mis += 1
+        if row["REVEL"] == ".":
+            continue
+        elif float(row["REVEL"]) >= 0.5:
+            N_Dmis += 1
+        elif GeneEff == "synonymous":
+            N_syn += 1
+    return N_LGD, N_mis, N_Dmis, N_syn
+
 ###################################################################################################################
 # Weighted Bias Calculattion
 ###################################################################################################################
@@ -565,16 +662,55 @@ def ZscoreOneSTR_Weighted_Indv_Gene(STR, ExpZscoreMat, Gene2Weights, Method = 1,
                 sum_weight += weight
         return res
 
-def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, Match_DF = None):
-    assert Method in [1, 2]
+def Z2_Gene_STR(gene, STR, ExpZscoreMat, Match_DF):
+    z_gene = ExpZscoreMat.loc[gene, STR]
+    g_matches = Match_DF.loc[gene, :].values
+    z_matches = [ExpZscoreMat.loc[g, STR] for g in g_matches]
+    z_matches = [x for x in z_matches if x==x]
+    b = (z_gene - np.mean(z_matches)) / np.std(z_matches)
+    return b
+
+def Z2_GeneSet(ExpMat, Gene2Weights, Match_DF, csv_fil="ExpSpec.csv"):
+    STRs = ExpMat.columns.values
+    str2reg = STR2Region()
+    EFFECTS, Regions = [], []
+    for i, STR in enumerate(STRs):
+        biases, weights = [], []
+        for gene, w in Gene2Weights.items():
+            if gene not in ExpMat.index.values:
+                continue
+            b = Z2_Gene_STR(gene, STR, ExpMat, Match_DF)
+            if b==b:
+                biases.append(b)
+                weights.append(w)
+        sorted_bias, sorted_weights = sort_lists([biases, weights])
+        trim_bias = sorted_bias[1:-2]
+        trim_weights = sorted_weights[1:-2]
+        STR_bias = np.average(trim_bias, weights=trim_weights)
+        EFFECTS.append(STR_bias)
+        Regions.append(str2reg[STR])
+    df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions})
+    df = df.sort_values("EFFECT", ascending=False)
+    df = df.reset_index(drop=True)
+    df["Rank"] = df.index + 1
+    if csv_fil != None:
+        df.to_csv(csv_fil, index=False)
+    return df
+
+
+
+def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, Match_DF = None, NonNeg=False):
+    assert Method in [1, 2, 3]
     res = []
     sum_weight = 0
     if Method == 1:
         for gene, weight in Gene2Weights.items():
             if gene not in ExpZscoreMat.index.values:
                 continue
-            #score = weight * max(0, ExpZscoreMat.loc[gene, STR])
-            score = weight * ExpZscoreMat.loc[gene, STR]
+            if NonNeg:
+                score = weight * max(0, ExpZscoreMat.loc[gene, STR])
+            else:
+                score = weight * ExpZscoreMat.loc[gene, STR]
             if score == score:
                 res.append(score)
                 sum_weight += weight
@@ -585,35 +721,76 @@ def ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, Match_DF 
                 continue
             z_gene = ExpZscoreMat.loc[gene, STR]
             g_matches = Match_DF.loc[gene, :].values 
+            g_matches = [x for x in g_matches if x in ExpZscoreMat.index.values]
             z_matches = [ExpZscoreMat.loc[g, STR] for g in g_matches]
-            z_matches = [x for x in z_matches if x==x]
+            z_matches2 = []
+            for xxxx in z_matches:
+                try:
+                    if xxxx == xxxx:
+                        z_matches2.append(xxxx)
+                except:
+                    continue
+            z_matches = z_matches2
+            #print(z_matches)
+            #print(type(z_matches))
+            #print(z_matches[0])
+            #z_matches = [x for x in z_matches if x==x]
             b = (z_gene - np.mean(z_matches)) / np.std(z_matches) 
             #b = z_gene - np.mean(z_matches)
-            score = weight * b
+            if NonNeg:
+                score = weight * max(0, b)
+            else:
+                score = weight * b
             #print(gene, score, weight)
             if score == score:
                 res.append(score)
                 sum_weight += weight
         return np.sum(res)/sum_weight
-def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Method = 1, Match_DF=0, BS_Weights=True, csv_fil=None, ConnFil=ConnFil):
+    if Method == 3: ## Quantile Weighted Average
+        genes = []
+        Values = []
+        weights = []
+        for gene, weight in Gene2Weights.items():
+            if gene in ExpZscoreMat.index.values:
+                genes.append(gene)
+                Values.append(ExpZscoreMat.loc[gene, STR])
+                weights.append(weight)
+        minV = min(Values)
+        def NanToV(value, V):
+            if value != value:
+                return V
+            else:
+                return value
+        Values_tosort = [NanToV(x, minV-1) for x in Values]
+        Total = len([x for x in Values if x==x])
+        idx = np.argsort(Values_tosort) # index to sort Values
+        quantiles = []
+        for i, (idx, v) in enumerate(zip(idx, Values)):
+            if v == v:
+                quantile = idx/Total
+                quantiles.append(quantile)
+            else:
+                quantiles.append(0)
+        return np.average(quantiles, weights=weights)
+
+def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Method = 1, Match_DF=0, NonNeg=False, BS_Weights=True, csv_fil=None, ConnFil=ConnFil):
     assert Method in [1,2,3] # 1: AvgZ; 2: gene Z normed by Matched gene Z; 3: gene set avgZ normed by Matched set Z;
     STRs = ExpZscoreMat.columns.values
     EFFECTS = []; Normed_EFFECTS = []
     Regions = []
-    str2reg_df = pd.read_csv("./dat/structure2region.map", delimiter="\t")
-    str2reg_df = str2reg_df.sort_values("REG")
-    str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
+    str2reg = STR2Region()
     for i, STR in enumerate(STRs):
-        #if STR != "Parataenial_nucleus": ### DEBUG
-        #    continue ### DEBUG
         if Method == 1:
-            mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1)
+            mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, NonNeg=NonNeg)
             STR_Bias = mean_z
         if Method == 2:
-            mean_b = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Match_DF=Match_DF, Method = 2)
+            mean_b = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Match_DF=Match_DF, Method = 2, NonNeg=NonNeg)
             STR_Bias = mean_b
-        if Method == 3: 
-            mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1)
+        if Method == 3:
+            mean_q = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 3)
+            STR_Bias = mean_q
+        if Method == 4: 
+            mean_z = ZscoreOneSTR_Weighted(STR, ExpZscoreMat, Gene2Weights, Method = 1, NonNeg=NonNeg)
             Match_mean_Zs = []
             for g in Match_DF.columns:
                 match_genes = Match_DF[g].values
@@ -629,26 +806,10 @@ def AvgSTRZ_Weighted(ExpZscoreMat, Gene2Weights, Method = 1, Match_DF=0, BS_Weig
         EFFECTS.append(STR_Bias)
         Regions.append(str2reg[STR])
     df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS, "REGION":Regions})
+    #df = pd.DataFrame(data = {"STR": STRs, "EFFECT":EFFECTS})
     df = df.sort_values("EFFECT", ascending=False)
     df = df.reset_index(drop=True)
     df["Rank"] = df.index + 1
-    """
-    # Trimming Circuit
-    g = LoadConnectome2(ConnFil=ConnFil)
-    top_structs = df.head(50)["STR"].values
-    top_nodes = g.vs.select(label_in=top_structs)
-    g2 = g.subgraph(top_nodes)
-    graph_size, exp_stats, exp_graphs, rm_vs = CircuitTrimming(g2, g)
-    idx = np.argmax(exp_stats[:40])
-    #print(50-idx)
-    CIR_STRS = [v["label"] for v in exp_graphs[idx].vs]
-    df['InCircuit'] = 0
-    df["TrimRank"] = 1
-    df.index = df["STR"].values
-    for i, _str in enumerate([x["label"] for x in rm_vs]):
-        df.loc[_str, "TrimRank"] = 50-i
-        df.loc[_str, "InCircuit"] = 1 if _str in CIR_STRS else 0
-    """
     if csv_fil != None:
         df.to_csv(csv_fil, index=False)
     return df
@@ -762,12 +923,24 @@ def MakeMatchDF(GeneWeightDict, N=1000, DIR = "/Users/jiayao/Work/ASD_Circuits/s
             Dat.append(match_genes[1:N+1])
             Index.append(k)
         except:
-            print(DIR+"/"+str(k)+".txt")
-            print(k, "Not Found in Dataset")
+            #print(DIR+"/"+str(k)+".txt")
+            #print(k, "Not Found in Dataset")
             GeneWeightDict.pop(k)
     df = pd.DataFrame(data=Dat, index=Index)
     return df
 
+def SeperateGenes(GeneDict):
+    df = pd.DataFrame(data=[(k,v) for k,v in GeneDict.items()], index=range(len(GeneDict)))
+    #return df
+    half = int(df.shape[0]/2)
+    print(half)
+    df = df.sample(frac=1)
+    df = df.reset_index(drop=True)
+    df1 = df.loc[0:half-1, :]
+    df2 = df.loc[half:, :]
+    dict1 = dict(zip(df1[0].values, df1[1].values))
+    dict2 = dict(zip(df2[0].values, df2[1].values))
+    return dict1, dict2
 #####################################################################################
 #####################################################################################
 #### Circuits
@@ -813,6 +986,11 @@ def LoadConnectome2(ConnFil = ConnFil,  Bin = False):
     g.vs['label'] = node_names  
     return g 
 
+def subgraph(g_complete, node_names):
+    top_nodes = g_complete.vs.select(label_in=node_names)
+    g_sub = g_complete.subgraph(top_nodes)
+    return g_sub
+
 def GetConnectivity_Edge(g, BiasDF, topN=50):
     g_ = g.copy()
     top_structs = BiasDF.head(topN).index.values
@@ -820,6 +998,7 @@ def GetConnectivity_Edge(g, BiasDF, topN=50):
     g2 = g_.subgraph(top_nodes)
     return g2.ecount(), InOutCohesiveAVG(g_, g2)
 
+# Old, Depricated
 def EdgePermutation(g, BiasDF, topN=50, Npermute=1000):
     g2_ecounts = []
     g2_cohe = []
@@ -844,6 +1023,108 @@ def EdgePermutation(g, BiasDF, topN=50, Npermute=1000):
         g2_ecounts.append(g2_.ecount())
         g2_cohe.append(InOutCohesiveAVG(g_, g2_))
     return g2_ecounts, g2_cohe
+
+def CountReg2RegConn(adj_mat, str2reg):
+    Reg2Reg = {}
+    for STR_i in adj_mat.index.values:
+        for STR_j in adj_mat.columns.values:
+            conn_w = adj_mat.loc[STR_i, STR_j]
+            if conn_w != 0:
+                Reg1 = str2reg[STR_i]
+                Reg2 = str2reg[STR_j]
+                connR = "{}-{}".format(Reg1, Reg2)
+                #connS = "{}-{}-{}".format(STR_i, STR_j, conn_w)
+                connS = (STR_i, STR_j, conn_w)
+                if connR not in Reg2Reg:
+                    Reg2Reg[connR] = [connS]
+                else:
+                    Reg2Reg[connR].append(connS)
+    return Reg2Reg
+
+def SortConnByRegion(Reg2Reg):
+    WithinRegion = {}
+    CrossRegion_SRC, CrossRegion_TGT, CrossRegion_W = [], [], []
+    for reg2reg, obj in Reg2Reg.items():
+        reg1, reg2 = reg2reg.split("-")
+        if reg1 == reg2:
+            Sources, Targets, Weights = [], [],[]
+            for src, tgt, w in obj:
+                Sources.append(src)
+                Targets.append(tgt)
+                Weights.append(w)
+            Sources = [item for items, c in Counter(Sources).most_common()
+                                      for item in [items] * c]
+            WithinRegion[reg2reg] = (Sources, Targets, Weights)
+        else:
+            for src, tgt, w in obj:
+                CrossRegion_SRC.append(src)
+                CrossRegion_TGT.append(tgt)
+                CrossRegion_W.append(w)
+    CrossRegion_SRC = [item for items, c in Counter(CrossRegion_SRC).most_common()
+                                      for item in [items] * c]
+    return WithinRegion, CrossRegion_SRC, CrossRegion_TGT, CrossRegion_W
+
+# Keep Node Degree Identity, Keep Same Region Number of Connections
+# Allow Cross Region Connection swap
+def Region2RegionPert(obj):
+    obj_copy = copy.deepcopy(obj)
+    Sources, Targets, Weights = obj_copy
+    ConnSet = set([])
+    for i, w in enumerate(Weights):
+        src = Sources[0]
+        N_stuck = 0
+        while 1:
+            tgt = np.random.choice(Targets)
+            conn = "{}-{}".format(src, tgt)
+            if conn not in ConnSet and src != tgt:
+                ConnSet.add(conn)
+                N_stuck = 0
+                Sources.pop(0)
+                Targets.remove(tgt)
+                break
+            else:
+                N_stuck += 1
+                if N_stuck >=20:
+                    return False, None
+    return True, ConnSet
+
+# This version I preserve Same Region Edge Identity but allow swapping of cross region edges to other region
+def EdgePermutation_V1(adj_mat, Reg2Reg, CrossRegion_SRC, CrossRegion_TGT, CrossRegion_W, str2reg):
+    adj_mat_permut = pd.DataFrame(data=np.zeros((213,213)), index=adj_mat.index.values, columns=adj_mat.columns.values)
+    for reg2reg, obj in Reg2Reg.items():
+        weights = obj[2]
+        random.shuffle(weights)
+        cc = 0
+        while 1:
+            #print(reg2reg, cc)
+            flag, ConnSet = Region2RegionPert(obj)
+            if flag:
+                for i, conn in enumerate(ConnSet):
+                    src, tgt = conn.split("-")
+                    adj_mat_permut.loc[src, tgt] = weights[i] 
+                break
+            else:
+                cc += 1
+    for i, w in enumerate(CrossRegion_W):
+        src = CrossRegion_SRC[0]
+        N_stuck = 0
+        while 1:
+            tgt = np.random.choice(CrossRegion_TGT)
+            if adj_mat_permut.loc[src, tgt] == 0 and str2reg[src]!=str2reg[tgt]:
+                adj_mat_permut.loc[src, tgt] = w
+                N_stuck = 0
+                CrossRegion_SRC.pop(0)
+                CrossRegion_TGT.remove(tgt)
+                break
+            else:
+                N_stuck += 1
+                if N_stuck > 10:
+                    return False, None
+    return True, adj_mat_permut
+
+# This version I swap edge with similar distance.
+#def EdgePermutation_V2(adj_mat, ):
+
 
 def LoadSTR2REG():
     df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
@@ -972,14 +1253,15 @@ def GetPermutationP(null, obs, gt=True):
         else:
             if obs <= v:
                 count += 1
-    return 1-float(count)/(len(null)+1)
+    Z = (obs - np.mean(null)) / np.std(null)
+    P = 1-float(count)/(len(null)+1)
+    return Z, P
 
-def PlotPermutationP(Null, Obs, title="", xlabel=""):
-    Z = (Obs - np.mean(Null)) / np.std(Null)
+def PlotPermutationP(Null, Obs, gt=True, title="", xlabel=""):
     n, bins, patches = plt.hist(Null, bins=20, histtype = "barstacked", align = 'mid', facecolor='black', alpha=0.8)
-    p = GetPermutationP(Null, Obs)
+    Z, P = GetPermutationP(Null, Obs, gt=gt)
     plt.vlines(x=Obs, ymin=0, ymax=max(n))
-    plt.text(x=Obs, y=max(n), s="p=%.3f, z=%.3f"%(p,Z))
+    plt.text(x=Obs, y=max(n), s="p=%.3f, z=%.3f"%(P,Z))
     plt.title(title)
     plt.xlabel(xlabel)
     plt.show()
@@ -1051,7 +1333,7 @@ def Cohesiveness(g, STRList, TopN=1):
         res += max_
     return res/D 
 
-def InOutCohesiveSingleNode(g, g_, STR, weighted_Dict):
+def InOutCohesiveSingleNode(g, g_, STR):
     d,d_ = 0, 0
     for idx, v in enumerate(g.vs):
         if v["label"] == STR:
@@ -1062,6 +1344,65 @@ def InOutCohesiveSingleNode(g, g_, STR, weighted_Dict):
             d_ = v_.degree()
             break
     return d_/d
+
+def CohesivenessSingleNodeMaxInOut2(g, g_, Node, weightDict, weighted=False, Direction=False):
+    Whole_EdgeList = []
+    Cir_EdgeList = []
+    CircuitLables = set(g_.vs["label"])
+    Total_Out,Circuit_Out = 0,0
+    Total_In, Circuit_In = 0,0
+    STR = Node["label"]
+    if Direction:
+        for _node in Node.successors():
+            if weighted:
+                weight = weightDict["{}-{}".format(STR, _node["label"])]
+            else:
+                weight = 1
+            Total_Out += weight
+            if _node["label"] in CircuitLables:
+                Circuit_Out += weight
+        if Total_Out == 0:
+            Frac_Out = 0
+        else:
+            Frac_Out = Circuit_Out/Total_Out
+        for _node in Node.predecessors():
+            if weighted:
+                weight = weightDict["{}-{}".format(_node["label"], STR)]
+            else:
+                weight = 1
+            Total_In += weight
+            if _node["label"] in CircuitLables:
+                Circuit_In += weight
+        if Total_In == 0:
+            Frac_In = 0
+        else:
+            Frac_In = Circuit_In/Total_In
+        if Frac_Out == 0:
+            ITR = np.inf
+        else:
+            ITR = Frac_In / Frac_Out
+        return max(Frac_In, Frac_Out), ITR
+    else:
+        for _node in Node.successors():
+            if weighted:
+                weight = weightDict["{}-{}".format(STR, _node["label"])]
+            else:
+                weight = 1
+            Total_Out += weight
+            if _node["label"] in CircuitLables:
+                Circuit_Out += weight
+        for _node in Node.predecessors():
+            if weighted:
+                weight = weightDict["{}-{}".format(_node["label"], STR)]
+            else:
+                weight = 1
+            Total_In += weight
+            if _node["label"] in CircuitLables:
+                Circuit_In += weight
+        if (Total_In+Total_Out) == 0:
+            return 0, None
+        else:
+            return ((Circuit_In+Circuit_Out)/(Total_In+Total_Out)), None
 
 def CohesivenessSingleNodeMaxInOut(g, g_, STR, weightDict, weighted=False, Direction=False):
     Whole_EdgeList = []
@@ -1123,24 +1464,48 @@ def CohesivenessSingleNodeMaxInOut(g, g_, STR, weightDict, weighted=False, Direc
             return ((Circuit_In+Circuit_Out)/(Total_In+Total_Out)), None
 
 def ScoreSTRSet(Graph, CandidateNodes, WeightDict, Weighted=False, Direction=False): ## Choesiveness
+    CandidateNodes = set(CandidateNodes)
     top_nodes = Graph.vs.select(label_in=CandidateNodes)
     g2 = Graph.copy()
     g2 = g2.subgraph(top_nodes)
     cohesives = []
-    for v in g2.vs:
-        coh, ITR = CohesivenessSingleNodeMaxInOut(Graph, g2, v["label"], WeightDict, Direction=Direction, weighted=Weighted) 
-        cohesives.append(coh)
-    return cohesives
-    #cohesive = np.mean(cohesives)
-    #return cohesive
+    for v in Graph.vs:
+        if v["label"] in CandidateNodes:
+            coh, ITR = CohesivenessSingleNodeMaxInOut(Graph, g2, v["label"], WeightDict, Direction=Direction, weighted=Weighted) 
+            cohesives.append(coh)
+    #return cohesives
+    cohesive = np.mean(cohesives)
+    return cohesive, len(g2.es)
 
+# Score Connectivity and Cohesiveness between two conponents, 
+def ScoreTwoComponents(Graph, STRSet1, STRSet2, WeightDict=None, Weighted=False, Directed=False):
+    g = Graph.copy()
+    Idx2Label = {}
+    for v in g.vs:
+        Idx2Label[v.index] = v['label']
+    ConnSet1, ConnSet2, Conn_bet = [], [], []
+    for e in g.es:
+        if Idx2Label[e.source] in STRSet1 and Idx2Label[e.target] in STRSet2:
+            Conn_bet.append(e["weight"])
+        elif Idx2Label[e.source] in STRSet2 and Idx2Label[e.target] in STRSet1:
+            Conn_bet.append(e["weight"])
+        if Idx2Label[e.source] in STRSet1 and Idx2Label[e.target] in STRSet1:
+            ConnSet1.append(e["weight"])
+        elif Idx2Label[e.source] in STRSet2 and Idx2Label[e.target] in STRSet2:
+            ConnSet2.append(e["weight"])
+    #return ConnSet1, ConnSet2, Conn_bet
+    return ConnSet1, ConnSet2, Conn_bet
 
-def InOutCohesiveAVG(g, g_):
+def InOutCohesiveAVG(g, g_, weightDict):
     cohesives = []
-    for v in g_.vs:
-        coh = InOutCohesiveSingleNode(g, g_, v["label"])
-        #coh = CohesivenessSingleNodeMaxInOut(g, g_, v["label"])
-        cohesives.append(coh)
+    CandidateNodes = set(g_.vs["label"])
+    for v in g.vs:
+        if v['label'] in CandidateNodes:
+        #coh = InOutCohesiveSingleNode(g, g_, v["label"])
+            coh, _ = CohesivenessSingleNodeMaxInOut2(g, g_, v, weightDict)
+            cohesives.append(coh)
+    #cohesive = np.mean(cohesives) - (len(cohesives)/213) 
+    #cohesive = np.mean(cohesives) / (len(cohesives)/213) 
     cohesive = np.mean(cohesives)
     return cohesive
 
@@ -1246,13 +1611,15 @@ def optimize_stat_in_n_out(graph, complate_graph):
             d += v.degree()
     return graph.ecount() / d
 
-def argmax_optimize_stat(graph, complate_graph, optimize_stat="in_n_out"):
+def argmax_optimize_stat(graph, complate_graph, WeightDict, optimize_stat="in_n_out"):
     opt_stats, graphs, vs = [], [], []
     for i, v in enumerate(graph.vs):
         tmp_graph = graph.copy()
         tmp_graph.delete_vertices(v)
         #stat = optimize_stat_in_n_out(tmp_graph, complate_graph)
-        stat = InOutCohesiveAVG(complate_graph, tmp_graph)
+        stat = InOutCohesiveAVG(complate_graph, tmp_graph, WeightDict)
+        #stat = sum(tmp_graph.degree())
+        #stat = tmp_graph.transitivity_undirected()
         opt_stats.append(stat)
         graphs.append(tmp_graph)
         vs.append(v)
@@ -1262,17 +1629,38 @@ def argmax_optimize_stat(graph, complate_graph, optimize_stat="in_n_out"):
     graph = graphs[idx]
     return graph, stat, trimmed_v
 
-def CircuitTrimming(graph, complate_graph, optimize_stat="in_n_out"):
+def CircuitTrimming(graph, complate_graph, WeightDict, optimize_stat="in_n_out"):
     trim_graph = graph.copy()
     stats, graph_size, graphs, trimmed_Vs = [], [], [], []
     for i in range(len(graph.vs), 1, -1):
-        trim_graph, stat, trimmed_v = argmax_optimize_stat(trim_graph, complate_graph, optimize_stat)
+
+        trim_graph, stat, trimmed_v = argmax_optimize_stat(trim_graph, complate_graph, WeightDict, optimize_stat)
         graphs.append(trim_graph.copy())
         stats.append(stat)
         graph_size.append(i)
         trimmed_Vs.append(trimmed_v)
     trimmed_Vs.append(trim_graph.vs[0])
     return graph_size, stats, graphs, trimmed_Vs
+
+def GreedyTrim(DF, g, topN, weightDict):
+    top_structs = DF.head(topN).index.values
+    #top_structs = np.array(DF)
+    top_nodes = g.vs.select(label_in=top_structs)
+    g2 = g.subgraph(top_nodes)
+    graph_size, exp_stats, exp_graphs, rm_vs = CircuitTrimming(g2, g, weightDict)
+    idx = np.argmax(exp_stats)
+    circuit_STRs = [v["label"] for v in exp_graphs[idx].vs]
+    return circuit_STRs, exp_stats[idx], len(exp_graphs[idx].es)
+
+def SiblingTrim(g, topN, InputDir="dat/cont.sib.bias/ASD.sib.Spec.bias.{}.csv"):
+    Cohes, Conns = [], []
+    for i in range(1000):
+        df = pd.read_csv(InputDir.format(i), index_col="STR")
+        CirSTRs, cohe, conn = GreedyTrim(df, g, topN)
+        Cohes.append(cohe)
+        Conns.append(conn)
+    return Cohes, Conns
+
 
 def Bias_vs_Cohesiveness(g, df, topN=50, conn="AvgCohesive", title="bias vs cohesiveness"):
     assert conn in ["AvgCohesive", "TotalCohesive", "Top5Edges"]
@@ -1359,6 +1747,98 @@ class MostCohesiveCirtuis(Annealer):
             idx_change = random.randint(0, len(self.CandidateNodes) - 1)
             self.state[idx_change] = 1 - self.state[idx_change]
         return (self.energy() - initial_energy) 
+    def energy2(self):
+        return - NeiborBias(self.Graph, self.state)
+    def energy(self):
+        InCirtuitNodes = self.CandidateNodes[np.where(self.state==1)[0]]
+        top_nodes = self.Graph.vs.select(label_in=InCirtuitNodes)
+        g2 = self.Graph.copy()
+        g2 = g2.subgraph(top_nodes)
+        cohesives = []
+        for v in g2.vs:
+            coh, ITR = CohesivenessSingleNodeMaxInOut(self.Graph, g2, v["label"], self.WeightDict, Direction=self.Direction, weighted=self.Weighted) 
+            cohesives.append(coh)
+        cohesive = np.mean(cohesives)
+        #cohesive = cohesive / len(top_nodes)
+        #cohesive = cohesive - len(top_nodes)/213
+        return 1 - cohesive
+    def cohesives(self):
+        InCirtuitNodes = self.CandidateNodes[np.where(self.state==1)[0]]
+        top_nodes = self.Graph.vs.select(label_in=InCirtuitNodes)
+        g2 = self.Graph.copy()
+        g2 = g2.subgraph(top_nodes)
+        cohesives = []
+        for v in g2.vs:
+            coh, TIR = CohesivenessSingleNodeMaxInOut(self.Graph, g2, v["label"], self.WeightDict)
+            cohesives.append(coh)
+        return cohesives
+
+def NeiborBias(g, States, verbose=False):
+    NeiborBias = []
+    dat = []
+    for idx, state in enumerate(States):
+        if state == 0:
+            continue
+        node = g.vs[idx]
+        TotalBias, InCircuitBias, OutCircuitBias = [], [], []
+        for neighbor in node.neighbors():
+            TotalBias.append(neighbor["Bias"])
+            if States[neighbor.index] == 1:
+                InCircuitBias.append(neighbor["Bias"])
+            else:
+                OutCircuitBias.append(max(0, neighbor["Bias"]))
+        total_bias = np.mean(TotalBias)
+        if len(InCircuitBias) == 0:
+            incircuit_bias = 0
+        else:
+            incircuit_bias = np.mean(InCircuitBias)
+            #incircuit_bias = np.sum(InCircuitBias)
+        if len(OutCircuitBias) == 0:
+            outcircuit_bias = 0
+        else:
+            outcircuit_bias = np.mean(OutCircuitBias)
+            #outcircuit_bias = np.sum(OutCircuitBias)
+        #NeiborBias.append(incircuit_bias / (incircuit_bias + outcircuit_bias)
+        #NeiborBias.append(incircuit_bias)
+        #if verbose:
+        #    print(node["label"], "%.3f\t%.3f\t%.3f"%(incircuit_bias, outcircuit_bias, incircuit_bias - outcircuit_bias))
+        #dat.append([])
+    #return np.mean(NeiborBias)  
+
+def run_CircuitOpt_neighborBias(g, EdgeWeightsDict, weighted, directed):
+    CandidateNodes = np.array(g.vs["label"]) # all nodes are candidate
+    Init_states = np.zeros(len(CandidateNodes))
+    for idx in range(len(CandidateNodes)):
+        if np.random.rand() > 0.5:
+            Init_states[idx] = 1
+    #print(CandidateNodes)
+    ins = MostCohesiveCirtuis(Init_states, g, CandidateNodes, EdgeWeightsDict,
+                              Weighted=weighted, Direction=directed)
+    ins.copy_strategy = "deepcopy"
+    ins.Tmax = 1
+    ins.Tmin = 1e-6
+    Tmps, Energys, state, e = ins.anneal()
+    print("Done")
+    return state
+
+class MostCohesiveCirtuisGivenNCandidates(Annealer):
+    def __init__(self, state, Graph, CandidateNodes, WeightDict, Weighted=True, Direction=False):
+        self.Graph = Graph
+        self.CandidateNodes = CandidateNodes
+        self.WeightDict = WeightDict
+        self.Weighted = Weighted
+        self.Direction = Direction
+        super(MostCohesiveCirtuisGivenNCandidates, self).__init__(state)  # important!
+    def move(self):
+        initial_energy = self.energy()
+        # Swipe two nodes
+        idx_in = np.where(self.state==1)[0]
+        idx_out = np.where(self.state==0)[0]
+        idx_change_i = np.random.choice(idx_in, 1)
+        idx_change_j = np.random.choice(idx_out, 1)
+        self.state[idx_change_i] = 1 - self.state[idx_change_i]
+        self.state[idx_change_j] = 1 - self.state[idx_change_j]
+        return (self.energy() - initial_energy) 
     def energy(self):
         InCirtuitNodes = self.CandidateNodes[np.where(self.state==1)[0]]
         top_nodes = self.Graph.vs.select(label_in=InCirtuitNodes)
@@ -1406,6 +1886,21 @@ def CircuitOptimize(topN=100, Weighted = False, Direction = False, Weight_Dict =
     Tmps, Energys, state, e = ins.anneal()
     return ins
 
+def run_CircuitOpt(g, EdgeWeightsDict, BiasDF, weighted, directed, topN=50):
+    CandidateNodes = BiasDF.head(topN).index.values
+    Init_States = np.ones(len(CandidateNodes))
+    for idx in range(len(Init_States)):
+        if np.random.rand() > 0.5:
+            Init_States[idx] = 0
+    ins = MostCohesiveCirtuis(Init_States, g, CandidateNodes, EdgeWeightsDict, Weighted=weighted, Direction=directed)
+    ins.copy_strategy = "deepcopy"
+    ins.Tmax=1
+    ins.Tmin=0.00001
+    Tmps, Energys, state, e = ins.anneal()
+    print("Done")
+    return state
+
+
 def LocalDistal_Region():
     adj_mat = pd.read_csv("../dat/allen-mouse-conn/norm_density-max_ipsi_contra-pval_0.05-deg_min_1-by_weight_pvalue.csv", index_col="ROW")
     str2reg = STR2Region()
@@ -1444,11 +1939,14 @@ def GetBestCoheSAFil(SAFil, Weighted, Direction, g, EdgeWeightsDict):
         state = row.values
         InCirtuitNodes = candidates[np.where(state==1)[0]]
         InCirtuitNodes_str = ",".join(InCirtuitNodes)
-        score = ScoreSTRSet(g, InCirtuitNodes, EdgeWeightsDict, Weighted=Weighted, Direction=Direction)
-        Cohes.append(score)
+        score,x = ScoreSTRSet(g, InCirtuitNodes, EdgeWeightsDict, Weighted=Weighted, Direction=Direction)
+        Cohes.append(np.mean(score))
     best_id = np.argmax(Cohes)
     state = sim.loc[1, :].values
     InCirtuitNodes = candidates[np.where(state==1)[0]]
+    best_cohe = max(Cohes)
+    exp = len(candidates)/213
+    print("Best Cohe %.3f\tExp %.3f\tRate %.3f" %(best_cohe, exp, best_cohe/exp))
     return InCirtuitNodes
 
 def Complete_Local_Distal_Cohesivesness_TopN_Case(BiasDF, g, g_local_region, g_distal_region, EdgeWeightsDict, Weighted, Directed, topN=50):
@@ -1466,14 +1964,101 @@ def Complete_Local_Distal_Cohesiveness_TopN_Cont(InputDir, g, g_local_region, g_
         complete = ScoreSTRSet(g, InCirtuitNodes, EdgeWeightsDict, Weighted, Directed)
         local = ScoreSTRSet(g_local_region, InCirtuitNodes, EdgeWeightsDict, Weighted, Directed)
         distal = ScoreSTRSet(g_distal_region, InCirtuitNodes, EdgeWeightsDict, Weighted, Directed)
-        Complete.append(np.mean(complete))
-        Local.append(np.mean(local))
-        Distal.append(np.mean(distal))
+        #Complete.append(np.mean(complete))
+        #Local.append(np.mean(local))
+        #Distal.append(np.mean(distal))
+        Complete.append(complete)
+        Local.append(local)
+        Distal.append(distal)
+    Complete = np.array(Complete)
+    local = np.array(local)
+    distal = np.array(distal)
     return Complete, Local, Distal
+
+class DiffusionGraph():
+    def __init__(self, biasDF, ConnMat):
+        self.biasDF = biasDF
+        self.Matrix = ConnMat
+        self.NodeSeq = self.Matrix.index.values
+        self.InitBias = np.array([self.biasDF.loc[X, "EFFECT"] for X in self.NodeSeq])
+    def Diffuse(self, N=100):
+        States = [self.InitBias]
+        last_state = States[0]
+        self.Beta = 0.9 * np.ones(213)
+        for n in range(N):
+            state = np.zeros(self.Matrix.values.shape[0])
+            for i, tgt_node in enumerate(self.NodeSeq):
+                retained_heat = self.Beta[i] * last_state[i]
+                received_heat = 0
+                for j, src_node in enumerate(self.Matrix.index.values):
+                    received_heat += self.Matrix.loc[src_node, tgt_node] * (1-self.Beta[j]) * last_state[j] 
+                state[i] = retained_heat + received_heat
+            last_state = state
+            States.append(state)
+        return np.array(States)
+    def Diffuse_vec(self, N=100):
+        States = [self.InitBias]
+        last_state = States[0]
+        self.Beta = 0.9 * np.ones(213)
+        for n in range(N):
+            state = last_state * self.Beta + (np.eye(213) @ ((1-self.Beta) * last_state) @ self.Matrix.values).sum(axis=1)
+            States.append(state)
+            last_state = state
+        return np.array(States)
+    def Diffuse2(self, N=100): # Source & Sink 
+        self.InitBias = self.InitBias - np.mean(self.InitBias)# Center Bias at 0 
+        States = [self.InitBias]
+        last_state = States[0]
+        for n in range(N):
+            state = np.zeros(self.Matrix.values.shape[0])
+            for i, tgt_node in enumerate(self.NodeSeq):
+                heat = 0.95 * last_state[i] + 0.05 * self.InitBias[i] # Each Step Node will Gian heat equal to their bias
+                for j, src_node in enumerate(self.Matrix.index.values):
+                    heat += 0.05 * self.Matrix.loc[src_node, tgt_node] * last_state[j]
+                state[i] = heat
+            last_state = state
+            States.append(state)
+        return np.array(States)
+    def Diffuse2_vec(self, N=100, alpha=1e-3, beta = 1e-3):
+        InitBias = self.InitBias - np.mean(self.InitBias) # Center Bias at 0
+        States = [InitBias]
+        sumheat = []
+        T = self.Matrix.values
+        for n in range(N):
+            A = (1-alpha) * States[-1] + beta * InitBias
+            B = alpha * T.transpose() @ States[-1].transpose()
+            state = A + B
+            States.append(state)
+            sumheat.append(sum(state))
+        self.States = np.array(States)
+        return self.States
 
 #####################################################################################
 # Other Methods
 #####################################################################################
+def sort_lists(list_of_lists):
+    return list(map(list, list(zip(*sorted(zip(*list_of_lists), key=lambda sublist_to_sort_by: sublist_to_sort_by[0])))))
+
+
+def queryConnections(STR, ConnMat, BiasDF, STR2REG):
+    #print("Project to")
+    XX = ConnMat.loc[STR, :].sort_values(ascending=False)
+    res = pd.DataFrame(data={'Region': [STR2REG[x] for x in XX.index.values], 
+                             'STR':XX.index.values, 'Weight':XX.values,
+                            "Bias":[BiasDF.loc[x, "EFFECT"] for x in XX.index.values]})
+    res = res[res["Weight"] > 0]
+    Project_To = res.shape[0]
+    NeighborBias = res["Bias"].sum()
+    #print("Receive From")
+    XX = ConnMat.loc[:, STR].sort_values(ascending=False)
+    res = pd.DataFrame(data={'Region': [STR2REG[x] for x in XX.index.values], 
+                             'STR':XX.index.values, 'Weight':XX.values, 
+                             "Bias":[BiasDF.loc[x, "EFFECT"] for x in XX.index.values]})
+    res = res[res["Weight"] > 0]
+    Receive_From = res.shape[0]
+    NeighborBias += res["Bias"].sum()
+    return Project_To, Receive_From, NeighborBias
+
 def queryDist(adj_mat, Cartesian_distances_w_edge, dist_min, dist_max, directed=False):
     str2reg = STR2Region()
     REG2REG = []
@@ -1665,6 +2250,186 @@ def Loading_sim_denovo_dat(DIRi, N_sim=1000):
                 EFFECT[STR].append(row["EFFECT"])
             else:
                 EFFECT[STR] = [row["EFFECT"]]
+
+def movingAVG(Input, smoothLen=3):
+    res = []
+    for i in range(len(Input)):
+        if i - smoothLen < 0:
+            new = np.mean(Input[0:i+smoothLen])
+        elif i+ smoothLen > len(Input):
+            new = np.mean(Input[i-smoothLen:])
+        else:
+            new = np.mean(Input[i-smoothLen:i+smoothLen])
+        res.append(new)
+    return res
+
+def CI(simulations, p):
+    simulations = sorted(simulations, reverse=False)
+    n = len(simulations)
+    u_pval = (1+p)/2.
+    l_pval = (1-u_pval)
+    print(l_pval, u_pval)
+    l_indx = int(np.floor(n*l_pval))
+    u_indx = int(np.floor(n*u_pval))
+    print(l_indx, u_indx)
+    return(simulations[l_indx],simulations[u_indx])
+
+#####################################################################################
+# Processes
+#####################################################################################
+
+# Show how cohesiveness change with TopN includes as candidates. 
+# Could be complete Graph, local or distal connections
+# Control could be 1. randomly selected STRs 2. subsampled siblings 3. Expression Matched genes
+def ContTopNvsCohe(biasDF, topN, weighted, directed, g, EdgeWeightsDict, cont="sib", N_sim=100):
+    YYY = []
+    for i in range(N_sim):
+        if cont == "rand":
+            CandidateNodes = np.random.choice(biasDF.index.values, topN, replace=False)
+        elif cont == "sib":
+            BiasDF_cont = pd.read_csv("dat/cont.sib.bias/ASD.sib.Spec.bias.{}.csv".format(i), index_col="STR")
+            CandidateNodes = BiasDF_cont.head(topN).index.values
+        elif cont == "match":
+            BiasDF_cont = pd.read_csv("dat/cont.bias/ASD.MetaMatch.Spec.bias.{}.csv".format(i), index_col="STR")
+            CandidateNodes = BiasDF_cont.head(topN).index.values
+        yyy = ScoreSTRSet(g, CandidateNodes, EdgeWeightsDict, Weighted=weighted, Direction=directed)
+        #YYY.append(np.mean(yyy))
+        YYY.append(yyy)
+    return np.array(YYY)
+
+def TopNAndCohesiveness(BiasDF, graph, weighted, directed, EdgeWeightsDict, cont, N_sim):
+    ASD_Cohe, Cont_Cohe = [], []
+    for topN in range(213):
+        CandidateNodes = BiasDF.head(topN).index.values
+        asd = ScoreSTRSet(graph, CandidateNodes, EdgeWeightsDict, Weighted=weighted, Direction=directed)
+        asd = np.mean(asd)
+        cont_cohe = ContTopNvsCohe(BiasDF, topN, weighted, directed, graph, EdgeWeightsDict, cont, N_sim)
+        cont_cohe = np.mean(cont_cohe)
+        ASD_Cohe.append(asd)
+        Cont_Cohe.append(cont_cohe)
+    unweight = movingAVG(np.array(ASD_Cohe[1:213])/np.array(Cont_Cohe[1:213]))
+    return unweight
+
+def MaskCortex2Cortex(adj_mat, Cortex_STRs):
+    adj_mat_c2c = adj_mat.copy(deep=True)
+    adj_mat_other = adj_mat.copy(deep=True)
+    for STR_i in adj_mat.index.values:
+        for STR_j in adj_mat.columns.values:
+            if STR_i in Cortex_STRs and STR_j in Cortex_STRs:
+                #adj_mat_c2c.loc[STR_i, STR_j] = adj_mat.loc[]
+                adj_mat_other.loc[STR_i, STR_j] = 0
+            else:
+                adj_mat_c2c.loc[STR_i, STR_j] = 0
+    return adj_mat_c2c, adj_mat_other
+
+
+def MaskCortex2Cortex(adj_mat, Cortex_STRs):
+    adj_mat_c2c = adj_mat.copy(deep=True)
+    adj_mat_other = adj_mat.copy(deep=True)
+    for STR_i in adj_mat.index.values:
+        for STR_j in adj_mat.columns.values:
+            if STR_i in Cortex_STRs and STR_j in Cortex_STRs:
+                adj_mat_other.loc[STR_i, STR_j] = 0
+            else:
+                adj_mat_c2c.loc[STR_i, STR_j] = 0
+    return adj_mat_c2c, adj_mat_other
+
+def MaskLocalRegionalConnection(adj_mat):
+    str2reg = STR2Region()
+    ALL_STRs = adj_mat.index.values
+    adj_mat_local = []
+    adj_mat_distal = []
+    for str_i in ALL_STRs:
+        tmp_local = []
+        tmp_distal = []
+        for str_j in ALL_STRs:
+            weight = adj_mat.loc[str_i, str_j]
+            if weight == 0:
+                tmp_local.append(0)
+                tmp_distal.append(0)
+            else:
+                rg_i = str2reg[str_i]
+                rg_j = str2reg[str_j]
+                if rg_i == rg_j:
+                    tmp_local.append(weight)
+                    tmp_distal.append(0)
+                else:
+                    tmp_local.append(0)
+                    tmp_distal.append(weight)
+        adj_mat_local.append(tmp_local)
+        adj_mat_distal.append(tmp_distal)
+    adj_mat_local = pd.DataFrame(data=adj_mat_local, index=ALL_STRs, columns=ALL_STRs)
+    adj_mat_distal = pd.DataFrame(data=adj_mat_distal, index=ALL_STRs, columns=ALL_STRs)
+    return adj_mat_local, adj_mat_distal
+
+def CohesivenessProfile(BiasDF, g, topNs, perm_conn_dir = "dat/permut_connectome_oct07", EdgeWeightsDict={}):
+    ASD_Conn_Z, ASD_Cohe_Z, ASD_Conn_P, ASD_Cohe_P, ASD_Conn_E, ASD_Cohe_E = [],[],[],[],[],[]
+    for topN in topNs:
+        Permuted_ASD_cohe = []
+        Permuted_ASD_conn = []
+        for i in range(1, 1001, 1):
+            adj_mat_perm = pd.read_csv("{}/{}.csv".format(perm_conn_dir, i), index_col=0)
+            g_perm = LoadConnectome2(adj_mat_perm)
+            asd_cohe, asd_conn = ScoreSTRSet(g_perm, BiasDF.head(topN).index.values, EdgeWeightsDict)
+            Permuted_ASD_cohe.append(asd_cohe)
+            Permuted_ASD_conn.append(asd_conn)
+        asd_cohe, asd_conn = ScoreSTRSet(g, BiasDF.head(topN).index.values, EdgeWeightsDict)
+
+        asd_z_conn, asd_p_conn = GetPermutationP(Permuted_ASD_conn, asd_conn)
+        asd_z_cohe, asd_p_cohe = GetPermutationP(Permuted_ASD_cohe, asd_cohe)
+        effect_conn = asd_conn/np.mean(Permuted_ASD_conn)
+        effect_cohe = asd_cohe/np.mean(Permuted_ASD_cohe)
+        ASD_Conn_Z.append(asd_z_conn); ASD_Cohe_Z.append(asd_z_cohe)
+        ASD_Conn_P.append(asd_p_conn); ASD_Cohe_P.append(asd_p_cohe)
+        ASD_Conn_E.append(effect_conn); ASD_Cohe_E.append(effect_cohe)
+    return ASD_Cohe_E, ASD_Cohe_P
+
+def addline(TopNs, Eff, ax, label = "", color="grey", ls="dashed"):
+    ax.plot(TopNs, Eff, label=label, color=color, ls="solid", lw=3, )
+
+def PlotCohesivenessProfile(topNs, EWE, EWE2):
+    fig, ax = plt.subplots(dpi=720, figsize=(16,8))
+    plt.style.use('seaborn-talk')
+    matplotlib.rcParams.update({'font.size': 32})
+
+    addline(topNs, EWE, ax, "ASD", "blue")
+    addline(topNs, EWE2, ax, "Sib", "green")
+
+    ax.hlines(xmin=min(topNs), xmax=max(topNs), y=1, ls="--", color="grey")
+    ax.grid(True)
+
+    ax.set_ylabel("Cohesiveness Effect Size",fontsize=28)
+    ax.set_xlabel("Number of Most Biased Structures",fontsize=28)
+    ax.tick_params(axis='x', labelsize=20)
+    ax.tick_params(axis='y', labelsize=20)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+def BiasCorrelation(DF1, DF2):
+    Bias1, Bias2 = [], []
+    Rank1, Rank2 = [], []
+    for STR in DF1.index.values:
+        bias1 = DF1.loc[STR, "EFFECT"]
+        bias2 = DF2.loc[STR, "EFFECT"]
+        rank1 = DF1.loc[STR, "Rank"]
+        rank2 = DF2.loc[STR, "Rank"]
+        Bias1.append(bias1); Bias2.append(bias2)
+        Rank1.append(rank1); Rank2.append(rank2)
+    fig, (ax1, ax2) = plt.subplots(1,2, figsize=(12,6), dpi=120)
+    ax1.scatter(Bias1, Bias2, s=3)
+    ax1.set_xlabel("Bias1")
+    ax1.set_ylabel("Bias2")
+    print(pearsonr(Bias1, Bias2))
+    ax2.scatter(Rank1, Rank2, s=3)
+    ax2.set_xlabel("Rank1")
+    ax2.set_ylabel("Rank2")
+    ax2.hlines(xmin=0, xmax=213, y=50, ls="--", color="grey")
+    ax2.vlines(ymin=0, ymax=213, x=50, ls="--", color="grey")
+    print(pearsonr(Rank1, Rank2))
+    plt.tight_layout()
+    plt.show()
+
 
 #####################################################################################
 #####################################################################################

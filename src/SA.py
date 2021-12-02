@@ -38,7 +38,7 @@ class Annealer(object):
     # defaults
     Tmax = 25000.0
     Tmin = 2.5
-    steps = 20000
+    steps = 10000
     updates = 100
     copy_strategy = 'deepcopy'
     user_exit = False
