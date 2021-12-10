@@ -1024,6 +1024,10 @@ def EdgePermutation(g, BiasDF, topN=50, Npermute=1000):
         g2_cohe.append(InOutCohesiveAVG(g_, g2_))
     return g2_ecounts, g2_cohe
 
+
+######################################################################################
+# Region Preserving graph permutation 
+######################################################################################
 def CountReg2RegConn(adj_mat, str2reg):
     Reg2Reg = {}
     for STR_i in adj_mat.index.values:
@@ -1125,6 +1129,144 @@ def EdgePermutation_V1(adj_mat, Reg2Reg, CrossRegion_SRC, CrossRegion_TGT, Cross
 # This version I swap edge with similar distance.
 #def EdgePermutation_V2(adj_mat, ):
 
+######################################################################################
+# Distance Preserving graph permutation 
+######################################################################################
+def SortEdgesToBuckets(adj_mat, adj_mat_dist, DistanceBins):
+    RealConnBuckets = []
+    PotentialConnBuckets = []
+    for i in range(len(DistanceBins)-1):
+        RealConnBuckets.append([])
+        PotentialConnBuckets.append([])
+    for i, str_i in enumerate(adj_mat.index.values):
+        for j, str_j in enumerate(adj_mat.columns.values):
+            edge_dist = adj_mat_dist.loc[str_i, str_j]
+            edge_w = adj_mat.loc[str_i, str_j]
+            if edge_w > 0:
+                for i in range(len(DistanceBins)-1):
+                    if edge_dist >= DistanceBins[i] and edge_dist < DistanceBins[i+1]:
+                        RealConnBuckets[i].append((str_i, str_j, edge_w))
+            for i in range(len(DistanceBins)-1):
+                if edge_dist >= DistanceBins[i] and edge_dist < DistanceBins[i+1]:
+                    PotentialConnBuckets[i].append((str_i, str_j))
+    return RealConnBuckets, PotentialConnBuckets
+
+def SortConnByDistance(Buckets):
+    NewBucket = []
+    for Bucket in Buckets:
+        Sources, Targets, Weights = [], [], []
+        for str_i, str_j, w in Bucket:
+            Sources.append(str_i)
+            Targets.append(str_j)
+            Weights.append(w)
+        NewBucket.append((Sources, Targets, Weights))
+    return NewBucket
+    
+def update_weights(Bucket2, OutDCounts, InDCounts):
+    res = []
+    for xxx in Bucket2:
+        str_i, str_j = xxx.split("-")
+        res.append(OutDCounts[str_i] + InDCounts[str_j])
+    sumw = np.sum(res)
+    for i, num in enumerate(res):
+        res[i] = num/sumw
+    #res[-1] = 1 - np.sum(res[:-1])
+    return res
+
+def ShuffleBasedOnDegree(Bucket1, Bucket2):
+    Sources, Targets, Weights = copy.deepcopy(Bucket1)
+    OutDCounts = {}
+    InDCounts = {}
+    for pair in Bucket2:
+        X,Y = pair
+        if X not in OutDCounts:
+            OutDCounts[X] = 1 + Sources.count(X)
+        if Y not in InDCounts:
+            InDCounts[Y] = 1 + Targets.count(Y)
+    #print(sorted(OutDCounts.items(), key=lambda x:x[1]))
+    res = []
+    tmp_bucket2 = ["{}-{}".format(x,y) for x,y in Bucket2]
+    weights = update_weights(tmp_bucket2, OutDCounts, InDCounts)
+    while len(tmp_bucket2) > 0:
+        xxx = np.random.choice(tmp_bucket2, p = weights)
+        res.append(xxx)
+        tmp_bucket2.remove(xxx)
+        weights = update_weights(tmp_bucket2, OutDCounts, InDCounts)
+    return res
+
+def PermuteOneBucket(Bucket1, Bucket2):
+    Sources, Targets, Weights = copy.deepcopy(Bucket1)
+    tmp_bucket2 = copy.deepcopy(Bucket2)
+    tmp_weight2 = copy.deepcopy(Weights)
+    tmp_bucket2 = ShuffleBasedOnDegree(Bucket1, Bucket2)[::-1]
+    #random.shuffle(tmp_bucket2)
+    #random.shuffle(tmp_weight2)
+    ConnSet = []
+    while len(tmp_weight2) > 0:
+        if len(tmp_bucket2) == 0:
+            return False, ConnSet
+        str_i, str_j = tmp_bucket2.pop().split("-")
+        if str_i in Sources and str_j in Targets:
+            w = tmp_weight2.pop()
+            Sources.remove(str_i)
+            Targets.remove(str_j)
+            ConnSet.append((str_i, str_j, w))
+    return True, ConnSet
+
+
+def EdgePermutation_DistancePreserving(adj_mat, EdgeBuckets, PairBuckets):
+    adj_mat_permut = pd.DataFrame(data=np.zeros((213,213)), index=adj_mat.index.values, columns=adj_mat.columns.values)
+    for i, (Bucket1, Bucket2) in enumerate(zip(EdgeBuckets, PairBuckets)):
+        cc = 0
+        while cc < 50:
+            Res, ConnSet = PermuteOneBucket(Bucket1, Bucket2)
+            if Res:
+                for str_i, str_j, w in ConnSet:
+                    adj_mat_permut.loc[str_i, str_j] = w
+                break
+            else:
+                cc += 1
+        print("Bucket",i,"Failed 50 times")
+    return adj_mat_permut
+
+def PermuteOneBucket2(Bucket1, Bucket2):
+    SwapSet = copy.deepcopy(Bucket1)
+    tmp_bucket2 = ["{}-{}".format(x,y) for x,y in Bucket2]
+    for i in range(1000):
+        random.shuffle(SwapSet)
+        SwapSet_dict = ["{}-{}".format(x,y) for x,y,z in SwapSet]
+        str_i, str_j, w = SwapSet[0]
+        # Find another pair that: 1. same distance for swapping; 2. Edge to swap not already exist
+        Swappable_set = []
+        for i in range(1, len(SwapSet)):
+            _str_i, _str_j, _w = SwapSet[i]
+            Cond1 = "{}-{}".format(_str_i, str_j) in tmp_bucket2
+            Cond2 = "{}-{}".format(str_i, _str_j) in tmp_bucket2
+            Cond3 = "{}-{}".format(_str_i, str_j) not in SwapSet_dict
+            Cond4 = "{}-{}".format(str_i, _str_j) not in SwapSet_dict
+            if Cond1 and Cond2 and Cond3 and Cond4:
+                Swappable_set.append((i, _str_i, _str_j, _w))
+        if len(Swappable_set) > 0:
+            random.shuffle(Swappable_set)
+            idx, _str_i, _str_j, _w = Swappable_set[0]
+            SwapSet[0] = (_str_i, str_j, w)
+            SwapSet[idx] = (str_i, _str_j, _w)
+            #print(_str_i, _str_j, _w)
+            #print(edge_deciles2[0], edge_deciles2[1])
+            #print(Cartesian_distancesDF.loc[str_i, str_j])
+            #print(Cartesian_distancesDF.loc[_str_i, _str_j])
+            #print(Cartesian_distancesDF.loc[str_i, _str_j])
+            #print(Cartesian_distancesDF.loc[_str_i, str_j])
+    return SwapSet
+
+def EdgePermutation_DistancePreserving_V2(adj_mat, EdgeBuckets, PairBuckets):
+    adj_mat_permut = pd.DataFrame(data=np.zeros((213,213)), index=adj_mat.index.values, columns=adj_mat.columns.values)
+    for i, (Bucket1, Bucket2) in enumerate(zip(EdgeBuckets, PairBuckets)):
+        print("Permutating Bucket",i)
+        SwapSet = PermuteOneBucket2(Bucket1, Bucket2)
+        for str_i, str_j, w in SwapSet:
+            adj_mat_permut.loc[str_i, str_j] = w
+    return adj_mat_permut 
 
 def LoadSTR2REG():
     df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
@@ -1257,12 +1399,14 @@ def GetPermutationP(null, obs, gt=True):
     P = 1-float(count)/(len(null)+1)
     return Z, P
 
-def PlotPermutationP(Null, Obs, gt=True, title="", xlabel=""):
-    n, bins, patches = plt.hist(Null, bins=20, histtype = "barstacked", align = 'mid', facecolor='black', alpha=0.8)
+def PlotPermutationP(Null, Obs, gt=True, title="", xlabel="", dist_label="", bar_label=""):
+    plt.figure(dpi=120)
+    n, bins, patches = plt.hist(Null, bins=20, histtype = "barstacked", align = 'mid', facecolor='grey', alpha=0.8, label=dist_label, color="grey", edgecolor="black", linewidth=0.5)
     Z, P = GetPermutationP(Null, Obs, gt=gt)
-    plt.vlines(x=Obs, ymin=0, ymax=max(n))
+    plt.vlines(x=Obs, ymin=0, ymax=max(n), label=bar_label, color="black")
     plt.text(x=Obs, y=max(n), s="p=%.3f, z=%.3f"%(P,Z))
     plt.title(title)
+    plt.legend()
     plt.xlabel(xlabel)
     plt.show()
     return
@@ -1463,7 +1607,7 @@ def CohesivenessSingleNodeMaxInOut(g, g_, STR, weightDict, weighted=False, Direc
         else:
             return ((Circuit_In+Circuit_Out)/(Total_In+Total_Out)), None
 
-def ScoreSTRSet(Graph, CandidateNodes, WeightDict, Weighted=False, Direction=False): ## Choesiveness
+def ScoreSTRSet(Graph, CandidateNodes, WeightDict = {}, Weighted=False, Direction=False): ## Choesiveness
     CandidateNodes = set(CandidateNodes)
     top_nodes = Graph.vs.select(label_in=CandidateNodes)
     g2 = Graph.copy()
