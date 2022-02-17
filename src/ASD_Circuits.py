@@ -550,6 +550,61 @@ def Aggregate_Gene_Weights2(MutFil, allen_mouse_genes, pLI=True, out=None):
            writer.writerow([k,v]) 
     return gene2None, gene2MutN
 
+def Aggregate_Gene_Weights2_LGD(MutFil, allen_mouse_genes, pLI=True, out=None):
+    gene2None, gene2MutN = {}, {}
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+            if g not in allen_mouse_genes:
+                continue
+        except:
+            continue
+        gene2None[g] = 1
+        if pLI:
+            try:
+                pLI = float(row["ExACpLI"])
+            except:
+                pLI = 0.0
+            if pLI >= 0.5:
+                gene2MutN[g] = row["AutismMerged_LoF"]*0.554 
+            else:
+                gene2MutN[g] = row["AutismMerged_LoF"]*0.138
+        else:
+            gene2MutN[g] = row["AutismMerged_LoF"]*0.457 
+    if out != None:
+        writer = csv.writer(open(out, 'wt'))
+        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
+           writer.writerow([k,v]) 
+    return gene2None, gene2MutN
+
+def Aggregate_Gene_Weights2_Dmis(MutFil, allen_mouse_genes, pLI=True, out=None):
+    gene2None, gene2MutN = {}, {}
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+            if g not in allen_mouse_genes:
+                continue
+        except:
+            continue
+        gene2None[g] = 1
+        #pLI = gnomad_cons.loc[row["HGNC"], "exac_pLI"]
+        if pLI:
+            try:
+                pLI = float(row["ExACpLI"])
+            except:
+                pLI = 0.0
+            if pLI >= 0.5:
+                gene2MutN[g] = row["AutismMerged_Dmis_REVEL0.5"]*0.333
+            else:
+                gene2MutN[g] = row["AutismMerged_Dmis_REVEL0.5"]*0.130
+        else:
+            gene2MutN[g] = row["AutismMerged_Dmis_REVEL0.5"]*0.231
+    if out != None:
+        writer = csv.writer(open(out, 'wt'))
+        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
+           writer.writerow([k,v]) 
+    return gene2None, gene2MutN
+
 def SCZOwen_Gene_Weights(MutFil, FDR=0.05, out=None):
     MutFil = MutFil[MutFil["Pvalue"]<FDR]
     gene2None, gene2MutN = {}, {}
@@ -577,7 +632,8 @@ def Sibling_Gene_Weights(MutFil, GeneSymbol2Entrez, out=None):
             continue
         gene2None[g] = 1
         #gene2MutN[g] = row["dnv_LGDs_sib"] + row["dnv_missense_sib"] 
-        gene2MutN[g] = row["N_LGD"] + row["N_Mis"] 
+        #gene2MutN[g] = row["N_LGD"] + row["N_Mis"] 
+        gene2MutN[g] = 0.375 * row["N_LGD"] + 0.231*row["N_Dmis"] 
         #gene2MutN[g] = row["dnLGD"]*0.357 + row["dnDmis"]*0.231
     if out != None:
         writer = csv.writer(open(out, 'wt'))
@@ -901,18 +957,20 @@ def sibling_gene_weight(df):
             continue
     return gene2MutN
 
-def sim_denovo_row2gweight(row, n_gene=101, LGD_Weight = 0.357, DMIS_Weight = 0.231):
+def sim_denovo_row2gweight(row, n_gene=101, LGD_Weight = 0.357, DMIS_Weight = 0.231, Syn_Weight=1):
     dat = []
     for index, value in row.items():
-        N_lgd, N_dmis = map(int, value.split(","))
+        N_lgd, N_dmis, N_syn = map(int, value.split(","))
         #print(index, N_lgd, N_dmis)
-        if N_lgd + N_dmis == 0:
+        if N_lgd + N_dmis + N_syn == 0:
             continue
-        dat.append([index, N_lgd, N_dmis, N_lgd * LGD_Weight + N_dmis * DMIS_Weight])
-    df = pd.DataFrame(data=dat, columns=["Entrez", "NLGD", "NDmis", "Weight"])
-    df = df.sort_values("Weight", ascending=False)
+        #dat.append([index, N_lgd, N_dmis, N_lgd * LGD_Weight + N_dmis * DMIS_Weight])
+        dat.append(index, N_lgd * LGD_Weight + N_dmis * DMIS_Weight, N_syn * Syn_Weight)
+    #df = pd.DataFrame(data=dat, columns=["Entrez", "NLGD", "NDmis", "Weight1"])
+    df = pd.DataFrame(data=dat, columns=["Entrez", "Weight1", "Weight2"])
+    df = df.sort_values("Weight1", ascending=False)
     top = df.head(n_gene)
-    return dict(zip([int(x) for x in top["Entrez"].values], top["Weight"].values))
+    return dict(zip([int(x) for x in top["Entrez"].values], top["Weight1"].values)), dict(zip([int(x) for x in top["Entrez"].values], top["Weight2"].values))
 
 def MakeMatchDF(GeneWeightDict, N=1000, DIR = "/Users/jiayao/Work/ASD_Circuits/src/dat/Jon_data/match-exp_avg"):
     Dat = []
@@ -1129,6 +1187,93 @@ def EdgePermutation_V1(adj_mat, Reg2Reg, CrossRegion_SRC, CrossRegion_TGT, Cross
 # This version I swap edge with similar distance.
 #def EdgePermutation_V2(adj_mat, ):
 
+## Seperate a connectome (real or permuted) into within/cross region sub-connectome.
+def ConnectomeSeperation_Region(adj_mat, str2reg):
+    adj_mat_local = pd.DataFrame(data=np.zeros((213,213)), 
+                                 index=adj_mat.index.values, 
+                                 columns=adj_mat.columns.values)
+    adj_mat_distal = pd.DataFrame(data=np.zeros((213,213)), 
+                                 index=adj_mat.index.values, 
+                                 columns=adj_mat.columns.values)
+    for str_i in adj_mat.index.values:
+        for str_j in adj_mat.index.values:
+            conn_w = adj_mat.loc[str_i, str_j]
+            if conn_w == 0:
+                continue
+            reg1 = str2reg[str_i]
+            reg2 = str2reg[str_j]
+            if reg1 == reg2:
+                adj_mat_local.loc[str_i, str_j] = conn_w
+            else:
+                adj_mat_distal.loc[str_i, str_j] = conn_w
+    return adj_mat_local, adj_mat_distal
+
+def MaskDistMat(Mat1, Mat2, cutoff, m='lt'):
+    New_Mat2 = Mat2.copy(deep=True)
+    for STR_i in Mat1.index.values:
+        for STR_j in Mat1.columns.values:
+            if m == 'gt':
+                if Mat1.loc[STR_i, STR_j] >= cutoff:
+                    New_Mat2.loc[STR_i, STR_j] = 0
+                else:
+                    New_Mat2.loc[STR_i, STR_j] = Mat2.loc[STR_i, STR_j]
+            elif m == "lt":
+                if Mat1.loc[STR_i, STR_j] <= cutoff:
+                    New_Mat2.loc[STR_i, STR_j] = 0
+                else:
+                    New_Mat2.loc[STR_i, STR_j] = Mat2.loc[STR_i, STR_j]
+    return New_Mat2
+
+def MaskDistMat_xx(distance_mat, Conn_mat, cutoff, cutoff2, keep='gt'):
+    Conn_mat_new = Conn_mat.copy(deep=True)
+    distance_mat_new = distance_mat.copy(deep=True)
+    for STR_i in distance_mat.index.values:
+        for STR_j in distance_mat.columns.values:
+            if keep == 'gt':
+                if distance_mat.loc[STR_i, STR_j] >= cutoff:
+                    Conn_mat_new.loc[STR_i, STR_j] = Conn_mat.loc[STR_i, STR_j]
+                    distance_mat_new.loc[STR_i, STR_j] = distance_mat.loc[STR_i, STR_j]
+                else:
+                    Conn_mat_new.loc[STR_i, STR_j] = 0
+                    distance_mat_new.loc[STR_i, STR_j] = 0
+            elif keep == "lt":
+                if distance_mat.loc[STR_i, STR_j] <= cutoff:
+                    Conn_mat_new.loc[STR_i, STR_j] = Conn_mat.loc[STR_i, STR_j]
+                    distance_mat_new.loc[STR_i, STR_j] = distance_mat.loc[STR_i, STR_j]
+                else:
+                    Conn_mat_new.loc[STR_i, STR_j] = 0
+                    distance_mat_new.loc[STR_i, STR_j] = 0   
+            elif keep=="bw":
+                if distance_mat.loc[STR_i, STR_j] >= cutoff and distance_mat.loc[STR_i, STR_j] <= cutoff2:
+                    Conn_mat_new.loc[STR_i, STR_j] = Conn_mat.loc[STR_i, STR_j]
+                    distance_mat_new.loc[STR_i, STR_j] = distance_mat.loc[STR_i, STR_j]
+                else:
+                    Conn_mat_new.loc[STR_i, STR_j] = 0
+                    distance_mat_new.loc[STR_i, STR_j] = 0   
+    return Conn_mat_new, distance_mat_new
+
+def ConnectomeSeperation_Distance(adj_mat, dist_mat):
+    g = LoadConnectome2(adj_mat) # Load Connectiome
+    Cartesian_distances_w_edge = MaskDistMat(adj_mat, dist_mat, cutoff=0)
+    mid = np.median([x for x in Cartesian_distances_w_edge.values.flatten() if x > 0])
+    adj_mat_local = pd.DataFrame(data=np.zeros((213,213)), 
+                                 index=adj_mat.index.values, 
+                                 columns=adj_mat.columns.values)
+    adj_mat_distal = pd.DataFrame(data=np.zeros((213,213)), 
+                                 index=adj_mat.index.values, 
+                                 columns=adj_mat.columns.values)
+    for str_i in adj_mat.index.values:
+        for str_j in adj_mat.index.values:
+            conn_w = adj_mat.loc[str_i, str_j]
+            conn_d = dist_mat.loc[str_i, str_j]
+            if conn_w == 0:
+                continue
+            if conn_d < mid:
+                adj_mat_local.loc[str_i, str_j] = conn_w
+            else:
+                adj_mat_distal.loc[str_i, str_j] = conn_w
+    return adj_mat_local, adj_mat_distal
+
 ######################################################################################
 # Distance Preserving graph permutation 
 ######################################################################################
@@ -1268,6 +1413,29 @@ def EdgePermutation_DistancePreserving_V2(adj_mat, EdgeBuckets, PairBuckets):
             adj_mat_permut.loc[str_i, str_j] = w
     return adj_mat_permut 
 
+def combine2list(A,B):
+    unique_combinations = []
+    for i in range(len(A)):
+        for j in range(len(B)):
+            unique_combinations.append((A[i], B[j]))
+    return unique_combinations
+
+def STR_RaduisNeighbors(adj_mat, dist_mat, radius=1000):
+    neighbor_dict = {}
+
+    for str_i in adj_mat.index.values:
+        neighbor_dict[str_i] = []
+        for str_j in adj_mat.columns.values:
+            dist = dist_mat.loc[str_i, str_j]
+            #print(dist)
+            if dist <= radius:
+                neighbor_dict[str_i].append(str_j)
+
+    return neighbor_dict
+
+
+
+
 def LoadSTR2REG():
     df = pd.read_csv(MajorBrainDivisions, delimiter="\t")
     STR2REG = dict(zip(df["STR"].values, df["REG"].values))
@@ -1399,17 +1567,21 @@ def GetPermutationP(null, obs, gt=True):
     P = 1-float(count)/(len(null)+1)
     return Z, P
 
-def PlotPermutationP(Null, Obs, gt=True, title="", xlabel="", dist_label="", bar_label=""):
-    plt.figure(dpi=120)
-    n, bins, patches = plt.hist(Null, bins=20, histtype = "barstacked", align = 'mid', facecolor='grey', alpha=0.8, label=dist_label, color="grey", edgecolor="black", linewidth=0.5)
+def myhist(ax, dist, label="", bins=20, histtype = "barstacked", align = 'mid', facecolor='grey', alpha=0.8):
+    n, bins, patches = ax.hist(dist, label=label, bins=bins, histtype=histtype, align=align, facecolor=facecolor, alpha=alpha, edgecolor="black", linewidth=0.5)
+    return n, bins, patches
+
+def PlotPermutationP(Null, Obs, ax, gt=True, title="", xlabel="", dist_label="", bar_label=""):
+    #plt.figure(dpi=120)
+    n, bins, patches = ax.hist(Null, bins=20, histtype = "barstacked", align = 'mid', facecolor='grey', alpha=0.8, label=dist_label, color="grey", edgecolor="black", linewidth=0.5)
     Z, P = GetPermutationP(Null, Obs, gt=gt)
-    plt.vlines(x=Obs, ymin=0, ymax=max(n), label=bar_label, color="black")
-    plt.text(x=Obs, y=max(n), s="p=%.3f, z=%.3f"%(P,Z))
-    plt.title(title)
-    plt.legend()
-    plt.xlabel(xlabel)
-    plt.show()
-    return
+    ax.vlines(x=Obs, ymin=0, ymax=max(n), label=bar_label, color="black")
+    ax.text(x=0.5*max(Null), y=max(n)*0.7, s=" p=%.2e, z=%.2f"%(P,Z))
+    #ax.text(x=Obs, y=max(n)*0.7, s=" p=%.2e, z=%.2f"%(P,Z))
+    ax.set_title(title)
+    ax.legend()
+    ax.set_xlabel(xlabel)
+    return ax
 
 def splitEdges(g, idx_node, InNodes, OutNodes):
     InEdges, OutEdges = [], [] # edges within circuits or outside the circuits
@@ -1619,6 +1791,22 @@ def ScoreSTRSet(Graph, CandidateNodes, WeightDict = {}, Weighted=False, Directio
             cohesives.append(coh)
     #return cohesives
     cohesive = np.mean(cohesives)
+    return cohesive, len(g2.es)
+
+def ScoreSTRSet2(Graph, CandidateNodes, WeightDict = {}, Weighted=False, Direction=False): ## Choesiveness
+    CandidateNodes = set(CandidateNodes)
+    top_nodes = Graph.vs.select(label_in=CandidateNodes)
+    g2 = Graph.copy()
+    g2 = g2.subgraph(top_nodes)
+    if Weighted:
+        pass
+    else:
+        D_in = np.sum(g2.degree())
+        D_total = 0
+        for v in Graph.vs:
+            if v["label"] in CandidateNodes:
+                D_total += v.degree()
+        cohesive = D_in / D_total
     return cohesive, len(g2.es)
 
 # Score Connectivity and Cohesiveness between two conponents, 
@@ -2573,6 +2761,24 @@ def BiasCorrelation(DF1, DF2):
     print(pearsonr(Rank1, Rank2))
     plt.tight_layout()
     plt.show()
+
+def NegetiveBiasGenes(ExpZ2, WeightDict, BiasDF):
+    Circuit_STRs = BiasDF.head(50).index.values
+    neg_genes = []
+    for entrez in WeightDict.keys():
+        g_biases = []
+        for STR in Circuit_STRs:
+            z_gene = ExpZ2.loc[entrez, STR]
+            g_biases.append(z_gene)
+        g_avgBias = np.mean(g_biases)
+        if g_avgBias <0:
+            neg_genes.append(entrez)
+    neg_gene_dict = {}
+    for k,v in WeightDict.items():
+        if k in neg_genes:
+            neg_gene_dict[k] = v
+    ASD_Neg_Spec = AvgSTRZ_Weighted(ExpZ2, neg_gene_dict, Method = 1, csv_fil = "dat/bias2/tmp.neg.bias.csv")
+    return ASD_Neg_Spec
 
 
 #####################################################################################
