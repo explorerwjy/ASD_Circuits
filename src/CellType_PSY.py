@@ -1,10 +1,18 @@
+#######################################
+# Cell type related functions
+#######################################
+
 from ASD_Circuits import *
 from scipy.stats import fisher_exact
 #from scipy.stats import binom_test
 from scipy.stats import hypergeom
 
+
+########################################
+# Human brain cell type atlas
+########################################
+
 # Load some common used variables
-HGNC, ENSID2Entrez, GeneSymbol2Entrez, Entrez2Symbol = LoadGeneINFO()
 Anno = pd.read_excel("/home/jw3514/Work/data/HumanBrainCellType/annotation.xlsx", index_col="Cluster")
 Anno.drop(Anno.tail(1).index,inplace=True) # drop last n rows
 Anno.fillna('', inplace=True)
