@@ -1,3 +1,14 @@
+# This script is used to submit jobs to run the Pareto front search for the SI model.
+
+BiasDF="../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.csv"
+DIR="../dat/Circuits/SA/ASD_Pareto_SI_v2_Size46_Nov2023/"
+mkdir -p $DIR
+BiasLim="../dat/Circuits/SA/biaslims2/biaslim.size.46.top17.txt"
+NJob=`wc -l $BiasLim|cut -f 1 -d ' '`
+parallel -j 30 bash run_circuit_search_SI.sh -i $BiasLim -b $BiasDF -g $AdjMat -m $InfoMat -d $DIR -a {} -x Connectivity ::: $(seq 1 $NJob)
+parallel -j 30 bash run_circuit_search_SI.sh -i $BiasLim -b $BiasDF -g $AdjMat -m $InfoMat -d $DIR -a {} -x SI ::: $(seq 1 $NJob)
+
+
 #BiasDF="/home/jw3514/Work/CellType_Psy/AllenBrainCellAtlas/dat/Bias/STR/ASD.MERFISH_Allen.VM.ISHMatch.Z2.splitSB.csv"
 #AdjMat="../dat/allen-mouse-conn/ScoreingMat_jw_v3/WeightMat.Ipsi.csv"
 #InfoMat="../dat/allen-mouse-conn/ScoreingMat_jw_v3/InfoMat.Ipsi.csv"

@@ -6,5 +6,6 @@
 #$ -l h_vmem=1G
 #$ -cwd
 Script="script_Z2_calculation.py"
-#python $Script --start $1 --step $2 -i $3
-python $Script --start $1 --step $2 
+#Script="script_Spec2_calculation.py"
+#echo "python $Script --start $1 --step $2 -i $3, -m $4 -o $5"
+python $Script --start $1 --step $2 -i $3 -m $4 -o $5
