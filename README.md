@@ -37,7 +37,7 @@ GENCIC integrates data from the following sources:
    - Allen Brain Cell Atlas 10X RNA-sequencing and MERFISH spatial transcriptomics data
 
 Key intermediate data for running GENCIC is available at:
-https://vitkuplab.c2b2.columbia.edu/gencic/index.html
+https://vitkuplab.c2b2.columbia.edu/Gencic/index.html
 
 ## Repository Structure
 ## Pipeline Overview
