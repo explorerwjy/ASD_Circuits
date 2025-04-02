@@ -1,7 +1,7 @@
 # This script is used to submit jobs to run the Pareto front search for the SI model.
 
 BiasDF="../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.csv"
-DIR="../dat/Circuits/SA/ASD_Pareto_SI_v2_Size46_Nov2023/"
+DIR="../dat/CircuitSearch/SA/ASD_Pareto_SI_Size46/"
 mkdir -p $DIR
 BiasLim="../dat/Circuits/SA/biaslims2/biaslim.size.46.top17.txt"
 NJob=`wc -l $BiasLim|cut -f 1 -d ' '`
