@@ -1,0 +1,232 @@
+"""
+Snakemake pipeline for GENCIC circuit search using Simulated Annealing
+
+This pipeline performs:
+1. Generation of bias limits for specified circuit sizes
+2. Simulated annealing search to find optimal circuits along Pareto front
+3. Output of circuit search results for downstream analysis
+
+Usage:
+    # Run specific dataset
+    snakemake -s Snakefile.circuit.refactored --configfile config/circuit_config.yaml \
+        --config dataset=ASD_All --cores 10
+
+    # Run all datasets
+    snakemake -s Snakefile.circuit.refactored --configfile config/circuit_config.yaml --cores 10
+"""
+
+import pandas as pd
+import numpy as np
+import os
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+configfile: "config/circuit_config.yaml"
+
+# Get all datasets from config
+INPUT_STR_BIAS = config.get("Input_str_bias", {})
+
+# Allow user to specify which dataset to run via --config dataset=ASD_All
+SELECTED_DATASET = config.get("dataset", None)
+
+if SELECTED_DATASET:
+    if SELECTED_DATASET not in INPUT_STR_BIAS:
+        raise ValueError(f"Dataset '{SELECTED_DATASET}' not found in Input_str_bias. "
+                        f"Available: {list(INPUT_STR_BIAS.keys())}")
+    DATASETS = [SELECTED_DATASET]
+else:
+    DATASETS = list(INPUT_STR_BIAS.keys())
+
+# Shared parameters
+WEIGHT_MAT = config["weight_mat"]
+INFO_MAT = config["info_mat"]
+OUTPUT_DIR = config["output_dir"]
+CIRCUIT_SIZES = config.get("circuit_sizes", [46])
+TOP_N = config.get("top_n", 213)
+MIN_BIAS_RANK = config.get("min_bias_rank", 50)
+SA_RUNTIMES = config.get("sa_runtimes", 5)
+SA_STEPS = config.get("sa_steps", 50000)
+MEASURE = config.get("measure", "SI")
+N_CORES = config.get("n_cores", 10)
+VERBOSE = config.get("verbose", False)
+
+# ============================================================================
+# Dynamic Input Functions
+# ============================================================================
+
+def get_sa_results_for_size(wildcards):
+    """Dynamically generate list of SA result files for a given size"""
+    checkpoint_output = checkpoints.generate_bias_limits.get(
+        output_dir=wildcards.output_dir,
+        dataset_name=wildcards.dataset_name,
+        size=wildcards.size
+    ).output.filtered_biaslim
+
+    df = pd.read_csv(checkpoint_output)
+    results = []
+    for _, row in df.iterrows():
+        bias = row["bias"]
+        result_file = os.path.join(
+            wildcards.output_dir, wildcards.dataset_name, "SA_results",
+            f"size_{wildcards.size}",
+            f"SA..topN_{TOP_N}-keepN_{wildcards.size}-minbias_{bias}.txt"
+        )
+        results.append(result_file)
+    return results
+
+# ============================================================================
+# Rules
+# ============================================================================
+
+rule all:
+    input:
+        # For each dataset, generate Pareto fronts and metadata
+        expand("{output_dir}/{dataset_name}/pareto_fronts/{dataset_name}_size_{size}_pareto_front.csv",
+               output_dir=OUTPUT_DIR,
+               dataset_name=[INPUT_STR_BIAS[d]['name'] for d in DATASETS],
+               size=CIRCUIT_SIZES),
+        expand("{output_dir}/{dataset_name}/analysis_metadata.yaml",
+               output_dir=OUTPUT_DIR,
+               dataset_name=[INPUT_STR_BIAS[d]['name'] for d in DATASETS])
+
+
+checkpoint generate_bias_limits:
+    """
+    Generate bias limits for each circuit size and dataset.
+    Uses external script for clean separation of concerns.
+    """
+    output:
+        raw_biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.txt",
+        filtered_biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt"
+    params:
+        size = "{size}",
+        dataset_name = "{dataset_name}",
+        min_bias_rank = MIN_BIAS_RANK,
+        input_str_bias = INPUT_STR_BIAS
+    script:
+        "scripts/workflow/generate_bias_limits.py"
+
+
+rule run_sa_search:
+    """
+    Run simulated annealing circuit search for a specific size and bias limit.
+    Uses external script with optimized SA implementation.
+    """
+    input:
+        weight_mat = WEIGHT_MAT,
+        info_mat = INFO_MAT,
+        biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt"
+    output:
+        result = "{output_dir}/{dataset_name}/SA_results/size_{size}/SA..topN_{topn}-keepN_{size}-minbias_{bias}.txt"
+    params:
+        topn = TOP_N,
+        size = "{size}",
+        bias = "{bias}",
+        dataset_name = "{dataset_name}",
+        runtimes = SA_RUNTIMES,
+        sa_steps = SA_STEPS,
+        measure = MEASURE,
+        input_str_bias = INPUT_STR_BIAS,
+        verbose = VERBOSE
+    threads: 1
+    resources:
+        mem_mb = 2000,
+        runtime = 360  # 6 hours max
+    script:
+        "scripts/workflow/run_sa_search.py"
+
+
+rule aggregate_sa_results:
+    """
+    Create completion marker after all SA runs for a size are complete.
+    """
+    input:
+        biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt",
+        sa_results = get_sa_results_for_size
+    output:
+        complete = "{output_dir}/{dataset_name}/SA_results/size_{size}/COMPLETE"
+    params:
+        size = "{size}",
+        dataset_name = "{dataset_name}",
+        measure = MEASURE,
+        sa_runtimes = SA_RUNTIMES
+    run:
+        os.makedirs(os.path.dirname(output.complete), exist_ok=True)
+        with open(output.complete, 'w') as f:
+            f.write(f"Circuit search completed for size {params.size}\n")
+            f.write(f"Dataset: {params.dataset_name}\n")
+            f.write(f"Total SA results: {len(input.sa_results)}\n")
+            f.write(f"Measure: {params.measure}\n")
+            f.write(f"SA runtimes per limit: {params.sa_runtimes}\n")
+
+
+rule extract_best_circuits:
+    """
+    Extract the best circuit from each SA result file.
+    Uses external script for clean logic.
+    """
+    input:
+        biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt",
+        sa_results = get_sa_results_for_size
+    output:
+        best_circuits = "{output_dir}/{dataset_name}/best_circuits/size_{size}_best_circuits.txt"
+    params:
+        size = "{size}",
+        dataset_name = "{dataset_name}",
+        output_dir = "{output_dir}",
+        topn = TOP_N
+    script:
+        "scripts/workflow/extract_best_circuits.py"
+
+
+rule create_pareto_front:
+    """
+    Create a consolidated Pareto front CSV file.
+    Uses external script for clean data processing.
+    """
+    input:
+        best_circuits = "{output_dir}/{dataset_name}/best_circuits/size_{size}_best_circuits.txt",
+        biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt",
+        weight_mat = WEIGHT_MAT,
+        info_mat = INFO_MAT
+    output:
+        pareto_csv = "{output_dir}/{dataset_name}/pareto_fronts/{dataset_name}_size_{size}_pareto_front.csv"
+    params:
+        size = "{size}",
+        dataset_name = "{dataset_name}",
+        input_str_bias = INPUT_STR_BIAS,
+        topn = TOP_N,
+        measure = MEASURE
+    script:
+        "scripts/workflow/create_pareto_front.py"
+
+
+rule create_metadata:
+    """
+    Create a metadata file documenting the analysis parameters.
+    Uses external script for YAML generation.
+    """
+    input:
+        pareto_fronts = lambda wildcards: expand(
+            "{output_dir}/{dataset_name}/pareto_fronts/{dataset_name}_size_{size}_pareto_front.csv",
+            output_dir=wildcards.output_dir,
+            dataset_name=wildcards.dataset_name,
+            size=CIRCUIT_SIZES
+        )
+    output:
+        metadata = "{output_dir}/{dataset_name}/analysis_metadata.yaml"
+    params:
+        dataset_name = "{dataset_name}",
+        input_str_bias = INPUT_STR_BIAS,
+        weight_mat = WEIGHT_MAT,
+        info_mat = INFO_MAT,
+        circuit_sizes = CIRCUIT_SIZES,
+        top_n = TOP_N,
+        min_bias_rank = MIN_BIAS_RANK,
+        sa_runtimes = SA_RUNTIMES,
+        sa_steps = SA_STEPS,
+        measure = MEASURE
+    script:
+        "scripts/workflow/create_metadata.py"
