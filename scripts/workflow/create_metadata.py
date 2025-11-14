@@ -11,7 +11,7 @@ Snakemake outputs:
 
 Snakemake params:
     params.dataset_name: Dataset name
-    params.input_str_bias: Dataset configurations
+    params.dataset_config: Dictionary with single dataset configuration
     params.weight_mat: Weight matrix path
     params.info_mat: Info matrix path
     params.circuit_sizes: List of circuit sizes
@@ -28,7 +28,7 @@ from datetime import datetime
 
 # Get Snakemake variables
 dataset_name = snakemake.params.dataset_name
-INPUT_STR_BIAS = snakemake.params.input_str_bias
+dataset_config = snakemake.params.dataset_config
 WEIGHT_MAT = snakemake.params.weight_mat
 INFO_MAT = snakemake.params.info_mat
 CIRCUIT_SIZES = snakemake.params.circuit_sizes
@@ -40,18 +40,13 @@ MEASURE = snakemake.params.measure
 
 print(f"[{dataset_name}] Creating metadata file...")
 
-# Find which dataset key corresponds to this dataset_name
-dataset_key = None
-for key, config_data in INPUT_STR_BIAS.items():
-    if config_data['name'] == dataset_name:
-        dataset_key = key
-        break
+# Get the dataset configuration (should be a single-entry dict)
+if not dataset_config:
+    raise ValueError(f"No dataset config found for dataset_name '{dataset_name}'")
 
-if dataset_key is None:
-    raise ValueError(f"Dataset name '{dataset_name}' not found in config")
-
-# Get dataset info
-dataset_info = INPUT_STR_BIAS[dataset_key]
+# Extract the config (first and only entry)
+dataset_key = list(dataset_config.keys())[0]
+dataset_info = list(dataset_config.values())[0]
 
 metadata = {
     'dataset_key': dataset_key,

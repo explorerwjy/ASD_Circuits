@@ -1,0 +1,150 @@
+import os
+
+# configfile: "config/config.yaml"  # Commented out - use --configfile argument instead
+
+# Pull variables from config
+GENESETS = config["gene_sets"]
+ANALYSIS = list(config["analysis_types"].keys())
+PROJDIR = config["ProjDIR"]
+OUTDIR = config["output_dir"]
+N_WEIGHTS = config["n_random_weights"]
+
+# Helper functions to get analysis type info
+def get_expr_path(analysis):
+    return os.path.join(PROJDIR, config["analysis_types"][analysis]["expr_matrix"])
+
+def get_analysis_mode(analysis):
+    return config["analysis_types"][analysis]["mode"]
+
+rule all:
+    input:
+        expand(f"{OUTDIR}/{{analysis}}/{{geneset}}_bias_addP_sibling.csv",
+               analysis=ANALYSIS,
+               geneset=GENESETS),
+        expand(f"{OUTDIR}/{{analysis}}/{{geneset}}_bias_addP_random.csv",
+               analysis=ANALYSIS,
+               geneset=GENESETS)
+
+# Step 1: Generate random gene weights for each gene set × analysis type
+rule generate_geneweights:
+    input:
+        expr=lambda wc: get_expr_path(wc.analysis),
+        geneweights=lambda wc: config["gene_sets"][wc.geneset]["geneweights"]
+    output:
+        weights_sibling=f"{OUTDIR}/{{analysis}}/null_weights/{{geneset}}_random_geneweights_sibling.csv",
+        weights_random=f"{OUTDIR}/{{analysis}}/null_weights/{{geneset}}_random_geneweights_random.csv"
+    params:
+        n=N_WEIGHTS
+    shell:
+        """
+        mkdir -p $(dirname {output.weights_random})
+        python scripts/script_generate_geneweights.py \
+            --WeightDF {input.geneweights} \
+            --SpecMat {input.expr} \
+            --n_sims {params.n} \
+            --outfile {output.weights_random}
+        """
+
+# Step 2a: Run null bias calculation for sibling genes
+rule compute_null_bias_sibling:
+    input:
+        expr=lambda wc: get_expr_path(wc.analysis),
+        weights=f"{OUTDIR}/{{analysis}}/null_weights/{{geneset}}_random_geneweights_sibling.csv"
+    output:
+        bias=f"{OUTDIR}/{{analysis}}/null_bias/{{geneset}}_null_bias_sibling.parquet"
+    params:
+        geneset="{geneset}",
+        mode=lambda wc: get_analysis_mode(wc.analysis)
+    threads: 10
+    shell:
+        """
+        mkdir -p $(dirname {output.bias})
+        # Check if sibling weights were skipped
+        if head -1 {input.weights} | grep -q "# Skipped:"; then
+            echo "Sibling weights were skipped - creating empty bias file"
+            touch {output.bias}
+        else
+            python scripts/script_run_ctrl_sim.py \
+                --SpecMat {input.expr} \
+                --outfile {output.bias} \
+                --mode {params.mode} \
+                --Ctrl_Genes_Fil {input.weights} \
+                --n_processes {threads}
+        fi
+        """
+
+# Step 2b: Run null bias calculation for random genes
+rule compute_null_bias_random:
+    input:
+        expr=lambda wc: get_expr_path(wc.analysis),
+        weights=f"{OUTDIR}/{{analysis}}/null_weights/{{geneset}}_random_geneweights_random.csv"
+    output:
+        bias=f"{OUTDIR}/{{analysis}}/null_bias/{{geneset}}_null_bias_random.parquet"
+    params:
+        geneset="{geneset}",
+        mode=lambda wc: get_analysis_mode(wc.analysis)
+    threads: 10
+    shell:
+        """
+        mkdir -p $(dirname {output.bias})
+        python scripts/script_run_ctrl_sim.py \
+            --SpecMat {input.expr} \
+            --outfile {output.bias} \
+            --mode {params.mode} \
+            --Ctrl_Genes_Fil {input.weights} \
+            --n_processes {threads}
+        """
+
+# Step 3a: Run bias calculation with sibling null genes
+rule compute_bias_pvalue_sibling:
+    input:
+        expr=lambda wc: get_expr_path(wc.analysis),
+        geneweights=lambda wc: config["gene_sets"][wc.geneset]["geneweights"],
+        bias_null=f"{OUTDIR}/{{analysis}}/null_bias/{{geneset}}_null_bias_sibling.parquet",
+        weights=f"{OUTDIR}/{{analysis}}/null_weights/{{geneset}}_random_geneweights_sibling.csv"
+    output:
+        bias_final=f"{OUTDIR}/{{analysis}}/{{geneset}}_bias_addP_sibling.csv"
+    params:
+        geneset="{geneset}",
+        mode=lambda wc: get_analysis_mode(wc.analysis)
+    shell:
+        """
+        mkdir -p $(dirname {output.bias_final})
+        # Check if sibling weights were skipped
+        if head -1 {input.weights} | grep -q "# Skipped:"; then
+            echo "Sibling analysis was skipped - creating placeholder output"
+            echo "# Sibling analysis skipped: insufficient sibling genes available" > {output.bias_final}
+            echo "# Using random null instead" >> {output.bias_final}
+        else
+            python scripts/script_bias_cal.py \
+                --SpecMat {input.expr} \
+                --gw {input.geneweights} \
+                --mode {params.mode} \
+                --geneset {params.geneset} \
+                --Bias_Null {input.bias_null} \
+                --Bias_Out {output.bias_final}
+        fi
+        """
+
+# Step 3b: Run bias calculation with random null genes
+rule compute_bias_pvalue_random:
+    input:
+        expr=lambda wc: get_expr_path(wc.analysis),
+        geneweights=lambda wc: config["gene_sets"][wc.geneset]["geneweights"],
+        bias_null=f"{OUTDIR}/{{analysis}}/null_bias/{{geneset}}_null_bias_random.parquet"
+    output:
+        bias_final=f"{OUTDIR}/{{analysis}}/{{geneset}}_bias_addP_random.csv"
+    params:
+        geneset="{geneset}",
+        mode=lambda wc: get_analysis_mode(wc.analysis)
+    shell:
+        """
+        mkdir -p $(dirname {output.bias_final})
+        python scripts/script_bias_cal.py \
+            --SpecMat {input.expr} \
+            --gw {input.geneweights} \
+            --mode {params.mode} \
+            --geneset {params.geneset} \
+            --Bias_Null {input.bias_null} \
+            --Bias_Out {output.bias_final}
+        """

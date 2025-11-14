@@ -17,7 +17,7 @@ Snakemake outputs:
 Snakemake params:
     params.size: Circuit size
     params.dataset_name: Dataset name
-    params.input_str_bias: Dataset configurations
+    params.dataset_config: Dictionary with single dataset configuration
     params.topn: Number of top structures to consider
     params.measure: Circuit scoring measure
 """
@@ -33,21 +33,18 @@ from ASD_Circuits import ScoreCircuit_SI_Joint, ScoreCircuit_NEdges
 # Get Snakemake variables
 dataset_name = snakemake.params.dataset_name
 size = int(snakemake.params.size)
-INPUT_STR_BIAS = snakemake.params.input_str_bias
+dataset_config = snakemake.params.dataset_config
 topn = int(snakemake.params.topn)
 measure = snakemake.params.measure
 
 print(f"[{dataset_name}] Creating Pareto front CSV for size {size}...")
 
-# Find dataset configuration
-dataset_key = None
-for key, config_data in INPUT_STR_BIAS.items():
-    if config_data['name'] == dataset_name:
-        dataset_key = key
-        break
+# Get the dataset configuration (should be a single-entry dict)
+if not dataset_config:
+    raise ValueError(f"No dataset config found for dataset_name '{dataset_name}'")
 
-if dataset_key is None:
-    raise ValueError(f"Dataset name '{dataset_name}' not found in config")
+# Extract the config (first and only entry)
+config_data = list(dataset_config.values())[0]
 
 # Parse best circuits file
 circuits_data = []
@@ -77,7 +74,7 @@ with open(snakemake.input.best_circuits, 'r') as f:
 # Load data for baseline circuit calculation
 print(f"[{dataset_name}] Calculating baseline circuit (top {size} structures by bias)...")
 
-bias_df_path = INPUT_STR_BIAS[dataset_key]['bias_df']
+bias_df_path = config_data['bias_df']
 BiasDF = pd.read_csv(bias_df_path, index_col=0)
 adj_mat = pd.read_csv(snakemake.input.weight_mat, index_col=0)
 InfoMat = pd.read_csv(snakemake.input.info_mat, index_col=0)

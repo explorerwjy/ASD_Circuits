@@ -63,7 +63,12 @@ class Annealer(object):
             raise ValueError('No valid values supplied for neither \
             initial_state nor load_state')
 
-        signal.signal(signal.SIGINT, self.set_user_exit)
+        # Try to register signal handler (only works in main thread)
+        try:
+            signal.signal(signal.SIGINT, self.set_user_exit)
+        except ValueError:
+            # signal only works in main thread - skip when running in worker threads
+            pass
 
     def save_state(self, fname=None):
         """Saves state to pickle"""
@@ -316,85 +321,3 @@ class Annealer(object):
 
         # Don't perform anneal, just return params
         return {'tmax': Tmax, 'tmin': Tmin, 'steps': duration, 'updates': self.updates}
-
-
-#================================================================
-# Cohesiveness Wrapper
-#================================================================
-class MostCohesiveCirtuisGivenNCandidates(Annealer):
-    def __init__(self, BiasDF, state, Graph, CandidateNodes, ExpDict, WeightDict, Weighted=True, Direction=False, minbias = -1, cohe_method='z'):
-        self.BiasDF = BiasDF
-        self.Graph = Graph
-        self.CandidateNodes = CandidateNodes
-        self.ExpDict = ExpDict
-        self.WeightDict = WeightDict
-        self.Weighted = Weighted
-        self.Direction = Direction
-        self.minbias = minbias
-        self.cohe_method = cohe_method
-        super(MostCohesiveCirtuisGivenNCandidates, self).__init__(state)
-    def move(self):
-        initial_energy = self.energy()
-        idx_in = np.where(self.state==1)[0]
-        idx_out = np.where(self.state==0)[0]
-        idx_change_i = np.random.choice(idx_in, 1)
-        idx_change_j = np.random.choice(idx_out, 1)
-        self.state[idx_change_i] = 1 - self.state[idx_change_i]
-        self.state[idx_change_j] = 1 - self.state[idx_change_j]
-        strs = self.CandidateNodes[np.where(self.state==1)]
-        if self.BiasDF.loc[strs, "EFFECT"].mean() < self.minbias:
-            self.state[idx_change_i] = 1 - self.state[idx_change_i]
-            self.state[idx_change_j] = 1 - self.state[idx_change_j]
-        return (self.energy() - initial_energy)
-    def energy(self):
-        InCirtuitNodes = self.CandidateNodes[np.where(self.state==1)[0]]
-        top_nodes = self.Graph.vs.select(label_in=InCirtuitNodes)
-        g2 = self.Graph.copy()
-        g2 = g2.subgraph(top_nodes)
-        cohesives = []
-        for v in g2.vs:
-            coh, ITR = CohesivenessSingleNodeMaxInOut(self.Graph, g2, v["label"], self.WeightDict, weighted=self.Weighted)
-            if self.cohe_method == 'vanilla':
-                coh = coh
-            # coh as zscore to exp
-            elif self.cohe_method == 'z':
-                exp_coh = self.ExpDict[v["label"]]
-                diff = coh - np.mean(exp_coh)
-                z = diff / np.std(exp_coh)
-                coh = z
-            elif self.cohe_method == 'ratio':
-                exp_coh = self.ExpDict[v["label"]]
-                ratio = coh / np.mean(exp_coh)
-                coh = ratio
-            cohesives.append(coh)
-        cohesive = np.mean(cohesives)
-        return 1 - cohesive
-
-
-def CohesivenessSingleNodeMaxInOut(g, g_, STR, weightDict, weighted=True):
-    Whole_EdgeList = []
-    Cir_EdgeList = []
-    Node = g.vs.find(label=STR)
-    CircuitLables = set(g_.vs["label"])
-    Total_Out,Circuit_Out = 0,0
-    Total_In, Circuit_In = 0,0
-    for _node in Node.successors():
-        if weighted:
-            weight = weightDict["{}-{}".format(STR, _node["label"])]
-        else:
-            weight = 1
-        Total_Out += weight
-        if _node["label"] in CircuitLables:
-            Circuit_Out += weight
-    for _node in Node.predecessors():
-        if weighted:
-            weight = weightDict["{}-{}".format(_node["label"], STR)]
-        else:
-            weight = 1
-        Total_In += weight
-        if _node["label"] in CircuitLables:
-            Circuit_In += weight
-    if (Total_In+Total_Out) == 0:
-        return 0, None
-    else:
-        return ((Circuit_In+Circuit_Out)/(Total_In+Total_Out)), None

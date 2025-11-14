@@ -41,6 +41,7 @@ def run_CircuitOpt(BiasDF, adj_mat, InfoMat, topN=213, keepN=46, minbias=-1, mea
     ins.copy_strategy = "deepcopy"
     ins.Tmax = 1e-2
     ins.Tmin = 5e-5
+    ins.updates = 0  # Suppress verbose output
     Tmps, Energys, state, e = ins.anneal()
     res = CandidateNodes[np.where(state == 1)[0]]
     #score = Energys[-1]
@@ -63,6 +64,7 @@ def run_CircuitOpt_old(BiasDF, adj_mat, InfoMat, topN=100, keepN=30, minbias=-1,
     ins.copy_strategy = "deepcopy"
     ins.Tmax = 1e-2
     ins.Tmin = 5e-5
+    ins.updates = 0  # Suppress verbose output
     Tmps, Energys, state, e = ins.anneal()
     res = CandidateNodes[np.where(state == 1)[0]]
     #score = Energys[-1]

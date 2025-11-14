@@ -23,7 +23,9 @@ import os
 # Configuration
 # ============================================================================
 
-configfile: "config/circuit_config.yaml"
+# Config file is loaded by top-level Snakefile
+# When using this file standalone, specify: --configfile config/circuit_config.yaml
+# When including this file, the parent Snakefile should load the config
 
 # Get all datasets from config
 INPUT_STR_BIAS = config.get("Input_str_bias", {})
@@ -104,7 +106,11 @@ checkpoint generate_bias_limits:
         size = "{size}",
         dataset_name = "{dataset_name}",
         min_bias_rank = MIN_BIAS_RANK,
-        input_str_bias = INPUT_STR_BIAS
+        # Only pass the specific dataset config (not entire dict) to avoid spurious reruns
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        }
     script:
         "scripts/workflow/generate_bias_limits.py"
 
@@ -128,7 +134,10 @@ rule run_sa_search:
         runtimes = SA_RUNTIMES,
         sa_steps = SA_STEPS,
         measure = MEASURE,
-        input_str_bias = INPUT_STR_BIAS,
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        },
         verbose = VERBOSE
     threads: 1
     resources:
@@ -196,7 +205,10 @@ rule create_pareto_front:
     params:
         size = "{size}",
         dataset_name = "{dataset_name}",
-        input_str_bias = INPUT_STR_BIAS,
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        },
         topn = TOP_N,
         measure = MEASURE
     script:
@@ -219,7 +231,10 @@ rule create_metadata:
         metadata = "{output_dir}/{dataset_name}/analysis_metadata.yaml"
     params:
         dataset_name = "{dataset_name}",
-        input_str_bias = INPUT_STR_BIAS,
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        },
         weight_mat = WEIGHT_MAT,
         info_mat = INFO_MAT,
         circuit_sizes = CIRCUIT_SIZES,

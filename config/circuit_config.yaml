@@ -1,0 +1,95 @@
+# Configuration file for GENCIC Circuit Search Pipeline
+# Usage: snakemake -s Snakefile.circuit.refactored --configfile config/circuit_config.yaml --cores 10
+
+# ============================================================================
+# Input Data Files
+# ============================================================================
+
+# Bias dataframe: CSV file with mutation bias for each brain structure
+# Must have index column with structure names and 'EFFECT' column with bias values
+Input_str_bias:
+  ASD_All:
+    name: "ASD_SPARK_61"
+    bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+    description: "ASD SPARK cohort with meta-analysis gene weights"
+  Boot9:
+    name: "ASD_SPARK_Boot9"
+    bias_df: "results/Bootstrap_bias/Spark_ExomeWide/Weighted_Resampling/Spark_ExomeWide.GeneWeight.boot9.csv"
+    description: "ASD SPARK cohort with bootstrapped gene weights"
+
+
+
+# Connectivity matrices from Allen Mouse Brain Connectome
+weight_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/WeightMat.Ipsi.csv"
+info_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+
+# Base output directory for all circuit search results
+# Will be organized as: {output_dir}/{dataset_name}/
+output_dir: "results/CircuitSearch"
+
+# ============================================================================
+# Circuit Search Parameters
+# ============================================================================
+
+# Circuit sizes to search (list of integers)
+# Default: [46] (the size with highest CCS score in the paper)
+# You can specify multiple sizes: [33, 46, 60, 75]
+circuit_sizes:
+  - 46
+  - 45
+  - 41
+
+# Number of top-ranked structures to consider as candidates
+# Default: 213 (structures with significant bias)
+top_n: 213
+
+# Minimum bias threshold: Use the bias value at this rank as minimum
+# Default: 50 (use 50th ranked structure's bias as cutoff)
+# This reduces computation by skipping low-bias circuits
+min_bias_rank: 50
+
+# Number of SA optimization runs per bias limit
+# Default: 10 (each run may find a different optimal circuit)
+sa_runtimes: 20
+
+# Number of SA steps per run (speed vs quality tradeoff)
+# Default: 50000 (higher = better quality but slower, lower = faster but may miss optimal)
+# Recommended range: 10000 (fast) to 100000 (thorough)
+sa_steps: 100000
+
+# Circuit scoring measure
+# Options: "SI" (Shannon Information) or "Connectivity"
+# Default: "SI"
+measure: "SI"
+
+# Number of parallel cores for execution
+# Default: 10
+n_cores: 40
+
+# Verbose output during SA runs
+# Default: False (suppress individual run details during pipeline execution)
+# Set to True for debugging
+verbose: False
+
+# ============================================================================
+# Example Configurations for Different Analyses
+# ============================================================================
+
+# Example 1: Quick test with single size
+# circuit_sizes: [46]
+# min_bias_rank: 30
+# sa_runtimes: 3
+
+# Example 2: Comprehensive search across multiple sizes
+# circuit_sizes: [33, 46, 60, 75]
+# min_bias_rank: 50
+# sa_runtimes: 10
+
+# Example 3: High-resolution Pareto front
+# circuit_sizes: [46]
+# min_bias_rank: 100  # Include more low-bias points
+# sa_runtimes: 20     # More runs for better optimization

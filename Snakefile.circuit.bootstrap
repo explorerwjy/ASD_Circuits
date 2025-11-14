@@ -1,0 +1,169 @@
+"""
+Snakemake pipeline for Bootstrap Circuit Search
+
+This pipeline extends Snakefile.circuit.refactored to support bootstrap analysis.
+It automatically discovers bootstrap bias files and runs circuit search on all of them,
+then aggregates results to compute 95% confidence intervals.
+
+Usage:
+    # Run bootstrap circuit search (auto-discovers all bootstrap files)
+    snakemake -s Snakefile.circuit.bootstrap \
+        --configfile config/circuit_config_bootstrap.yaml \
+        --cores 20
+
+    # Run only first 10 bootstrap iterations (for testing)
+    snakemake -s Snakefile.circuit.bootstrap \
+        --configfile config/circuit_config_bootstrap.yaml \
+        --config n_bootstrap=10 \
+        --cores 20
+
+    # Aggregate bootstrap results to get 95% CI
+    snakemake -s Snakefile.circuit.bootstrap \
+        --configfile config/circuit_config_bootstrap.yaml \
+        aggregate_all \
+        --cores 1
+"""
+
+import pandas as pd
+import numpy as np
+import os
+import sys
+
+# Add bootstrap utils to path
+sys.path.insert(0, 'scripts/workflow')
+from bootstrap_utils import discover_bootstrap_datasets, get_bootstrap_dataset_names
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+configfile: "config/circuit_config_bootstrap.yaml"
+
+# Check if bootstrap mode
+BOOTSTRAP_MODE = config.get("bootstrap_mode", False)
+
+if not BOOTSTRAP_MODE:
+    raise ValueError("This Snakefile requires bootstrap_mode: true in config")
+
+# Discover bootstrap datasets
+BOOTSTRAP_BIAS_DIR = config["bootstrap_bias_dir"]
+BOOTSTRAP_BIAS_PATTERN = config["bootstrap_bias_pattern"]
+BOOTSTRAP_DATASET_PREFIX = config.get("bootstrap_dataset_prefix", "ASD_Boot")
+N_BOOTSTRAP = config.get("n_bootstrap", None)
+
+print(f"Discovering bootstrap files from: {BOOTSTRAP_BIAS_DIR}")
+print(f"Pattern: {BOOTSTRAP_BIAS_PATTERN}")
+
+bootstrap_datasets = discover_bootstrap_datasets(
+    BOOTSTRAP_BIAS_DIR,
+    BOOTSTRAP_BIAS_PATTERN,
+    BOOTSTRAP_DATASET_PREFIX,
+    N_BOOTSTRAP
+)
+
+print(f"Found {len(bootstrap_datasets)} bootstrap datasets")
+
+# Combine with main dataset if requested
+INPUT_STR_BIAS = {}
+
+if config.get("include_main_dataset", True):
+    main_config = config.get("Input_str_bias", {})
+    INPUT_STR_BIAS.update(main_config)
+    print(f"Including {len(main_config)} main dataset(s)")
+
+INPUT_STR_BIAS.update(bootstrap_datasets)
+
+# Update config with discovered datasets
+config["Input_str_bias"] = INPUT_STR_BIAS
+
+# Get all dataset names for workflow
+DATASETS = list(INPUT_STR_BIAS.keys())
+DATASET_NAMES = [INPUT_STR_BIAS[d]['name'] for d in DATASETS]
+BOOTSTRAP_DATASET_NAMES = get_bootstrap_dataset_names(bootstrap_datasets)
+
+print(f"Total datasets to process: {len(DATASETS)}")
+print()
+
+# Shared parameters (same as main pipeline)
+WEIGHT_MAT = config["weight_mat"]
+INFO_MAT = config["info_mat"]
+OUTPUT_DIR = config["output_dir"]
+CIRCUIT_SIZES = config.get("circuit_sizes", [46])
+TOP_N = config.get("top_n", 213)
+MIN_BIAS_RANK = config.get("min_bias_rank", 50)
+SA_RUNTIMES = config.get("sa_runtimes", 5)
+SA_STEPS = config.get("sa_steps", 50000)
+MEASURE = config.get("measure", "SI")
+N_CORES = config.get("n_cores", 10)
+VERBOSE = config.get("verbose", False)
+CI_LEVEL = config.get("ci_level", 0.95)
+AGG_OUTPUT_DIR = config.get("aggregation_output_dir", "results/CircuitSearch_Bootstrap_Summary")
+
+# ============================================================================
+# Include main circuit search rules
+# ============================================================================
+
+# Import all rules from main Snakefile
+include: "Snakefile.circuit.refactored"
+
+# ============================================================================
+# Bootstrap-specific aggregation rules
+# ============================================================================
+
+rule aggregate_all:
+    """
+    Master rule to aggregate all bootstrap results.
+    """
+    input:
+        expand("{agg_dir}/size_{size}/bootstrap_aggregation_complete.txt",
+               agg_dir=AGG_OUTPUT_DIR,
+               size=CIRCUIT_SIZES)
+
+rule aggregate_bootstrap_results:
+    """
+    Aggregate bootstrap pareto fronts to compute confidence intervals.
+    """
+    input:
+        # All bootstrap pareto fronts
+        bootstrap_paretos = expand(
+            "{output_dir}/{dataset_name}/pareto_fronts/{dataset_name}_size_{{size}}_pareto_front.csv",
+            output_dir=OUTPUT_DIR,
+            dataset_name=BOOTSTRAP_DATASET_NAMES
+        ),
+        # Main dataset pareto front (if included)
+        main_pareto = expand(
+            "{output_dir}/{dataset_name}/pareto_fronts/{dataset_name}_size_{{size}}_pareto_front.csv",
+            output_dir=OUTPUT_DIR,
+            dataset_name=[INPUT_STR_BIAS[d]['name'] for d in INPUT_STR_BIAS.keys() if 'bootstrap_id' not in INPUT_STR_BIAS[d]]
+        ) if config.get("include_main_dataset", True) else []
+    output:
+        summary_csv = "{agg_dir}/size_{size}/bootstrap_summary.csv",
+        ci_by_bias = "{agg_dir}/size_{size}/confidence_intervals_by_biaslimit.csv",
+        complete = "{agg_dir}/size_{size}/bootstrap_aggregation_complete.txt"
+    params:
+        size = "{size}",
+        ci_level = CI_LEVEL,
+        n_bootstrap = len(bootstrap_datasets),
+        main_included = config.get("include_main_dataset", True)
+    script:
+        "scripts/workflow/aggregate_bootstrap_results.py"
+
+# ============================================================================
+# Helper rules
+# ============================================================================
+
+rule list_bootstrap_datasets:
+    """
+    List all discovered bootstrap datasets.
+    """
+    run:
+        print("\n" + "="*80)
+        print(f"Bootstrap Datasets ({len(bootstrap_datasets)} total)")
+        print("="*80)
+        for key, config_data in sorted(bootstrap_datasets.items(), key=lambda x: x[1].get('bootstrap_id', 0)):
+            boot_id = config_data.get('bootstrap_id', '?')
+            name = config_data['name']
+            path = os.path.relpath(config_data['bias_df'])
+            print(f"  Bootstrap {boot_id:3d}: {name:20s} -> {path}")
+        print("="*80)
+        print()

@@ -1,0 +1,92 @@
+# List of gene sets to analyze
+ProjDIR: "/home/jw3514/Work/ASD_Circuits_CellType/"  # Change to your project directory
+
+gene_sets:
+  ASD_All:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD_All.gw"
+  ASD_HIQ:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD.HIQ.gw.csv"
+  ASD_LIQ:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD.LIQ.gw.csv"
+  ASD_SPARK_159: 
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Spark_Meta_160.GeneWeight.csv"
+  DDD_61:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top61.gw"
+  DDD_293:  
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.gw"
+  DDD_293_ExcludeASD: 
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.ExcludeASD.gw"
+  # ASC_102:
+  #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASC_102.GeneWeight.csv"
+  Fu_ASD_72:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_Fu_ASD_72.gw"
+  Fu_ASD_185: 
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_Fu_ASD_185.gw"
+  SCZ:
+    geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/SCZ.top61.nopLI.LGD_Dmis_SameWeight.exclude_Mis2.gw"
+
+  # Constraint_top_decile_LOEUF:
+  #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/constraint_top_decile_LOEUF.gw"
+  # Constraint_top_decile_LOEUF_excludeASD:
+  #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/constraint_top_decile_LOEUF_excludeASD.gw"
+  Constraint_top25_LOEUF:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/constraint_top25_LOEUF.gw"
+
+  NT_Dopamine_source:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_dopamine_source.gw"
+  NT_Dopamine_target:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_dopamine_target.gw"
+  NT_Dopamine_combined:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_dopamine_combined.gw"
+  
+  NT_Serotonin_source:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_serotonin_source.gw"
+  NT_Serotonin_target:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_serotonin_target.gw"
+  NT_Serotonin_combined:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_serotonin_combined.gw"
+  
+  NT_Oxytocin_source:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_oxytocin_source.gw"
+  NT_Oxytocin_target:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_oxytocin_target.gw"
+  NT_Oxytocin_combined:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_oxytocin_combined.gw"
+
+  NT_acetylcholine_source:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_acetylcholine_source.gw"
+  NT_acetylcholine_target:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_acetylcholine_target.gw"
+  NT_acetylcholine_combined:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_acetylcholine_combined.gw"
+
+  Parkinson:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Parkinson.gw"
+
+# Analysis types and their corresponding expression matrices and modes
+analysis_types:
+  STR_ISH: 
+    expr_matrix: "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet"
+    mode: "mouse_str_bias"
+  # CT_Spec: 
+  #   expr_matrix: "dat/BiasMatrices/MouseCT.TPM.1.Filt.Spec.clip.lowexp.100000.qn.parquet"
+  #   mode: "mouse_ct_bias"
+  # STR_MERIFH: 
+  #   expr_matrix: "dat/BiasMatrices/MouseBrain_MERIFHbias.parquet"
+  #   mode: "mouse_str_bias"
+  CT_Z2: 
+    expr_matrix: "dat/BiasMatrices/Cluster_Z2Mat_ISHMatch.z1clip3.parquet" 
+    mode: "mouse_ct_bias"
+
+# Output directory for all results
+output_dir: "results"
+# Number of random weights (can customize per gene set if needed)
+n_random_weights: 10000
+
+# Data file paths
+data_files:
+  sibling_weights: "dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv"
+  mouse_ct_annotation: "dat/MouseCT_Cluster_Anno.csv"
+  protein_coding_genes: "dat/Genetics/protein-coding_gene.txt"
+  major_brain_divisions: "dat/structure2region.tsv"
+  Denovo_mut_rate: "/home/jw3514/Work/Resources/MutationRate_20170710_rate.CorrectSymbol.txt"

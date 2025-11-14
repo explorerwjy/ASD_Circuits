@@ -20,7 +20,7 @@ Snakemake params:
     params.runtimes: Number of SA runs
     params.sa_steps: Number of SA steps per run
     params.measure: Circuit scoring measure ("SI" or "Connectivity")
-    params.input_str_bias: Dataset configurations
+    params.dataset_config: Dictionary with single dataset configuration
     params.verbose: Print detailed output (default False)
 """
 
@@ -51,21 +51,18 @@ minbias = float(snakemake.params.bias)
 runtimes = snakemake.params.runtimes
 sa_steps = snakemake.params.sa_steps
 measure = snakemake.params.measure
-INPUT_STR_BIAS = snakemake.params.input_str_bias
+dataset_config = snakemake.params.dataset_config
 verbose = snakemake.params.verbose
 
-# Find dataset configuration
-dataset_key = None
-for key, config_data in INPUT_STR_BIAS.items():
-    if config_data['name'] == dataset_name:
-        dataset_key = key
-        break
+# Get the dataset configuration (should be a single-entry dict)
+if not dataset_config:
+    raise ValueError(f"No dataset config found for dataset_name '{dataset_name}'")
 
-if dataset_key is None:
-    raise ValueError(f"Dataset name '{dataset_name}' not found in config")
+# Extract the config (first and only entry)
+config_data = list(dataset_config.values())[0]
 
 # Get bias file path
-bias_df_path = INPUT_STR_BIAS[dataset_key]['bias_df']
+bias_df_path = config_data['bias_df']
 
 
 # Helper functions

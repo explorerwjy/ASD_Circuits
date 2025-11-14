@@ -15,7 +15,7 @@ Snakemake params:
     params.size: Circuit size
     params.dataset_name: Dataset name
     params.min_bias_rank: Rank to use for minimum bias threshold
-    params.input_str_bias: Dictionary of dataset configurations
+    params.dataset_config: Dictionary with single dataset configuration
 """
 
 import sys
@@ -29,20 +29,17 @@ from ASD_Circuits import BiasLim
 dataset_name = snakemake.params.dataset_name
 size = int(snakemake.params.size)
 min_bias_rank = snakemake.params.min_bias_rank
-INPUT_STR_BIAS = snakemake.params.input_str_bias
+dataset_config = snakemake.params.dataset_config
 
-# Find dataset configuration
-dataset_key = None
-for key, config_data in INPUT_STR_BIAS.items():
-    if config_data['name'] == dataset_name:
-        dataset_key = key
-        break
+# Get the dataset configuration (should be a single-entry dict)
+if not dataset_config:
+    raise ValueError(f"No dataset config found for dataset_name '{dataset_name}'")
 
-if dataset_key is None:
-    raise ValueError(f"Dataset name '{dataset_name}' not found in config")
+# Extract the config (first and only entry)
+config_data = list(dataset_config.values())[0]
 
 # Get bias file path
-bias_df_path = INPUT_STR_BIAS[dataset_key]['bias_df']
+bias_df_path = config_data['bias_df']
 
 # Load bias dataframe
 print(f"[{dataset_name}] Loading bias data from: {bias_df_path}")

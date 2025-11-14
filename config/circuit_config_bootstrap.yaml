@@ -1,0 +1,102 @@
+# Configuration file for GENCIC Circuit Search Pipeline - Bootstrap Mode
+# Usage: snakemake -s Snakefile.circuit.refactored --configfile config/circuit_config_bootstrap.yaml --cores 20
+
+# ============================================================================
+# Bootstrap Configuration
+# ============================================================================
+
+# Bootstrap mode: automatically discovers bias files matching pattern
+bootstrap_mode: true
+
+# Bootstrap bias files directory and pattern
+bootstrap_bias_dir: "results/Bootstrap_bias/Spark_ExomeWide/Weighted_Resampling"
+bootstrap_bias_pattern: "Spark_ExomeWide.GeneWeight.boot*.csv"
+
+# Base name for bootstrap results
+bootstrap_dataset_prefix: "ASD_Boot"
+
+# Number of bootstrap iterations (auto-detected if not specified)
+# Set to null to auto-detect all files matching pattern
+n_bootstrap: null  # Will find all boot*.csv files
+
+# ============================================================================
+# Main Dataset (for comparison)
+# ============================================================================
+
+# Include main dataset for comparison
+include_main_dataset: true
+
+Input_str_bias:
+  ASD_Main:
+    name: "ASD_SPARK_Main"
+    bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+    description: "Main ASD SPARK result (for comparison with bootstrap CI)"
+
+# ============================================================================
+# Connectivity Matrices (shared across all datasets)
+# ============================================================================
+
+weight_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/WeightMat.Ipsi.csv"
+info_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+
+# Bootstrap results go to separate directory
+output_dir: "results/CircuitSearch_Bootstrap"
+
+# ============================================================================
+# Circuit Search Parameters (same as main analysis)
+# ============================================================================
+
+circuit_sizes:
+  - 46
+
+top_n: 213
+
+min_bias_rank: 50
+
+# Reduced SA runs for bootstrap (to save computation)
+# Main dataset uses more runs for final result
+sa_runtimes: 5  # Reduced from 20 for bootstrap
+
+sa_steps: 50000  # Keep same quality
+
+measure: "SI"
+
+n_cores: 20
+
+verbose: False
+
+# ============================================================================
+# Bootstrap Aggregation Settings
+# ============================================================================
+
+# Confidence interval level
+ci_level: 0.95  # 95% confidence interval
+
+# Aggregation output
+aggregation_output_dir: "results/CircuitSearch_Bootstrap_Summary"
+
+# ============================================================================
+# Notes
+# ============================================================================
+
+# This config automatically discovers bootstrap files matching the pattern.
+# Run with:
+#   snakemake -s Snakefile.circuit.refactored \
+#     --configfile config/circuit_config_bootstrap.yaml \
+#     --cores 20
+
+# To run only specific bootstrap iterations:
+#   snakemake -s Snakefile.circuit.refactored \
+#     --configfile config/circuit_config_bootstrap.yaml \
+#     --config n_bootstrap=10 \
+#     --cores 20
+
+# To aggregate results:
+#   snakemake -s Snakefile.circuit.refactored \
+#     --configfile config/circuit_config_bootstrap.yaml \
+#     aggregate_bootstrap \
+#     --cores 1
