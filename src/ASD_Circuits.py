@@ -55,6 +55,103 @@ def load_config(config_path="../config/config.yaml"):
 _config = load_config()
 _ProjDIR = _config["ProjDIR"]
 
+
+# properly handle NA values
+def quantileNormalize_withNA(expression_matrix):
+    """
+    Perform quantile normalization on gene expression matrix while ignoring NA values.
+    
+    Parameters:
+    -----------
+    expression_matrix : pandas.DataFrame or numpy.ndarray
+        Expression matrix with genes as rows and structures as columns.
+        May contain NA/NaN values.
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        Quantile normalized expression matrix with the same shape as input.
+        NA values remain NA in the output.
+    """
+    # Convert to DataFrame if numpy array
+    if isinstance(expression_matrix, np.ndarray):
+        df = pd.DataFrame(expression_matrix)
+    else:
+        df = expression_matrix.copy()
+    
+    # Store column names and index for later
+    original_columns = df.columns if hasattr(df, 'columns') else None
+    original_index = df.index if hasattr(df, 'index') else None
+    
+    # Create a mask for NA values
+    na_mask = df.isna()
+    
+    # Calculate ranks for each column, ignoring NAs
+    ranks_df = df.rank(method='average', na_option='keep')
+    
+    # For each column, sort the non-NA values
+    sorted_values = {}
+    for col in df.columns:
+        # Get non-NA values for this column
+        valid_values = df[col].dropna().values
+        # Sort them
+        valid_values.sort()
+        sorted_values[col] = valid_values
+    
+    # Find the maximum number of non-NA values in any column
+    max_valid_count = max(len(values) for values in sorted_values.values())
+    
+    # Create a matrix of sorted values (columns with fewer non-NA values will have NaNs)
+    sorted_matrix = np.full((max_valid_count, len(df.columns)), np.nan)
+    for i, col in enumerate(df.columns):
+        values = sorted_values[col]
+        sorted_matrix[:len(values), i] = values
+    
+    # Calculate the mean of each row, ignoring NaNs
+    sorted_df = pd.DataFrame(sorted_matrix)
+    mean_values = sorted_df.mean(axis=1, skipna=True).values
+    
+    # Create normalized dataframe with same shape as input
+    normalized_df = pd.DataFrame(np.full(df.shape, np.nan), 
+                                index=df.index, 
+                                columns=df.columns)
+    
+    # Assign normalized values based on ranks, keeping NA values as NA
+    for col in df.columns:
+        # Get the ranks for non-NA values
+        col_ranks = ranks_df[col].dropna()
+        # Convert ranks to array indices (0-based)
+        rank_indices = (col_ranks - 1).astype(int).values
+        # For each non-NA value, assign the corresponding mean value
+        normalized_df.loc[col_ranks.index, col] = mean_values[rank_indices]
+    
+    # Restore original column names and index
+    if original_columns is not None:
+        normalized_df.columns = original_columns
+    if original_index is not None:
+        normalized_df.index = original_index
+    
+    return normalized_df
+
+def ZscoreConverting(values, mean = np.nan, std = np.nan):
+    real_values = [x for x in values if x==x]
+    #real_values = values 
+    if mean != mean:
+        mean = np.mean(real_values)
+    if std != std:
+        std = np.std(real_values)
+    zscores = []
+    #print(mean, std)
+    #print(mean, std)
+    for x in values:
+        try:
+            z = (x - mean)/std
+            zscores.append(z)
+        except:
+            zscores.append(0)
+    return np.array(zscores)
+    
+
 def LoadGeneINFO():
     protein_coding_genes_path = os.path.join(_ProjDIR, _config["data_files"]["protein_coding_genes"])
     HGNC = pd.read_csv(protein_coding_genes_path, delimiter="\t", low_memory=False)
@@ -71,6 +168,8 @@ def STR2Region():
     str2reg_df = str2reg_df.sort_values("REG")
     str2reg = dict(zip(str2reg_df["STR"].values, str2reg_df["REG"].values))
     return str2reg
+
+str2reg = STR2Region()
 
 def GeneList2GW(GeneListFil):
     with open(GeneListFil, 'r') as f:
@@ -284,6 +383,100 @@ def BiasCorrelation(DF1, DF2, name1="1", name2="2", dpi=80):
     plt.tight_layout()
     plt.show()
 
+def Aggregate_Gene_Weights_NDD(MutFil, usepLI=False, Bmis=False, out=None):
+    gene2MutN = {}
+    for i, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+        except:
+            print(g, "Error converting Entrez ID")
+
+        nLGD = row["frameshift_variant"] + row["splice_acceptor_variant"] + row["splice_donor_variant"] + row["stop_gained"] + row["stop_lost"] 
+        nMis = row["missense_variant"] 
+
+        gene2MutN[g] = nLGD * 0.347 + nMis * 0.194
+    if out != None:
+        writer = csv.writer(open(out, 'wt'))
+        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
+           writer.writerow([k,v]) 
+    return gene2MutN
+    
+# This function is used to bootstrap the gene mutations 
+def bootstrap_gene_mutations(
+    df,
+    n_boot=10,
+    weighted=True,
+    lof_col="AutismMerged_LoF",
+    dmis_col="AutismMerged_Dmis_REVEL0.5",
+    rng=None,
+):
+    """
+    Bootstrap mutation counts at the mutation level, preserving gene identity
+    and total mutation load. Supports weighted (mutation-rate) or uniform resampling.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe with gene-level LOF and Dmis mutation counts.
+    n_boot : int, optional
+        Number of bootstrap replicates (default = 10).
+    weighted : bool, optional
+        If True, mutations are resampled with probability proportional to observed counts.
+        If False, each gene has equal probability of receiving any mutation.
+    lof_col, dmis_col : str
+        Column names for LOF and Dmis counts.
+    rng : np.random.Generator, optional
+        Numpy random generator for reproducibility.
+
+    Returns
+    -------
+    boot_DFs : list of pd.DataFrame
+        List of bootstrapped dataframes with resampled mutation counts and 'bootstrap_iter' column.
+    """
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    n = len(df)
+    boot_DFs = []
+
+    # Ensure integer non-negative mutation counts
+    lof = df[lof_col].astype(int).clip(lower=0)
+    dmis = df[dmis_col].astype(int).clip(lower=0)
+
+    total_lof = lof.sum()
+    total_dmis = dmis.sum()
+
+    # Probability vectors for mutation assignment
+    if weighted:
+        # Weighted by observed mutation burden per gene
+        p_lof = lof / total_lof if total_lof > 0 else np.ones(n) / n
+        p_dmis = dmis / total_dmis if total_dmis > 0 else np.ones(n) / n
+    else:
+        # Uniform: every gene equally likely
+        p_lof = np.ones(n) / n
+        p_dmis = np.ones(n) / n
+
+    for i in range(1, n_boot + 1):
+        # Draw total_lof mutation events, assign to genes
+        new_lof_counts = np.bincount(
+            rng.choice(n, size=total_lof, replace=True, p=p_lof),
+            minlength=n
+        )
+        new_dmis_counts = np.bincount(
+            rng.choice(n, size=total_dmis, replace=True, p=p_dmis),
+            minlength=n
+        )
+
+        # Create bootstrap replicate
+        df_boot = df.copy().reset_index(drop=True)
+        df_boot[lof_col] = new_lof_counts
+        df_boot[dmis_col] = new_dmis_counts
+        df_boot["bootstrap_iter"] = i
+        df_boot["bootstrap_type"] = "weighted" if weighted else "uniform"
+        boot_DFs.append(df_boot)
+
+    return boot_DFs
+
 #####################################################################################
 #####################################################################################
 #### IQ function
@@ -411,7 +604,7 @@ def get_cache_info() -> Dict[str, Any]:
 def MouseSTR_AvgZ_Weighted(ExpZscoreMat, Gene2Weights, csv_fil=None, results_dir="./results"):
     """
     Calculate weighted average bias scores for brain structures
-    
+
     Parameters:
     -----------
     ExpZscoreMat : pd.DataFrame
@@ -419,24 +612,24 @@ def MouseSTR_AvgZ_Weighted(ExpZscoreMat, Gene2Weights, csv_fil=None, results_dir
     Gene2Weights : dict
         Gene weights dictionary (entrez_id -> weight)
     csv_fil : str, optional
-        Filename to save results (will be saved in results_dir)
+        Filename or full path to save results
     results_dir : str, default "./results"
-        Directory to save results
-        
+        Directory to save results if csv_fil is provided as a filename only
+
     Returns:
     --------
     pd.DataFrame : Structure bias results with EFFECT and Rank columns
     """
     # Convert Gene2Weights to pandas Series for faster lookup
     weights_series = pd.Series(Gene2Weights)
-    
+
     # Get intersection of genes using index operations
     valid_genes = ExpZscoreMat.index.intersection(weights_series.index)
-    
+
     # Get weights and expression values using vectorized operations
     weights = weights_series[valid_genes].values
     expr_mat = ExpZscoreMat.loc[valid_genes]
-    
+
     # Compute weighted averages for all cell types at once using matrix operations
     mask = ~np.isnan(expr_mat)
     # Broadcasting weights to match expr_mat shape
@@ -447,25 +640,30 @@ def MouseSTR_AvgZ_Weighted(ExpZscoreMat, Gene2Weights, csv_fil=None, results_dir
     weight_sums = weights_broadcast * mask
     # Compute weighted average across genes for each cell type
     EFFECTS = np.sum(weighted_vals, axis=0) / np.sum(weight_sums, axis=0)
-    
+
     # Create results dataframe efficiently
     df = pd.DataFrame({
         'Structure': ExpZscoreMat.columns,
         'EFFECT': EFFECTS
     }).set_index('Structure')
-    
-    
+
     # Sort and add rank
     df = df.sort_values('EFFECT', ascending=False)
     df['Rank'] = np.arange(1, len(df) + 1)
-    
+    df["REGION"] = df.index.map(str2reg)
+
     if csv_fil is not None:
-        # Create results directory if it doesn't exist
-        os.makedirs(results_dir, exist_ok=True)
-        output_path = os.path.join(results_dir, csv_fil)
+        # If csv_fil has a directory component, use it as a full path (do not prepend results_dir)
+        if os.path.dirname(csv_fil):
+            output_path = csv_fil
+            os.makedirs(os.path.dirname(csv_fil), exist_ok=True)
+        else:
+            # Otherwise, use results_dir as base directory
+            os.makedirs(results_dir, exist_ok=True)
+            output_path = os.path.join(results_dir, csv_fil)
         df.to_csv(output_path)
         print(f"Results saved to: {output_path}")
-    
+
     return df
 
 def HumanCT_AvgZ_Weighted(ExpZscoreMat, Gene2Weights, csv_fil=None):
