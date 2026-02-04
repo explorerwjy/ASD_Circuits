@@ -15,3 +15,8 @@
 .snakemake/
 .vscode/
 __pycache__/
+
+# Ignore specific directory names everywhere in the project
+**/archive/
+**/draft/
+**/drafts/
