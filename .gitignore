@@ -1,0 +1,17 @@
+# 1. Ignore everything by default
+*
+
+# 2. But don't ignore directories (otherwise Git won't look inside them for files)
+!*/
+
+# 3. Whitelist your specific file types
+!*.py
+!*.ipynb
+!.gitignore
+
+# 4. Explicitly ignore Mac system files (the .DS_Store files in your status)
+.DS_Store
+._*
+.snakemake/
+.vscode/
+__pycache__/

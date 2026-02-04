@@ -1,6 +1,6 @@
 import os
 
-# configfile: "config/config.yaml"  # Commented out - use --configfile argument instead
+configfile: "config/config.yaml"
 
 # Pull variables from config
 GENESETS = config["gene_sets"]

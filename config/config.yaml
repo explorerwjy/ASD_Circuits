@@ -2,8 +2,8 @@
 ProjDIR: "/home/jw3514/Work/ASD_Circuits_CellType/"  # Change to your project directory
 
 gene_sets:
-  ASD_All:
-    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD_All.gw"
+  #ASD_All:
+ #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD_All.gw"
   ASD_HIQ:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD.HIQ.gw.csv"
   ASD_LIQ:
@@ -16,8 +16,10 @@ gene_sets:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.gw"
   DDD_293_ExcludeASD: 
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.ExcludeASD.gw"
-  # ASC_102:
-  #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASC_102.GeneWeight.csv"
+  ASC_102:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_ASC_102.gw"
+  Spark_top20:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Spark_top20.gw"
   Fu_ASD_72:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_Fu_ASD_72.gw"
   Fu_ASD_185: 
@@ -61,8 +63,17 @@ gene_sets:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/NT_acetylcholine_combined.gw"
 
   Parkinson:
-    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Parkinson.gw"
-
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Parkinson.top61.gw"
+  Alzheimer:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ALZ.top60.gw"
+  hba1c:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/hba1c.top61.gw"
+  HDL_C:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/HDL_C.top61.gw"
+  IBD:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/IBD.top61.gw"
+  T2D:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/T2D.top61.gw"
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
   STR_ISH: 
