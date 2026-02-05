@@ -72,15 +72,28 @@ def CompareCT_ABC(Bias1, Bias2, name1="1", name2="2", name0 = "",SuperClusters=A
 #################################################
 # Go terms related Functions
 #################################################
-Go2Uniprot = pk.load(open("/home/jw3514/Work/CellType_Psy/dat3/Goterms/Go2Uniprot.pk", 'rb'))
-Uniprot2Entrez = pk.load(open("/home/jw3514/Work/CellType_Psy/dat3/Goterms/Uniprot2Entrez.pk", 'rb'))
+_GO_DATA_DIR = "/home/jw3514/Work/CellType_Psy/dat3/Goterms"
+_Go2Uniprot = None
+_Uniprot2Entrez = None
+
+def _load_go_data():
+    """Lazy-load GO term data files. Called on first use of GO functions."""
+    global _Go2Uniprot, _Uniprot2Entrez
+    if _Go2Uniprot is None:
+        _Go2Uniprot = pk.load(open(f"{_GO_DATA_DIR}/Go2Uniprot.pk", 'rb'))
+        _Uniprot2Entrez = pk.load(open(f"{_GO_DATA_DIR}/Uniprot2Entrez.pk", 'rb'))
+    return _Go2Uniprot, _Uniprot2Entrez
 
 def GetALLGo(go, GoID):
     Root = go[GoID]
     all_go = Root.get_all_children()
     all_go.add(GoID)
     return all_go
-def GetGeneOfGo2(go, GoID, Go2Uniprot=Go2Uniprot):
+def GetGeneOfGo2(go, GoID, Go2Uniprot=None):
+    if Go2Uniprot is None:
+        Go2Uniprot, Uniprot2Entrez = _load_go_data()
+    else:
+        _, Uniprot2Entrez = _load_go_data()
     goset = GetALLGo(go, GoID)
     Total_Genes = set([])
     for i, tmpgo in enumerate(goset):
