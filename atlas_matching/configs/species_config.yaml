@@ -1,0 +1,73 @@
+# Species-specific configuration
+# Use this to manage different species (mouse, human, etc.)
+
+mouse:
+  scientific_name: "Mus musculus"
+  common_name: "Mouse"
+  genome_assembly: "GRCm39"
+  gene_id_type: "gene_symbol"  # or ensembl_id
+
+  # Reference atlases available
+  atlases:
+    - name: "AIBS_whole_cortex_10x"
+      description: "Allen Institute whole cortex 10x scRNA-seq"
+      cell_count: 1093859
+      technology: "10x_v3"
+      brain_regions: ["VISp", "ALM", "MOp", "MOs", "SSp", "ACA"]
+      data_path: "dat/reference/aibs_whole_cortex_10x.h5ad"
+
+    - name: "BICCN_motor_cortex"
+      description: "BICCN motor cortex multimodal atlas"
+      cell_count: 300000
+      technology: "10x_v3"
+      brain_regions: ["MOp", "MOs"]
+      data_path: "dat/reference/biccn_motor_cortex.h5ad"
+
+  # Quality control thresholds
+  qc:
+    min_genes: 500
+    max_genes: 10000
+    min_counts: 1000
+    max_counts: 50000
+    max_pct_mito: 10.0
+
+  # Gene sets
+  gene_sets:
+    neuronal_markers: ["Snap25", "Rbfox3", "Syp", "Syt1"]
+    glial_markers: ["Gfap", "Aldoc", "Mog", "Pdgfra"]
+    quality_indicators: ["Malat1", "mt-Nd1", "mt-Nd2"]
+human:
+  scientific_name: "Homo sapiens"
+  common_name: "Human"
+  genome_assembly: "GRCh38"
+  gene_id_type: "gene_symbol"  # or ensembl_id
+
+  # Reference atlases available
+  atlases:
+    - name: "SEA-AD_MTG_sn"
+      description: "Seattle Alzheimer's Disease Brain Cell Atlas - Middle Temporal Gyrus snRNA-seq"
+      cell_count: ~1000000
+      technology: "10x_v3"
+      brain_regions: ["MTG"]
+      data_path: "dat/reference/seaad_mtg_sn.h5ad"
+
+    - name: "Human_cortex_multi_region"
+      description: "Multi-region human cortex snRNA-seq atlas"
+      cell_count: ~500000
+      technology: "10x_v3"
+      brain_regions: ["M1", "S1", "PFC", "V1"]
+      data_path: "dat/reference/human_cortex_multi.h5ad"
+
+  # Quality control thresholds (more stringent for snRNA-seq)
+  qc:
+    min_genes: 300
+    max_genes: 8000
+    min_counts: 500
+    max_counts: 30000
+    max_pct_mito: 5.0  # Lower for nuclear RNA
+
+  # Gene sets (human orthologs)
+  gene_sets:
+    neuronal_markers: ["SNAP25", "RBFOX3", "SYP", "SYT1"]
+    glial_markers: ["GFAP", "ALDOC", "MOG", "PDGFRA"]
+    quality_indicators: ["MALAT1", "MT-ND1", "MT-ND2"]

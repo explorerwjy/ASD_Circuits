@@ -7,7 +7,12 @@
 # 3. Whitelist your specific file types
 !*.py
 !*.ipynb
+!*.yaml
+!*.yml
+!*.txt
+!*.md
 !.gitignore
+!.gitattributes
 
 # 4. Explicitly ignore Mac system files (the .DS_Store files in your status)
 .DS_Store
@@ -20,3 +25,6 @@ __pycache__/
 **/archive/
 **/draft/
 **/drafts/
+
+# Atlas matching results (large model/data files)
+atlas_matching/results/
