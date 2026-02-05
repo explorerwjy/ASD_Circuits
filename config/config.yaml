@@ -101,3 +101,25 @@ data_files:
   protein_coding_genes: "dat/Genetics/protein-coding_gene.txt"
   major_brain_divisions: "dat/structure2region.tsv"
   Denovo_mut_rate: "/home/jw3514/Work/Resources/MutationRate_20170710_rate.CorrectSymbol.txt"
+
+  # Gene annotation files for enhanced matching (Reviewer 3 response)
+  gnomad_constraints: "/home/jw3514/Work/Resources/gnomad.v2.1.1.lof_metrics.by_gene.txt"
+  cds_length: "/home/jw3514/Work/Resources/gencode_v19_longest_cds_per_gene.tsv"
+  phastcons_bw: "/home/jw3514/Work/Resources/hg19.100way.phastCons.bw"
+  background_mutation_rate: "/home/jw3514/Work/Resources/BGMR.withEntrez.csv"
+
+# Enhanced permutation settings (Reviewer 3 response)
+enhanced_permutation:
+  # Matching stringency levels to test
+  stringency_levels: ["loose", "medium", "tight", "very_tight"]
+  # Default stringency for standard analysis
+  default_stringency: "medium"
+  # Number of permutations for sensitivity analysis (fewer for quick tests)
+  n_sims_sensitivity: 1000
+  # Number of permutations for final analysis
+  n_sims_final: 10000
+
+# Specificity score cap sensitivity analysis
+specificity_sensitivity:
+  cap_values: [1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+  default_cap: 3.0
