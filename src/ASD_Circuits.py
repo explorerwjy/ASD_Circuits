@@ -391,15 +391,250 @@ def Aggregate_Gene_Weights_NDD(MutFil, usepLI=False, Bmis=False, out=None):
         except:
             print(g, "Error converting Entrez ID")
 
-        nLGD = row["frameshift_variant"] + row["splice_acceptor_variant"] + row["splice_donor_variant"] + row["stop_gained"] + row["stop_lost"] 
-        nMis = row["missense_variant"] 
+        nLGD = row["frameshift_variant"] + row["splice_acceptor_variant"] + row["splice_donor_variant"] + row["stop_gained"] + row["stop_lost"]
+        nMis = row["missense_variant"]
 
         gene2MutN[g] = nLGD * 0.347 + nMis * 0.194
     if out != None:
         writer = csv.writer(open(out, 'wt'))
         for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
-           writer.writerow([k,v]) 
+           writer.writerow([k,v])
     return gene2MutN
+
+
+def Aggregate_Gene_Weights_NDD_BGMR(
+    MutFil,
+    BGMR=None,
+    Nproband=31058,  # DDD cohort size (Kaplanis et al. 2020)
+    usepLI=False,
+    out=None,
+    lof_cols=None,
+    mis_col="missense_variant",
+    lof_weight=0.347,
+    mis_weight=0.194
+):
+    """
+    Calculate mutation-derived gene weights for NDD/DDD data with BGMR correction.
+
+    This extends the expected-count adjustment (previously only for SCZ, Eq. 5)
+    to ASD and NDD genes per Reviewer 3's request.
+
+    Parameters
+    ----------
+    MutFil : pd.DataFrame
+        DataFrame of mutations with gene-level counts. Must contain:
+        - EntrezID: Gene identifier
+        - Mutation count columns (LoF types and missense)
+    BGMR : pd.DataFrame, optional
+        Background mutation rate DataFrame indexed by Entrez ID.
+        Must contain columns: p_LGD, prevel_0.5 (or p_misense)
+    Nproband : int
+        Number of probands in cohort (default: 31058 for DDD)
+    usepLI : bool
+        If True, apply pLI-based gene weighting
+    out : str, optional
+        Output CSV file path
+    lof_cols : list, optional
+        Column names for LoF mutation types. Default:
+        ["frameshift_variant", "splice_acceptor_variant",
+         "splice_donor_variant", "stop_gained", "stop_lost"]
+    mis_col : str
+        Column name for missense mutations
+    lof_weight : float
+        Weight for LoF mutations (default: 0.347)
+    mis_weight : float
+        Weight for missense mutations (default: 0.194)
+
+    Returns
+    -------
+    dict
+        gene2MutN: dict mapping gene EntrezID to computed weight
+    """
+    if lof_cols is None:
+        lof_cols = [
+            "frameshift_variant",
+            "splice_acceptor_variant",
+            "splice_donor_variant",
+            "stop_gained",
+            "stop_lost"
+        ]
+
+    gene2MutN = {}
+
+    # De novo mutation rate scaling factors (from Samocha et al.)
+    # These are the proportion of de novo mutations that are LoF/missense
+    LGD_SCALE = 0.138  # ~14% of de novos are LoF
+    MIS_SCALE = 0.130  # ~13% of de novos are damaging missense
+
+    for _, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+        except Exception:
+            continue
+
+        # Sum LoF mutations across all LoF columns
+        nLGD = 0
+        for col in lof_cols:
+            if col in row.index:
+                nLGD += row[col]
+
+        # Get missense count
+        nMis = row.get(mis_col, 0)
+
+        # Calculate expected counts based on background mutation rate
+        LGD_exp = 0
+        Mis_exp = 0
+
+        if BGMR is not None:
+            try:
+                # Get mutation rates for this gene
+                LGD_MR = BGMR.loc[g, "p_LGD"]
+
+                # Use prevel_0.5 for damaging missense if available, else p_misense
+                if "prevel_0.5" in BGMR.columns:
+                    Mis_MR = BGMR.loc[g, "prevel_0.5"]
+                else:
+                    Mis_MR = BGMR.loc[g, "p_misense"]
+
+                # Expected counts = mutation_rate * scale_factor * n_probands * 2 (diploid)
+                LGD_exp = LGD_MR * LGD_SCALE * Nproband * 2
+                Mis_exp = Mis_MR * MIS_SCALE * Nproband * 2
+            except Exception:
+                LGD_exp = Mis_exp = 0
+
+        # Calculate gene weight with expected-count adjustment
+        # Weight = (observed - expected) * category_weight
+        weight = (nLGD - LGD_exp) * lof_weight + (nMis - Mis_exp) * mis_weight
+        gene2MutN[g] = weight
+
+    # Write output if requested
+    if out is not None:
+        with open(out, 'wt', newline='') as f:
+            writer = csv.writer(f)
+            for k, v in sorted(gene2MutN.items(), key=lambda x: x[1], reverse=True):
+                writer.writerow([k, v])
+
+    return gene2MutN
+
+
+def SPARK_Gene_Weights_Extended(
+    MutFil,
+    BGMR=None,
+    Nproband=42607,
+    UsepLI=True,
+    Bmis=False,
+    out=None,
+    lof_col="AutismMerged_LoF",
+    dmis_col="AutismMerged_Dmis_REVEL0.5",
+    bmis_col="AutismMerged_Bmis_REVEL0.5"
+):
+    """
+    Extended version of SPARK_Gene_Weights with explicit column names.
+
+    This is a more flexible version that allows specifying column names,
+    useful for applying to different datasets (ASD, NDD, etc.)
+
+    Parameters
+    ----------
+    MutFil : pd.DataFrame
+        DataFrame of mutations with gene-level counts
+    BGMR : pd.DataFrame, optional
+        Background mutation rate DataFrame
+    Nproband : int
+        Number of probands in cohort
+    UsepLI : bool
+        If True, apply pLI-based gene weighting
+    Bmis : bool
+        If True, include benign missense category
+    out : str, optional
+        Output file path
+    lof_col : str
+        Column name for LoF mutations
+    dmis_col : str
+        Column name for damaging missense mutations
+    bmis_col : str
+        Column name for benign missense mutations
+
+    Returns
+    -------
+    tuple
+        (gene2None, gene2MutN) dictionaries
+    """
+    gene2None = {}
+    gene2MutN = {}
+
+    for _, row in MutFil.iterrows():
+        try:
+            g = int(row["EntrezID"])
+        except Exception:
+            continue
+        gene2None[g] = 1
+
+        # Initialize expected mutation counts
+        LGD_exp = Dmis_exp = Bmis_exp = 0
+        if BGMR is not None:
+            try:
+                LGD_MR = BGMR.loc[g, "p_LGD"]
+                Dmis_MR = BGMR.loc[g, "prevel_0.5"]
+                Bmis_MR = Dmis_MR - BGMR.loc[g, "p_misense"]
+                LGD_exp = LGD_MR * 0.138 * Nproband * 2
+                Dmis_exp = Dmis_MR * 0.130 * Nproband * 2
+                Bmis_exp = Bmis_MR * 0.022 * Nproband * 2
+            except Exception:
+                LGD_exp = Dmis_exp = Bmis_exp = 0
+
+        pLI = 0.0
+        if UsepLI:
+            try:
+                pLI = float(row["ExACpLI"])
+            except Exception:
+                pLI = 0.0
+
+        # Get mutation counts
+        n_lof = row.get(lof_col, 0)
+        n_dmis = row.get(dmis_col, 0)
+        n_bmis = row.get(bmis_col, 0) if Bmis else 0
+
+        # Compute gene weights
+        if UsepLI:
+            if pLI >= 0.5:
+                if Bmis:
+                    score = (
+                        (n_lof - LGD_exp) * 0.554 +
+                        (n_dmis - Dmis_exp) * 0.333 +
+                        (n_bmis - Bmis_exp) * 0.099
+                    )
+                else:
+                    score = (
+                        (n_lof - LGD_exp) * 0.554 +
+                        (n_dmis - Dmis_exp) * 0.333
+                    )
+            else:
+                if Bmis:
+                    score = (
+                        (n_lof - LGD_exp) * 0.138 +
+                        (n_dmis - Dmis_exp) * 0.130 +
+                        (n_bmis - Bmis_exp) * 0.022
+                    )
+                else:
+                    score = (
+                        (n_lof - LGD_exp) * 0.138 +
+                        (n_dmis - Dmis_exp) * 0.130
+                    )
+        else:
+            score = (
+                (n_lof - LGD_exp) * 0.457 +
+                (n_dmis - Dmis_exp) * 0.231
+            )
+        gene2MutN[g] = score
+
+    if out is not None:
+        with open(out, 'wt', newline='') as f:
+            writer = csv.writer(f)
+            for k, v in sorted(gene2MutN.items(), key=lambda x: x[1], reverse=True):
+                writer.writerow([k, v])
+
+    return gene2None, gene2MutN
     
 # This function is used to bootstrap the gene mutations 
 def bootstrap_gene_mutations(
