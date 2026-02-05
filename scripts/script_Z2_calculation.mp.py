@@ -8,8 +8,9 @@
 
 import argparse
 import sys
+import os
 from pathlib import Path
-sys.path.insert(1, '../src')
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 from ASD_Circuits import *
 from tqdm import tqdm
 
@@ -58,7 +59,7 @@ class script_Z2_calculation:
 
 def GetOptions():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', default=ExpZscoreMatFil,
+    parser.add_argument('-i', '--input', required=True,
             type=str, help='expression spec (Z1) matrix')
     parser.add_argument('-s', '--start', type=int,
             help='start index of genes')

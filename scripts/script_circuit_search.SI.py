@@ -1,6 +1,7 @@
 import argparse
 import sys
-sys.path.insert(1, '../src')
+import os
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 from ASD_Circuits import *
 
 #res = run_CircuitOpt(adj_mat, BiasDF, topN=topN, keepN=keepN, minbias=minbias)
