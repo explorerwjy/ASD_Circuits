@@ -1,0 +1,209 @@
+# Dataset-specific configuration
+# Use this to define Patch-seq datasets and their properties
+
+datasets:
+  V1_mouse_gouwens:
+    name: "V1 Mouse Patch-seq (Gouwens et al. 2020)"
+    species: "mouse"
+    brain_region: "VISp"
+    technology: "Patch-seq (Smart-seq2)"
+    sample_count: 4435
+    publication: "Gouwens et al. (2020) Cell"
+    dandi_id: "000020"
+
+    # Data paths (relative to data_dir or absolute)
+    paths:
+      # Transcriptomics data
+      expression_counts: "V1_patchseq_counts.csv"  # genes × cells CSV
+      metadata: "V1_patchseq_metadata.csv"  # Cell metadata
+      ephys_features: "V1_patchseq_ephys_features.pickle"  # Electrophysiology features
+
+      # External metadata (optional, full path)
+      external_metadata: "/mnt/data0/Patch-seq-RNA/allen_mouse_visual_cortex/20200625_patchseq_metadata_mouse.csv"
+
+    # Metadata columns
+    metadata:
+      cell_id_col: "transcriptomics_sample_id"  # Primary cell identifier
+      cell_type_col: "corresponding_AIT2.3.1_alias"  # Original cell type annotation
+      brain_region_col: "structure"  # Brain region/structure
+      ephys_id_col: "ephys_session_id"  # Electrophysiology session ID
+
+      # Column renaming for compatibility
+      rename_mapping:
+        "corresponding_AIT2.3.1_alias": "Patch-seq CT"
+
+    # File format specifications
+    file_formats:
+      expression: "csv"  # CSV format, genes × cells
+      metadata: "csv"  # CSV format
+      ephys: "pickle"  # Pickle format
+      compression: null  # No compression
+
+    # Pipeline parameters
+    pipeline:
+      use_for_training: true
+      batch_key: "tech_batch"  # Will be set to "PatchSeq_V1"
+      tech_batch_value: "PatchSeq_V1"
+
+
+  M1_mouse_tasic:
+    name: "M1 Mouse Patch-seq (Tasic et al. 2018)"
+    species: "mouse"
+    brain_region: "ALM"  # Anterior lateral motor cortex
+    technology: "Patch-seq (Smart-seq2)"
+    sample_count: 1329
+    publication: "Tasic et al. (2018) Nature"
+    dandi_id: "000008"
+
+    # Data paths (relative to data_dir or absolute)
+    paths:
+      # Transcriptomics data
+      expression_counts: "M1_patchseq_counts.csv.gz"  # genes × cells CSV, gzipped
+      metadata: "M1_patchseq_metadata.csv"  # Cell metadata
+      ephys_features: "M1_patchseq_ephys_features.csv"  # Electrophysiology features
+
+    # Metadata columns
+    metadata:
+      cell_id_col: "Cell"  # Primary cell identifier
+      cell_type_col: "RNA type"  # Original cell type annotation
+      family_col: "RNA family"  # Broader cell family classification
+      cre_line_col: "Cre"  # Cre driver line
+      layer_col: "Inferred layer"  # Cortical layer
+
+      # Optional columns (included if present)
+      optional_cols:
+        - "Cre"
+        - "Inferred layer"
+        - "Layer"
+
+    # File format specifications
+    file_formats:
+      expression: "csv"  # CSV format, genes × cells
+      metadata: "csv"  # CSV format (tab-separated by default)
+      ephys: "csv"  # CSV format
+      compression: "gzip"  # Expression file is gzipped
+      metadata_sep: "\t"  # Tab-separated (fallback to comma)
+
+    # Pipeline parameters
+    pipeline:
+      use_for_training: true
+      batch_key: "tech_batch"  # Will be set to "PatchSeq_M1"
+      tech_batch_value: "PatchSeq_M1"
+
+
+  # Reference atlas configuration
+  reference_atlas:
+    name: "Allen Institute Mouse Whole Cortex 10x"
+    species: "mouse"
+    brain_regions: ["VISp", "ALM", "MOp", "MOs", "SSp", "ACA", "RSP", "PTLp"]
+    technology: "10x Chromium v3"
+    sample_count: 1093859
+    publication: "Yao et al. (2021) Cell"
+
+    # Data paths (relative to atlas_dir or absolute)
+    paths:
+      expression_part1: "Isocortex-1-raw.h5ad"  # Part 1 of expression data
+      expression_part2: "Isocortex-2-raw.h5ad"  # Part 2 of expression data
+      metadata: "cell_metadata.csv"  # Cell metadata with annotations
+
+    # Metadata columns
+    metadata:
+      cell_id_col: "cell_label"  # Primary cell identifier
+      cluster_col: "cluster"  # Fine-grained cluster assignment
+      subclass_col: "subclass"  # Broader subclass assignment
+      class_col: "class"  # Major cell class (Glutamatergic, GABAergic, etc.)
+      region_col: "region_label"  # Brain region
+
+    # File format specifications
+    file_formats:
+      expression: "h5ad"  # AnnData format
+      metadata: "csv"  # CSV format
+      gene_id_type: "ensembl"  # Gene IDs in h5ad (converted to symbols)
+      gene_symbol_col: "gene_symbol"  # Column containing gene symbols
+
+    # Pipeline parameters
+    pipeline:
+      batch_key: "tech_batch"  # Will be set to "Allen_Atlas"
+      tech_batch_value: "Allen_Atlas"
+
+
+  # Ion channel genes
+  ion_channel_genes:
+    paths:
+      go_terms: "gene_lists/ion_channel_genes_GO.txt"
+      curated_177: "gene_lists/177_ion_channel_genes.txt"
+    source: "both"  # Use both GO and curated lists
+
+
+# Integration method defaults
+integration:
+  default_method: "scvi"
+
+  scvi:
+    n_latent: 50
+    n_layers: 2
+    n_hidden: 256
+    max_epochs: 400
+    early_stopping: true
+    early_stopping_patience: 50
+    dropout_rate: 0.1
+    gene_likelihood: "nb"  # negative binomial
+
+  scanvi:
+    n_latent: 50
+    n_layers: 2
+    n_hidden: 256
+    max_epochs: 400
+    use_labels: true
+    unlabeled_category: "Unknown"
+
+  harmony:
+    n_pcs: 50
+    max_iter_harmony: 20
+    theta: 2.0
+
+
+# Mapping parameters
+mapping:
+  k_candidates: 30  # Increased from 15 for better rare type detection
+  k_nn: 20
+  conf_threshold_subclass: 0.7
+  conf_threshold_cluster: 0.5  # Relaxed from 0.7
+  distance_weighted: true
+
+
+# QC filters (can override species-specific defaults)
+qc:
+  apply_filters: true
+  flag_non_neuronal: true
+  require_manual_review_non_neuronal: true
+
+  # Custom thresholds (optional, overrides species defaults)
+  # min_genes: 1500
+  # min_counts: 5000
+  # max_pct_mito: 10.0
+
+
+# Output configuration
+output:
+  save_intermediate: true
+  save_latent_embeddings: true
+  save_canonical_profiles: true
+  save_annotated_metadata: true  # Save metadata with mapping results
+  compression: "gzip"
+  float_precision: "float32"
+
+  # Annotation output
+  annotated_metadata_dir: "results/annotated_metadata"
+
+
+# Directory structure (relative to project root)
+directories:
+  data_dir: "dat/expression"  # Patch-seq expression data
+  atlas_dir: "dat/expression/reference_atlas"  # Reference atlas
+  results_dir: "atlas_matching/results"  # All results
+  preprocessed_dir: "atlas_matching/results/preprocessed"  # Preprocessed data
+  models_dir: "atlas_matching/results/models"  # Trained models
+  scvi_mapped_dir: "atlas_matching/results/scvi_mapped"  # Mapping results
+  canonical_dir: "atlas_matching/results/canonical"  # Canonical expression
+  annotated_dir: "atlas_matching/results/annotated_metadata"  # Annotated metadata
