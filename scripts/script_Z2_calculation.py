@@ -8,7 +8,8 @@
 
 import argparse
 import sys
-sys.path.insert(1, '/home/jw3514/Work/CellType_Psy/src/')
+import os
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 from ASD_Circuits import *
 
 class script_Z2_calculation:
