@@ -10,35 +10,74 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import seaborn as sns
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr, spearmanr, mannwhitneyu
 
 # Helper for pretty p-value formatting everywhere
+def format_pval(pval):
+    """Format a p-value as a string (number only, no 'p =' prefix)."""
+    if np.isnan(pval):
+        return "nan"
+    if pval < 1e-10:
+        return "< 1e-10"
+    if pval < 0.001:
+        return f"{pval:.1e}"
+    if pval < 0.01:
+        return f"{pval:.4f}"
+    if pval < 0.1:
+        return f"{pval:.3f}"
+    return f"{pval:.2f}"
+
+
 def pretty_pval_allstyle(pval):
+    """Format a p-value with 'p =' prefix for display in plots."""
     if np.isnan(pval):
         return "p = nan"
-    elif pval < 1e-10:
+    if pval < 1e-10:
         return "p < 1e-10"
-    else:
-        # choose scientific or decimal based on size
-        if pval < 1e-3:
-            return f"p = {pval:.2e}"
-        elif pval < 0.01:
-            return f"p = {pval:.3f}"
-        elif pval < 0.1:
-            return f"p = {pval:.2f}"
-        else:
-            return f"p = {pval:.2f}"
+    return f"p = {format_pval(pval)}"
 
-# Import ScoreCircuit_SI_Joint from ASD_Circuits if available
+# Import ScoreCircuit_SI_Joint and GetPermutationP from ASD_Circuits if available
 try:
-    from ASD_Circuits import ScoreCircuit_SI_Joint
+    from ASD_Circuits import ScoreCircuit_SI_Joint, GetPermutationP
 except ImportError:
-    # Define a placeholder if not available
+    # Define placeholders if not available
     def ScoreCircuit_SI_Joint(STRs, InfoMat):
         raise ImportError("ScoreCircuit_SI_Joint must be imported from ASD_Circuits")
+    def GetPermutationP(null, obs):
+        raise ImportError("GetPermutationP must be imported from ASD_Circuits")
 
 # Constants for cell type classification
 ABC_nonNEUR = ['30 Astro-Epen', '31 OPC-Oligo', '32 OEC', '33 Vascular', '34 Immune']
+
+# Shared color palettes for disorders and neurotransmitter systems
+DISORDER_COLORS = {
+    "ASD": "#1f77b4",
+    "T2D": "#ff7f0e",
+    "IBD": "#2ca02c",
+    "HDL_C": "#d62728",
+    "Parkinson": "#9467bd",
+    "HBALC": "#8c564b",
+    "Alzheimer": "#e377c2",
+}
+
+NT_COLORS = {
+    "dopamine":      "#e45756",
+    "serotonin":     "#4e79a7",
+    "oxytocin":      "#76b7b2",
+    "acetylcholine": "#f28e2b",
+}
+
+def get_system_color(name):
+    """Look up color for a disorder or neurotransmitter system name."""
+    if name in DISORDER_COLORS:
+        return DISORDER_COLORS[name]
+    if name.lower() in NT_COLORS:
+        return NT_COLORS[name.lower()]
+    # case-insensitive fallback for disorder names
+    for k, v in DISORDER_COLORS.items():
+        if name.lower() == k.lower():
+            return v
+    return "#555555"
 
 
 # ============================================================================
@@ -245,6 +284,7 @@ def plot_structure_bias_comparison(
     )
 
     # Set labels
+    # Increase fontsize of axis labels by 50%: from 14 to 21, and ticks from default to 18
     if metric == 'Rank':
         xlabel = f'{suffixes[1][1:]} Structure Bias Rank'
         ylabel = f'{suffixes[0][1:]} Structure Bias Rank'
@@ -254,9 +294,10 @@ def plot_structure_bias_comparison(
         xlabel = f'{suffixes[1][1:]} Structure Bias'
         ylabel = f'{suffixes[0][1:]} Structure Bias'
 
-    ax1.set_xlabel(xlabel, fontsize=14)
-    ax1.set_ylabel(ylabel, fontsize=14)
+    ax1.set_xlabel(xlabel, fontsize=21)
+    ax1.set_ylabel(ylabel, fontsize=21)
     ax1.grid(True, linestyle='--', alpha=0.7)
+    ax1.tick_params(axis='both', which='major', labelsize=18)
 
     # Show region legend conditionally
     if show_region_legend:
@@ -995,6 +1036,946 @@ def plot_boxplot_mouseCT(pc_scores_df, Anno, ALL_CTs, PC, geneset_name="", ylabe
                                         linewidth=2, alpha=0.7, label='p = 0.05'))
     
     ax.legend(handles=legend_elements, loc='upper right', fontsize=12)
-    
+
     return ax
 
+
+def plot_top_residual_structures_with_CI(merged_data, residual_ci_df=None, top_n=30, top_threshold=40,
+                                         name1="ASD", name2="DD", figsize=(10, 8)):
+    """
+    Plot brain structures with largest residuals from regression analysis, with optional 95% CI error bars.
+
+    Parameters:
+    -----------
+    merged_data : DataFrame
+        Merged dataset with residual and region information
+    residual_ci_df : DataFrame or None
+        DataFrame with CI information (columns: ci_lower, ci_upper, median, mean).
+        If None, plots without error bars.
+    top_n : int
+        Number of top structures to display
+    top_threshold : int
+        Filter to structures in top N of at least one dataset
+    name1, name2 : str
+        Names of the two datasets being compared
+    figsize : tuple
+        Figure size (width, height)
+
+    Returns:
+    --------
+    top_diff : DataFrame
+        Top structures with largest residuals
+    """
+    # Filter to only structures that appear in top threshold of at least one dataset
+    top_structures = merged_data[(merged_data[f"Rank_{name1}"] <= top_threshold) |
+                                (merged_data[f"Rank_{name2}"] <= top_threshold)]
+
+    print(f"Total structures in top {top_threshold} of at least one dataset: {len(top_structures)}")
+
+    # Sort by absolute difference for top structures only
+    top_structures = top_structures.copy()
+    top_structures["ABS_DIFF"] = abs(merged_data[f"residual"])
+    top_structures = top_structures.sort_values('ABS_DIFF', ascending=True)
+
+    # Take the top N structures with largest differences from those in top threshold
+    top_n = min(top_n, len(top_structures))
+    top_diff = top_structures.tail(top_n)
+
+    print(f"Showing top {len(top_diff)} structures with largest differences (from top {top_threshold} filter)")
+
+    # Merge with CI data if provided
+    if residual_ci_df is not None:
+        top_diff = top_diff.merge(residual_ci_df[['ci_lower', 'ci_upper', 'median']],
+                                 left_index=True, right_index=True, how='left')
+        top_diff['residual_plot'] = top_diff['residual']
+        top_diff['ci_lower_plot'] = top_diff['ci_lower'].fillna(top_diff['residual'])
+        top_diff['ci_upper_plot'] = top_diff['ci_upper'].fillna(top_diff['residual'])
+    else:
+        top_diff['residual_plot'] = top_diff['residual']
+
+    # Define regions and colors
+    REGIONS_seq = ['Isocortex','Olfactory_areas', 'Cortical_subplate',
+                    'Hippocampus','Amygdala','Striatum',
+                    "Thalamus", "Hypothalamus", "Midbrain",
+                    "Medulla", "Pallidum", "Pons",
+                    "Cerebellum"]
+    REG_COR_Dic = dict(zip(REGIONS_seq, ["#268ad5", "#D5DBDB", "#7ac3fa",
+                                        "#2c9d39", "#742eb5", "#ed8921",
+                                        "#e82315", "#E6B0AA", "#f6b26b",
+                                        "#20124d", "#2ECC71", "#D2B4DE",
+                                        "#ffd966", ]))
+
+    # Create publication-quality plot of residuals for top_diff structures
+    plt.rcParams.update({'font.size': 12, 'font.family': 'Arial'})
+    fig, ax = plt.subplots(figsize=figsize, dpi=300)
+
+    # Sort top_diff by residuals for better visualization
+    top_diff_sorted = top_diff.sort_values('ABS_DIFF', ascending=True)
+
+    # Create colors based on region
+    colors = [REG_COR_Dic.get(region, '#808080') for region in top_diff_sorted['Region']]
+
+    # Calculate positions and values
+    y_pos = range(len(top_diff_sorted))
+    x_vals = top_diff_sorted['residual_plot'].values
+
+    # Create horizontal bar plot
+    bars = ax.barh(y_pos, x_vals,
+                   color=colors, alpha=0.8, edgecolor='black', linewidth=0.5)
+
+    # Add error bars if CI data is available
+    if residual_ci_df is not None:
+        xerr_lower = x_vals - top_diff_sorted['ci_lower_plot'].values
+        xerr_upper = top_diff_sorted['ci_upper_plot'].values - x_vals
+        ax.errorbar(x_vals, y_pos,
+                    xerr=[xerr_lower, xerr_upper],
+                    fmt='none', ecolor='black', elinewidth=1.5, capsize=3, capthick=1.5, alpha=0.7)
+
+    # Customize the plot with publication-quality styling
+    # yticklabels are the main tick labels for this horizontal bar plot,
+    # so these are the ones whose fontsize you want to increase
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels([name.replace('_', ' ') for name in top_diff_sorted.index],
+                       fontsize=18, fontweight='normal')
+    xlabel_suffix = " with 95% CI" if residual_ci_df is not None else ""
+    ax.set_xlabel(f'Residuals ({name1} vs {name2}){xlabel_suffix}', fontsize=15, fontweight='bold')
+
+    # Set X-axis tick font size (THIS IS YOUR REQUESTED CHANGE)
+    ax.tick_params(axis='x', labelsize=16)
+
+    # Remove top and right spines for cleaner look
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1)
+    ax.spines['bottom'].set_linewidth(1)
+
+    # Add subtle grid
+    ax.grid(True, axis='x', alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+
+    # Add vertical line at x=0 with better styling
+    ax.axvline(x=0, color='black', linestyle='-', alpha=0.7, linewidth=1)
+
+    # Create legend for regions with better styling
+    unique_regions = sorted(list(set(top_diff_sorted['Region'])))
+    legend_elements = [plt.Rectangle((0,0),1,1, facecolor=REG_COR_Dic.get(region, '#808080'),
+                                    alpha=0.8, edgecolor='black', linewidth=0.5)
+                       for region in unique_regions if region in REG_COR_Dic]
+    legend_labels = [region.replace('_', ' ') for region in unique_regions if region in REG_COR_Dic]
+
+    if legend_elements:
+        ax.legend(
+            legend_elements, legend_labels,
+            loc='center left',
+            bbox_to_anchor=(0.80, 0.15),
+            fontsize=10,
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+            framealpha=0.9
+        )
+
+    # Adjust layout and margins
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.3)  # Make room for structure names
+    plt.show()
+
+    return top_diff
+
+
+# --- Helpers for cluster_residual_boxplot ---
+
+def bh_fdr(pvals):
+    """Benjamini-Hochberg FDR correction; returns adjusted p-values."""
+    pvals = np.asarray(pvals, dtype=float)
+    n = np.sum(np.isfinite(pvals))
+    out = pvals.copy()
+    if n == 0:
+        return out
+    idx = np.where(np.isfinite(pvals))[0]
+    p = pvals[idx]
+    order = np.argsort(p)
+    ranked = p[order]
+    adj = ranked * n / (np.arange(1, n + 1))
+    adj = np.minimum.accumulate(adj[::-1])[::-1]
+    adj = np.clip(adj, 0, 1)
+    out_idx = np.empty_like(adj)
+    out_idx[order] = adj
+    out[idx] = out_idx
+    return out
+
+
+def p_to_star(p):
+    """Convert p-value to significance stars."""
+    if p < 1e-4: return "****"
+    if p < 1e-3: return "***"
+    if p < 1e-2: return "**"
+    if p < 5e-2: return "*"
+    return "ns"
+
+
+def wrap_label(s, max_len=16):
+    """Wrap a long label string for tick labels."""
+    if len(s) <= max_len:
+        return s
+    for sep in [" ", "_"]:
+        if sep in s:
+            parts = s.split(sep)
+            line1, line2 = [], []
+            cur = 0
+            for part in parts:
+                add = len(part) + (1 if line1 else 0)
+                if cur + add <= max_len:
+                    line1.append(part); cur += add
+                else:
+                    line2.append(part)
+            if line2:
+                return " ".join(line1) + "\n" + " ".join(line2)
+    return s
+
+
+def cluster_residual_boxplot(
+    results_df,
+    cluster_dict,
+    metric="residual",
+    palette=None,
+    figsize=(12, 8),
+    pairwise_tests=None,
+    p_adjust="fdr_bh",
+    p_style="stars",
+    show_ns=False,
+    wrap_xticks=True,
+    wrap_len=16,
+    point_size=2.2,
+    point_alpha=0.16,
+    point_color="0.2",
+    rasterize_points=True,
+    box_width=0.6,
+    fontsize=12,
+    title=None,
+    show=True
+):
+    """
+    Boxplot of residuals (or any metric) grouped by cell-type clusters,
+    with optional pairwise Mann-Whitney U tests and FDR correction.
+
+    Parameters:
+    -----------
+    results_df : DataFrame
+        DataFrame with metric column, indexed by cell type IDs
+    cluster_dict : dict
+        {cluster_name: [cell_type_ids]}
+    metric : str
+        Column name in results_df to plot
+    palette : list or dict or None
+        Colors for each cluster
+    pairwise_tests : list of tuples
+        [(groupA, groupB), ...] for Mann-Whitney U tests
+    p_adjust : str or None
+        "fdr_bh" for BH correction, None for raw p-values
+    p_style : str
+        "stars" or "exact" for annotation style
+    show_ns : bool
+        Whether to show non-significant comparisons
+
+    Returns:
+    --------
+    plot_df : DataFrame
+        Long-form DataFrame used for plotting
+    """
+    if metric not in results_df.columns:
+        raise ValueError(f"metric='{metric}' not in results_df.columns")
+    if pairwise_tests is None:
+        pairwise_tests = []
+
+    cluster_labels = list(cluster_dict.keys())
+
+    # palette
+    if palette is None:
+        palette = sns.color_palette("tab10", n_colors=len(cluster_labels))
+    elif isinstance(palette, dict):
+        palette = [palette[k] for k in cluster_labels]
+    else:
+        if len(palette) < len(cluster_labels):
+            raise ValueError(f"palette has {len(palette)} colors but needs {len(cluster_labels)}.")
+        palette = palette[:len(cluster_labels)]
+
+    # build plot_df
+    vals_list, n_points = [], []
+    for k in cluster_labels:
+        v = results_df.loc[cluster_dict[k], metric].dropna().values
+        vals_list.append(v)
+        n_points.append(len(v))
+
+    plot_df = pd.DataFrame({
+        "Cluster": np.repeat(cluster_labels, n_points),
+        metric: np.concatenate(vals_list) if len(vals_list) else np.array([])
+    })
+
+    # plot
+    sns.set_style("white")
+    sns.set_context("paper", font_scale=1.0)
+    fig, ax = plt.subplots(figsize=figsize, dpi=240)
+
+    sns.boxplot(
+        x="Cluster", y=metric, data=plot_df,
+        palette=palette, width=box_width,
+        showfliers=False, linewidth=1.0,
+        showmeans=True,
+        meanprops={"marker": "o", "markerfacecolor": "black",
+                   "markeredgecolor": "black", "markersize": 5},
+        ax=ax
+    )
+    for patch in ax.artists:
+        patch.set_alpha(0.88)
+
+    sns.stripplot(
+        x="Cluster", y=metric, data=plot_df,
+        color=point_color, alpha=point_alpha,
+        jitter=0.22, size=point_size,
+        ax=ax
+    )
+    if rasterize_points:
+        for coll in ax.collections:
+            coll.set_rasterized(True)
+
+    ax.axhline(0, color="black", linewidth=2.0, alpha=0.85, linestyle="--", zorder=2)
+    ax.grid(axis="y", color="0.86", linestyle="-", linewidth=0.8)
+    ax.grid(axis="x", visible=False)
+
+    ax.set_ylabel("Bias Residual", fontsize=fontsize * 1.8)
+    ax.set_xlabel("")
+    ax.tick_params(axis="y", labelsize=fontsize)
+
+    xticklabels = cluster_labels
+    if wrap_xticks:
+        xticklabels = [wrap_label(s, max_len=wrap_len) for s in xticklabels]
+    ax.set_xticklabels(xticklabels, rotation=35, ha="right", fontsize=fontsize*1.3)
+
+    if title:
+        ax.set_title(title, fontsize=fontsize + 2)
+
+    # prepare comparisons
+    def get_vals(group):
+        group = [group] if isinstance(group, str) else list(group)
+        arrs = []
+        for k in group:
+            if k not in cluster_dict:
+                continue
+            arrs.append(results_df.loc[cluster_dict[k], metric].dropna().values)
+        return np.concatenate(arrs) if len(arrs) else np.array([])
+
+    tests = []
+    for gA, gB in pairwise_tests:
+        A = get_vals(gA)
+        B = get_vals(gB)
+        if len(A) == 0 or len(B) == 0:
+            continue
+        gA_list = [gA] if isinstance(gA, str) else list(gA)
+        gB_list = [gB] if isinstance(gB, str) else list(gB)
+        x1 = float(np.mean([cluster_labels.index(k) for k in gA_list]))
+        x2 = float(np.mean([cluster_labels.index(k) for k in gB_list]))
+        _, p = mannwhitneyu(A, B, alternative="two-sided")
+        local_top = max(np.max(A), np.max(B))
+        tests.append({"x1": x1, "x2": x2, "p": p, "local_top": local_top})
+
+    if len(tests) == 0:
+        plt.subplots_adjust(bottom=0.28, top=0.92)
+        if show:
+            plt.show()
+        return plot_df
+
+    # adjust p
+    raw_p = np.array([t["p"] for t in tests], dtype=float)
+    adj_p = bh_fdr(raw_p) if p_adjust == "fdr_bh" else raw_p
+    for t, p_adj in zip(tests, adj_p):
+        t["p_adj"] = p_adj
+
+    # annotate brackets
+    y_min = float(np.nanmin(plot_df[metric].values))
+    y_max = float(np.nanmax(plot_df[metric].values))
+    y_range = (y_max - y_min) if y_max != y_min else 1.0
+    h = 0.020 * y_range
+    clearance = 0.03 * y_range
+    y_step = 0.10 * y_range
+
+    tests_sorted = sorted(tests, key=lambda t: (t["local_top"], abs(t["x2"] - t["x1"])))
+
+    placed = []
+    for t in tests_sorted:
+        p_use = t["p_adj"] if p_adjust else t["p"]
+        label = p_to_star(p_use) if p_style == "stars" else f"$p$={p_use:.2e}"
+        if (label == "ns") and (not show_ns):
+            continue
+
+        x1, x2 = t["x1"], t["x2"]
+        xlo, xhi = min(x1, x2), max(x1, x2)
+
+        y = t["local_top"] + clearance
+        while True:
+            yhi = y + h
+            overlap = False
+            for pxlo, pxhi, pylo, pyhi in placed:
+                if not (xhi < pxlo - 0.3 or xlo > pxhi + 0.3):
+                    if not (yhi < pylo - 0.01 or y > pyhi + 0.01):
+                        overlap = True
+                        break
+            if not overlap:
+                break
+            y += y_step
+
+        placed.append((xlo, xhi, y, y + h))
+        ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=1.1, c="k", alpha=0.9)
+        ax.text((x1 + x2) / 2, y + h - 2*h, label, ha="center", va="bottom", fontsize=fontsize*2.0)
+
+    plt.subplots_adjust(bottom=0.28, top=0.92)
+    if show:
+        plt.show()
+    return plot_df
+
+
+def plot_null_distribution_analysis(structure_name, null_dfs, observed_df, title_prefix="", plot=True):
+    """
+    Plot null distribution analysis for a given brain structure.
+
+    Parameters:
+    -----------
+    structure_name : str
+        Name of the structure to analyze
+    null_dfs : list of DataFrame
+        List of dataframes containing null distribution data
+    observed_df : DataFrame
+        Dataframe containing observed data
+    title_prefix : str
+        Optional prefix for the plot title
+    plot : bool
+        Whether to show the plot
+
+    Returns:
+    --------
+    p_value : float
+        One-tailed p-value (observed >= null)
+    observed_effect : float
+        Observed EFFECT value
+    null_effects : ndarray
+        Array of null EFFECT values
+    """
+    # Extract EFFECT values from all null datasets
+    null_effects = []
+    for df in null_dfs:
+        null_effects.append(df.loc[structure_name, "EFFECT"])
+
+    # Get observed value
+    observed_effect = observed_df.loc[structure_name, "EFFECT"]
+
+    # Calculate p-value (one-tailed test: observed > null)
+    null_effects = np.array(null_effects)
+    p_value = (np.sum(null_effects >= observed_effect) + 1) / (len(null_effects) + 1)
+
+    # Plot histogram
+    if plot:
+        plt.figure(figsize=(10, 6))
+        plt.hist(null_effects, bins=50, alpha=0.7, color='lightblue', edgecolor='black',
+                 label='Null distribution (Constrained Genes)')
+        plt.axvline(observed_effect, color='red', linestyle='--', linewidth=2,
+                    label=f'Observed (Spark ASD): {observed_effect:.4f}')
+        plt.xlabel('EFFECT')
+        plt.ylabel('Frequency')
+        plt.title(f'{title_prefix}{structure_name} EFFECT: Null Distribution vs Observed')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.text(0.05, 0.95, f'P-value: {p_value:.4f}', transform=plt.gca().transAxes,
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        plt.show()
+
+        print(f"Observed Spark ASD effect: {observed_effect:.4f}")
+        print(f"Null mean: {np.mean(null_effects):.4f}")
+        print(f"Null std: {np.std(null_effects):.4f}")
+        print(f"P-value: {p_value:.4f}")
+
+    return p_value, observed_effect, null_effects
+
+
+# ============================================================================
+# Neurotransmitter / Disorder CCS Plots
+# ============================================================================
+
+def plot_combined_bias_only(
+    results,
+    top_n=15,
+    save_plot=False,
+    results_dir="./results",
+    pvalue_label="q-value",
+    dpi=300
+):
+    """
+    Visualize only the COMBINED neurotransmitter system bias results,
+    in a 1xN (one row, N columns) figure: one barplot per system.
+    Shows significance stars (* for q < 0.05, ** for q < 0.01, *** for q < 0.001).
+    Each structure bar colored by region, using provided color schema.
+    """
+    import matplotlib.patches as mpatches
+    import os
+
+    REGIONS_seq = [
+        'Isocortex', 'Olfactory_areas', 'Cortical_subplate',
+        'Hippocampus', 'Amygdala', 'Striatum',
+        "Thalamus", "Hypothalamus", "Midbrain",
+        "Medulla", "Pallidum", "Pons",
+        "Cerebellum"
+    ]
+    REG_COR_Dic = dict(zip(REGIONS_seq, [
+        "#268ad5", "#D5DBDB", "#7ac3fa",
+        "#2c9d39", "#742eb5", "#ed8921",
+        "#e82315", "#E6B0AA", "#f6b26b",
+        "#20124d", "#2ECC71", "#D2B4DE",
+        "#ffd966",
+    ]))
+
+    def get_significance_star(q):
+        if q < 0.001:
+            return '***'
+        elif q < 0.01:
+            return '**'
+        elif q < 0.05:
+            return '*'
+        return ''
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    sns.set_context("notebook", font_scale=1.5)
+
+    systems = list(results.keys())
+    n_systems = len(systems)
+    n_panels = min(n_systems, 3)
+    fig, axes = plt.subplots(1, n_panels, figsize=(8 * n_panels, 7), dpi=dpi, constrained_layout=True)
+    if n_panels == 1:
+        axes = [axes]
+
+    # Gather region-color presence across all subplots for the legend
+    found_region_colors = dict()
+    for i in range(n_panels):
+        system = systems[i]
+        system_data = results[system]
+        if 'combined' not in system_data:
+            continue
+        top_combined = system_data['combined'].head(top_n)
+        if "Region" in top_combined.columns:
+            for region in top_combined["Region"]:
+                region = str(region)
+                col = REG_COR_Dic.get(region, "#888888")
+                found_region_colors[region] = col
+        else:
+            found_region_colors["Unknown"] = "#888888"
+
+    # For legend: order by REGIONS_seq, then add others
+    used_regions = [r for r in REGIONS_seq if r in found_region_colors]
+    others = sorted([r for r in found_region_colors if r not in REGIONS_seq])
+    legend_entries = used_regions + others
+    legend_handles = [
+        mpatches.Patch(color=found_region_colors[r], label=r.replace('_', ' ')) for r in legend_entries
+    ]
+
+    # Plotting each panel
+    for i in range(n_panels):
+        system = systems[i]
+        system_data = results[system]
+        ax = axes[i]
+
+        if 'combined' not in system_data:
+            ax.axis('off')
+            continue
+
+        top_combined = system_data['combined'].head(top_n)
+
+        region_col = []
+        if "Region" in top_combined.columns:
+            for region in top_combined["Region"]:
+                region = str(region)
+                col = REG_COR_Dic.get(region, "#888888")
+                region_col.append(col)
+        else:
+            region_col = ["#888888"] * len(top_combined)
+
+        eff_vals = top_combined['EFFECT'].values
+        ax.barh(
+            y=np.arange(len(top_combined)),
+            width=eff_vals,
+            color=region_col,
+            edgecolor='black',
+            alpha=0.94,
+            zorder=2
+        )
+
+        ax.set_yticks(np.arange(len(top_combined)))
+        ax.set_yticklabels([s.replace('_', ' ') for s in top_combined.index], fontsize=35, fontweight='bold')
+        ax.set_xlabel('Bias Effect', fontsize=18, fontweight='bold', labelpad=8)
+        ax.set_title(f'{system.capitalize()}', fontsize=21, fontweight='bold', pad=16)
+        ax.tick_params(axis='x', labelsize=16)
+        ax.tick_params(axis='y', labelsize=15)
+        ax.invert_yaxis()
+
+        for spine in ['top', 'right']:
+            ax.spines[spine].set_visible(False)
+        ax.spines['left'].set_linewidth(1.6)
+        ax.spines['bottom'].set_linewidth(1.6)
+
+        ax.axvline(0, ls='--', color='grey', lw=1.1, zorder=1)
+
+        if pvalue_label in top_combined.columns:
+            top_combined_pval = top_combined[pvalue_label]
+        else:
+            raise ValueError(f"P-value column '{pvalue_label}' not found in the dataframe for system '{system}', 'combined'.")
+        for j, (eff_val, p_val) in enumerate(zip(top_combined['EFFECT'], top_combined_pval)):
+            star = get_significance_star(p_val)
+            if star:
+                x_offset = 0.08 * (np.nanmax(np.abs(eff_vals)) or 1)
+                x = eff_val + x_offset if eff_val >= 0 else eff_val - x_offset
+                ha = 'left' if eff_val >= 0 else 'right'
+                ax.text(
+                    x, j,
+                    star,
+                    va='center',
+                    ha=ha,
+                    color='firebrick',
+                    fontsize=23,
+                    fontweight='bold',
+                    zorder=5,
+                )
+        bar_absmax = np.nanmax(np.abs(eff_vals))
+        ax.set_xlim(0, bar_absmax * 1.18)
+
+    # Place region legend on last panel
+    for i, ax in enumerate(axes):
+        if i == len(axes) - 1:
+            ax.legend(
+                handles=legend_handles,
+                loc='upper left',
+                bbox_to_anchor=(0.7, 0.6),
+                borderaxespad=0.6,
+                fontsize=16,
+                ncol=1,
+                title="Region",
+                title_fontsize=16,
+                frameon=True
+            )
+
+    fig.subplots_adjust(wspace=0.23, left=0.13, right=0.98, bottom=0.07, top=0.93)
+
+    if save_plot:
+        os.makedirs(results_dir, exist_ok=True)
+        plot_path = os.path.join(results_dir, f'neurotransmitter_COMBINED_barplots_top{top_n}.svg')
+        fig.savefig(plot_path, dpi=dpi, bbox_inches='tight', transparent=False)
+        print(f"Combined bar plots saved to: {plot_path}")
+    plt.show()
+    return fig
+
+
+def plot_CCS_pvalues_at_N(n, neuro_system_scores, topNs, Cont_Distance, colors=None):
+    """
+    Plot -log10(p-values) of circuit connectivity scores at given N (topN).
+
+    Args:
+        n: int
+            Rank at which to evaluate CCS p-values (e.g., 40, 50, etc).
+        neuro_system_scores: dict
+            Dictionary with system names as keys and CCS score arrays as values.
+        topNs: array-like
+            Array of topN values corresponding to score/Cont_Distance columns.
+        Cont_Distance: numpy array
+            Null distribution array, shape (n_permutations, len(topNs)).
+        colors: list or None
+            Color palette for bars. If None, uses default tab10 palette.
+    Returns:
+        fig, ax: matplotlib Figure and Axes objects
+    """
+    if colors is None:
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
+                  '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78']
+
+    topNs = np.asarray(topNs)
+    fig, ax = plt.subplots(figsize=(7, 6), dpi=120)
+
+    pvalues = {}
+    for system_category, scores in neuro_system_scores.items():
+        obs = scores[np.where(topNs == n)][0]
+        Null = Cont_Distance[:, np.where(topNs == n)].flatten()
+        z, p, xx = GetPermutationP(Null, obs)
+        pvalues[system_category] = p
+
+    labels = list(neuro_system_scores.keys())
+    values = [-np.log10(pvalues[label]) for label in labels]
+
+    colors_bar = colors[:len(labels)]
+    if len(colors_bar) < len(labels):
+        times = (len(labels) // len(colors)) + 1
+        colors_bar = (colors * times)[:len(labels)]
+
+    bars = ax.bar(range(len(labels)), values, color=colors_bar)
+    for bar in bars:
+        bar.set_linewidth(1.0)
+
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, rotation=45, ha='right')
+    ax.set_ylabel('-log10(p-value)')
+    ax.set_title(f'CCS Score P-values at N_Str={n} (Neurotransmitter systems)')
+    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.axhline(y=-np.log10(0.05), color='red', linestyle='--', alpha=0.5)
+
+    print(f"CCS score P-values at N_Str={n} (Neurotransmitter systems):")
+    for label in labels:
+        print(f"{label}: {format_pval(pvalues[label])}")
+
+    plt.tight_layout()
+    return fig, ax
+
+
+def plot_CCS_histogram_with_NT_bars(n, neuro_system_scores, Cont_Distance, topNs):
+    """
+    Plot histogram of siblings CCS distribution with vertical bars for each system.
+    System color is searched in both neurotransmitter and disorder color dicts.
+    Labels are placed with arrows to avoid overlap.
+
+    Args:
+        n: int
+            Rank at which to evaluate CCS (e.g., 20, 40)
+        neuro_system_scores: dict
+            Dictionary with system names as keys and CCS arrays as values
+        Cont_Distance: numpy array
+            Array of CCS scores for siblings (null distribution), shape (n_permutations, n_topNs)
+        topNs: numpy array
+            Array of topN values corresponding to Cont_Distance columns
+    Returns:
+        fig, ax: matplotlib Figure and Axes objects
+    """
+    import matplotlib as mpl
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    mpl.rcParams.update({
+        "axes.titlesize": 20,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": 14,
+        "axes.edgecolor": "k",
+        "axes.linewidth": 1.4,
+    })
+
+    n_idx = np.where(topNs == n)[0]
+    if len(n_idx) == 0:
+        raise ValueError(f"N={n} not found in topNs")
+    n_idx = n_idx[0]
+    siblings_CCS = Cont_Distance[:, n_idx].flatten()
+
+    # Gather observed values and p-values
+    nt_systems = list(neuro_system_scores.keys())
+    nt_values = {}
+    nt_pvalues = {}
+    for system in nt_systems:
+        obs = neuro_system_scores[system][n_idx]
+        nt_values[system] = obs
+        _, p_value, _ = GetPermutationP(siblings_CCS, obs)
+        nt_pvalues[system] = p_value
+
+    fig, ax = plt.subplots(dpi=300, figsize=(7, 5))
+
+    n_bins = 25
+    hist_n, bins, patches = ax.hist(
+        siblings_CCS, bins=n_bins, histtype="barstacked", align="mid",
+        facecolor="gray", alpha=0.75, label="Siblings", edgecolor="black", linewidth=0.7, zorder=2
+    )
+
+    systems_with_values = sorted(
+        [(system, nt_values[system], nt_pvalues[system]) for system in nt_systems],
+        key=lambda x: x[1]
+    )
+
+    # Plot vertical lines
+    for i, (system, obs_val, p_val) in enumerate(systems_with_values):
+        col = get_system_color(system)
+        if system == "ASD":
+            lw, alpha, ls, zorder = 3.5, 1.0, '-', 4
+        else:
+            lw, alpha, ls, zorder = 2.2, 0.85, '--', 3
+        ax.axvline(
+            obs_val, ymin=0, ymax=1, linewidth=lw, color=col,
+            linestyle=ls, label=system, alpha=alpha, zorder=zorder
+        )
+
+    # Annotate labels near vertical lines, staggered vertically to avoid overlap
+    hist_peak = hist_n.max()
+    x_range = siblings_CCS.max() - siblings_CCS.min()
+    x_offset = 0.04 * x_range  # small offset to the right of the line
+
+    # Stagger y-positions in upper part of histogram
+    y_positions = np.linspace(hist_peak * 0.95, hist_peak * 0.55, len(systems_with_values))
+
+    for (system, obs_val, p_val), y_pos in zip(systems_with_values, y_positions):
+        col = get_system_color(system)
+        ax.annotate(
+            f"{system}\np={format_pval(p_val)}",
+            xy=(obs_val, y_pos),
+            xytext=(obs_val + x_offset, y_pos),
+            fontsize=11, fontweight="bold",
+            color=col, ha="left", va="center",
+            bbox=dict(boxstyle='round,pad=0.25', facecolor="white", alpha=0.85, edgecolor=col, linewidth=1.5),
+            arrowprops=dict(arrowstyle='->', color=col, lw=1.2)
+        )
+
+    ax.set_xlabel("Circuit Connectivity Score (CCS)", fontsize=18, weight="bold")
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.tick_params(axis='both', which='major', length=6, width=1.2)
+    ax.grid(axis='y', linestyle="--", alpha=0.3)
+
+    from collections import OrderedDict
+    handles, labels = ax.get_legend_handles_labels()
+    od = OrderedDict()
+    for h, l in zip(handles, labels):
+        od[l] = h
+    ax.legend(
+        od.values(), od.keys(),
+        loc="upper right", bbox_to_anchor=(1.15, 1.0),
+        borderaxespad=0, frameon=False, ncol=1
+    )
+
+    plt.tight_layout()
+    return fig, ax
+
+
+# ============================================================================
+# Average Positive Mutation Bias Histogram
+# ============================================================================
+
+def plot_avg_positive_bias_histogram(
+    null_biases,
+    observed_bias,
+    control_biases=None,
+    observed_label="ASD Probands",
+    dpi=300,
+    figsize=(7, 5),
+):
+    """Plot histogram of null distribution with observed and control vertical lines.
+
+    Parameters
+    ----------
+    null_biases : array-like
+        Sibling null distribution of mean positive biases.
+    observed_bias : float
+        Observed ASD mean positive bias value.
+    control_biases : dict or None
+        Dictionary mapping disorder name to its mean positive bias value,
+        e.g. {"T2D": 0.12, "IBD": 0.08}.
+    observed_label : str
+        Label for the observed (ASD) line.
+    dpi : int
+        Figure resolution.
+    figsize : tuple
+        Figure size (width, height).
+
+    Returns
+    -------
+    fig, ax : matplotlib Figure and Axes objects.
+    """
+    import matplotlib as mpl
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    mpl.rcParams.update({
+        "axes.titlesize": 20,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": 14,
+        "axes.edgecolor": "k",
+        "axes.linewidth": 1.4,
+    })
+
+    if control_biases is None:
+        control_biases = {}
+
+    fig, ax = plt.subplots(dpi=dpi, figsize=figsize)
+
+    # Histogram of null distribution
+    n_hist, bins, patches = ax.hist(
+        null_biases, bins=20, histtype="barstacked", align="mid",
+        facecolor="gray", alpha=0.75, label="Siblings",
+        edgecolor="black", linewidth=0.7, zorder=2,
+    )
+
+    # ASD observed line
+    asd_color = get_system_color("ASD")
+    ax.axvline(
+        observed_bias, linewidth=3.5, color=asd_color,
+        linestyle='-', label=observed_label, zorder=4,
+    )
+
+    # Control lines
+    for name, val in control_biases.items():
+        col = get_system_color(name)
+        ax.axvline(
+            val, linewidth=2.2, color=col,
+            linestyle='--', label=name, alpha=0.85, zorder=3,
+        )
+
+    # Compute p-values for all lines
+    all_systems = [("ASD", observed_bias)]
+    for name, val in control_biases.items():
+        all_systems.append((name, val))
+
+    systems_with_pvals = []
+    for name, val in all_systems:
+        _, p_val, _ = GetPermutationP(null_biases, val)
+        systems_with_pvals.append((name, val, p_val))
+
+    # Stagger annotations vertically to avoid overlap
+    y_max = n_hist.max()
+    n_labels = len(systems_with_pvals)
+    y_positions = np.linspace(y_max * 0.95, y_max * 0.35, max(n_labels, 2))[:n_labels]
+
+    x_lo, x_hi = ax.get_xlim()
+    x_range = x_hi - x_lo
+    x_offset = x_range * 0.02
+    x_mid = (x_lo + x_hi) / 2.0
+
+    for (name, val, p_val), y_pos in zip(systems_with_pvals, y_positions):
+        col = get_system_color(name)
+        # Place label to the left if the line is in the right half
+        if val > x_mid:
+            txt_x = val - x_offset
+            ha = "right"
+        else:
+            txt_x = val + x_offset
+            ha = "left"
+        ax.annotate(
+            f"{name}\np={format_pval(p_val)}",
+            xy=(val, y_pos),
+            xytext=(txt_x, y_pos),
+            fontsize=11, fontweight="bold",
+            color=col, ha=ha, va="center",
+            bbox=dict(
+                boxstyle='round,pad=0.25', facecolor="white",
+                alpha=0.85, edgecolor=col, linewidth=1.5,
+            ),
+            arrowprops=dict(arrowstyle='->', color=col, lw=1.2),
+        )
+
+    # Axes styling
+    ax.set_xlabel("Average Positive Mutation Bias", fontsize=18, weight="bold")
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.tick_params(axis='both', which='major', length=6, width=1.2)
+    ax.grid(axis='y', linestyle="--", alpha=0.3)
+
+    # Deduplicated legend
+    from collections import OrderedDict
+    handles, labels = ax.get_legend_handles_labels()
+    od = OrderedDict()
+    for h, l in zip(handles, labels):
+        od[l] = h
+    ax.legend(
+        od.values(), od.keys(),
+        loc="upper left", bbox_to_anchor=(0.45, 1.0),
+        borderaxespad=0, frameon=False, ncol=1,
+    )
+
+    plt.tight_layout()
+    return fig, ax
