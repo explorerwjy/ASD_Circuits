@@ -183,7 +183,9 @@ def plot_correlation_profile_together(
         cors2.append(corrval)
         pvals2.append(pval)
     
-    plt.figure(figsize=(8, 5.5))
+    fig = plt.figure(figsize=(8, 5.5), facecolor='none')
+    fig.patch.set_alpha(0)
+    plt.gca().patch.set_alpha(0)
     sns.set(style="whitegrid", font_scale=1.25)
     sns.lineplot(x=TopN_list, y=cors1, marker='o', linewidth=2.5, label=label1, color='royalblue')
     sns.lineplot(x=TopN_list, y=cors2, marker='s', linewidth=2.5, label=label2, color='orange')
@@ -294,8 +296,8 @@ def plot_structure_bias_comparison(
         xlabel = f'{suffixes[1][1:]} Structure Bias'
         ylabel = f'{suffixes[0][1:]} Structure Bias'
 
-    ax1.set_xlabel(xlabel, fontsize=21)
-    ax1.set_ylabel(ylabel, fontsize=21)
+    ax1.set_xlabel(xlabel, fontsize=21, fontweight='bold')
+    ax1.set_ylabel(ylabel, fontsize=21, fontweight='bold')
     ax1.grid(True, linestyle='--', alpha=0.7)
     ax1.tick_params(axis='both', which='major', labelsize=18)
 
@@ -385,10 +387,13 @@ def plot_circuit_connectivity_scores_multi(
     """
     conn_types = list(cont_distance_dict.keys())
     n_conn = len(conn_types)
-    fig, axes = plt.subplots(n_conn, 1, dpi=480, figsize=(7, 4*n_conn))
+    fig, axes = plt.subplots(n_conn, 1, dpi=480, figsize=(7, 4*n_conn), facecolor='none')
+    fig.patch.set_alpha(0)
 
     if n_conn == 1:
         axes = [axes]
+    for _ax in axes:
+        _ax.patch.set_alpha(0)
 
     BarLen = 34.1
 
@@ -478,7 +483,9 @@ def plot_source_target_heatmap(results, top_n=15, save_plot=False, results_dir="
     comparison_df = comparison_df.loc[comparison_df.mean(axis=1).sort_values(ascending=False).index]
     
     # Plot heatmap
-    fig, ax = plt.subplots(figsize=(12, max(8, len(comparison_df) * 0.3)))
+    fig, ax = plt.subplots(figsize=(12, max(8, len(comparison_df) * 0.3)), facecolor='none')
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
     sns.heatmap(comparison_df.head(top_n), 
                 annot=True, fmt='.2f', cmap='RdYlBu_r', center=0,
                 yticklabels=[s.replace('_', ' ') for s in comparison_df.head(top_n).index],
@@ -540,9 +547,12 @@ def plot_source_target_only(
     n_systems = len(systems)
     
     # Create subplots
-    fig, axes = plt.subplots(n_systems, 3, figsize=(25, 4*n_systems), dpi=480)
+    fig, axes = plt.subplots(n_systems, 3, figsize=(25, 4*n_systems), dpi=480, facecolor='none')
+    fig.patch.set_alpha(0)
     if n_systems == 1:
         axes = axes.reshape(1, -1)
+    for _ax in axes.flat:
+        _ax.patch.set_alpha(0)
     
     for i, system in enumerate(systems):
         system_data = results[system]
@@ -779,8 +789,10 @@ def plot_correlation_scatter_mouseCT(
     print(f"Non-neuronal correlation: {corr_nonneur:.2f} ({pretty_pval(p_nonneur)})")
 
     if ax is None:
-        plt.figure(figsize=(6.5,6), dpi=dpi)
+        fig = plt.figure(figsize=(6.5,6), dpi=dpi, facecolor='none')
+        fig.patch.set_alpha(0)
         ax = plt.gca()
+        ax.patch.set_alpha(0)
 
     # Scatter plot
     # x = values1, y = values2 for both groups
@@ -790,7 +802,7 @@ def plot_correlation_scatter_mouseCT(
                color="blue", alpha=0.6, s=5, label="Non-neuronal")
     ax.set_xlabel(name1, fontsize=22)
     ax.set_ylabel(name2, fontsize=22)
-    ax.legend(fontsize=12, loc="upper left")
+    ax.legend(fontsize=18, loc="upper left")
 
     # Add linear regression line using all points (as in the notebook)
     if len(values1) > 1:
@@ -848,7 +860,9 @@ def PlotBiasContrast_v2(MergeDF, name1, name2, dataset="Human", title=""):
         NonNEUR = MergeDF[~MergeDF["Supercluster_{}".format(name1)].isin(Neurons)]
         X_NEUR, Y_NEUR = NEUR["EFFECT_{}".format(name1)], NEUR["EFFECT_{}".format(name2)]
         X_NonNEUR, Y_NonNEUR = NonNEUR["EFFECT_{}".format(name1)], NonNEUR["EFFECT_{}".format(name2)]
-        fig, ax = plt.subplots(dpi=300, figsize=(5, 5))
+        fig, ax = plt.subplots(dpi=300, figsize=(5, 5), facecolor='none')
+        fig.patch.set_alpha(0)
+        ax.patch.set_alpha(0)
 
         ax.scatter(X_NEUR, Y_NEUR, s=40, color="blue", edgecolor='black', alpha=0.7)
         ax.scatter(X_NonNEUR, Y_NonNEUR, s=40, color="red", edgecolor='black', alpha=0.7)
@@ -891,7 +905,9 @@ def PlotBiasContrast_v2(MergeDF, name1, name2, dataset="Human", title=""):
         NonNEUR = MergeDF[MergeDF["class_id_label_{}".format(name1)].isin(ABC_nonNEUR)]
         X_NEUR, Y_NEUR = NEUR["EFFECT_{}".format(name1)], NEUR["EFFECT_{}".format(name2)]
         X_NonNEUR, Y_NonNEUR = NonNEUR["EFFECT_{}".format(name1)], NonNEUR["EFFECT_{}".format(name2)]
-        fig, ax = plt.subplots(dpi=300, figsize=(5, 5))
+        fig, ax = plt.subplots(dpi=300, figsize=(5, 5), facecolor='none')
+        fig.patch.set_alpha(0)
+        ax.patch.set_alpha(0)
 
         ax.scatter(X_NEUR, Y_NEUR, s=40, color="blue", edgecolor='black', alpha=0.7)
         ax.scatter(X_NonNEUR, Y_NonNEUR, s=40, color="red", edgecolor='black', alpha=0.7)
@@ -955,8 +971,10 @@ def plot_boxplot_mouseCT(pc_scores_df, Anno, ALL_CTs, PC, geneset_name="", ylabe
         Axes object to plot on. If None, creates new figure
     """
     if ax is None:
-        plt.figure(figsize=(12,8), dpi=300)
+        fig = plt.figure(figsize=(12,8), dpi=300, facecolor='none')
+        fig.patch.set_alpha(0)
         ax = plt.gca()
+        ax.patch.set_alpha(0)
 
     # Create list to store data for boxplot and calculate means for sorting
     box_data = []
@@ -1107,7 +1125,9 @@ def plot_top_residual_structures_with_CI(merged_data, residual_ci_df=None, top_n
 
     # Create publication-quality plot of residuals for top_diff structures
     plt.rcParams.update({'font.size': 12, 'font.family': 'Arial'})
-    fig, ax = plt.subplots(figsize=figsize, dpi=300)
+    fig, ax = plt.subplots(figsize=figsize, dpi=300, facecolor='none')
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
 
     # Sort top_diff by residuals for better visualization
     top_diff_sorted = top_diff.sort_values('ABS_DIFF', ascending=True)
@@ -1136,9 +1156,10 @@ def plot_top_residual_structures_with_CI(merged_data, residual_ci_df=None, top_n
     # so these are the ones whose fontsize you want to increase
     ax.set_yticks(y_pos)
     ax.set_yticklabels([name.replace('_', ' ') for name in top_diff_sorted.index],
-                       fontsize=18, fontweight='normal')
-    xlabel_suffix = " with 95% CI" if residual_ci_df is not None else ""
-    ax.set_xlabel(f'Residuals ({name1} vs {name2}){xlabel_suffix}', fontsize=15, fontweight='bold')
+                       fontsize=15, fontweight='normal')
+    #xlabel_suffix = " with 95% CI" if residual_ci_df is not None else ""
+    xlabel_suffix = ""
+    ax.set_xlabel(f'Bias Residuals ({name1} vs {name2}){xlabel_suffix}', fontsize=20, fontweight='bold')
 
     # Set X-axis tick font size (THIS IS YOUR REQUESTED CHANGE)
     ax.tick_params(axis='x', labelsize=16)
@@ -1166,8 +1187,8 @@ def plot_top_residual_structures_with_CI(merged_data, residual_ci_df=None, top_n
     if legend_elements:
         ax.legend(
             legend_elements, legend_labels,
-            loc='center left',
-            bbox_to_anchor=(0.80, 0.15),
+            loc='upper left',
+            bbox_to_anchor=(1.02, 1.0),
             fontsize=10,
             frameon=True,
             fancybox=True,
@@ -1175,9 +1196,8 @@ def plot_top_residual_structures_with_CI(merged_data, residual_ci_df=None, top_n
             framealpha=0.9
         )
 
-    # Adjust layout and margins
-    plt.tight_layout()
-    plt.subplots_adjust(left=0.3)  # Make room for structure names
+    # Adjust layout: left margin for structure names, right margin for legend
+    fig.subplots_adjust(left=0.3, right=0.72)
     plt.show()
 
     return top_diff
@@ -1315,7 +1335,9 @@ def cluster_residual_boxplot(
     # plot
     sns.set_style("white")
     sns.set_context("paper", font_scale=1.0)
-    fig, ax = plt.subplots(figsize=figsize, dpi=240)
+    fig, ax = plt.subplots(figsize=figsize, dpi=240, facecolor='none')
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
 
     sns.boxplot(
         x="Cluster", y=metric, data=plot_df,
@@ -1474,7 +1496,9 @@ def plot_null_distribution_analysis(structure_name, null_dfs, observed_df, title
 
     # Plot histogram
     if plot:
-        plt.figure(figsize=(10, 6))
+        fig = plt.figure(figsize=(10, 6), facecolor='none')
+        fig.patch.set_alpha(0)
+        plt.gca().patch.set_alpha(0)
         plt.hist(null_effects, bins=50, alpha=0.7, color='lightblue', edgecolor='black',
                  label='Null distribution (Constrained Genes)')
         plt.axvline(observed_effect, color='red', linestyle='--', linewidth=2,
@@ -1547,9 +1571,12 @@ def plot_combined_bias_only(
     systems = list(results.keys())
     n_systems = len(systems)
     n_panels = min(n_systems, 3)
-    fig, axes = plt.subplots(1, n_panels, figsize=(8 * n_panels, 7), dpi=dpi, constrained_layout=True)
+    fig, axes = plt.subplots(1, n_panels, figsize=(8 * n_panels, 7), dpi=dpi, constrained_layout=True, facecolor='none')
+    fig.patch.set_alpha(0)
     if n_panels == 1:
         axes = [axes]
+    for _ax in axes:
+        _ax.patch.set_alpha(0)
 
     # Gather region-color presence across all subplots for the legend
     found_region_colors = dict()
@@ -1664,7 +1691,7 @@ def plot_combined_bias_only(
     if save_plot:
         os.makedirs(results_dir, exist_ok=True)
         plot_path = os.path.join(results_dir, f'neurotransmitter_COMBINED_barplots_top{top_n}.svg')
-        fig.savefig(plot_path, dpi=dpi, bbox_inches='tight', transparent=False)
+        fig.savefig(plot_path, dpi=dpi, bbox_inches='tight', transparent=True)
         print(f"Combined bar plots saved to: {plot_path}")
     plt.show()
     return fig
@@ -1693,7 +1720,9 @@ def plot_CCS_pvalues_at_N(n, neuro_system_scores, topNs, Cont_Distance, colors=N
                   '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78']
 
     topNs = np.asarray(topNs)
-    fig, ax = plt.subplots(figsize=(7, 6), dpi=120)
+    fig, ax = plt.subplots(figsize=(7, 6), dpi=120, facecolor='none')
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
 
     pvalues = {}
     for system_category, scores in neuro_system_scores.items():
@@ -1776,7 +1805,9 @@ def plot_CCS_histogram_with_NT_bars(n, neuro_system_scores, Cont_Distance, topNs
         _, p_value, _ = GetPermutationP(siblings_CCS, obs)
         nt_pvalues[system] = p_value
 
-    fig, ax = plt.subplots(dpi=300, figsize=(7, 5))
+    fig, ax = plt.subplots(dpi=300, figsize=(7, 5), facecolor='none')
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
 
     n_bins = 25
     hist_n, bins, patches = ax.hist(
@@ -1892,7 +1923,9 @@ def plot_avg_positive_bias_histogram(
     if control_biases is None:
         control_biases = {}
 
-    fig, ax = plt.subplots(dpi=dpi, figsize=figsize)
+    fig, ax = plt.subplots(dpi=dpi, figsize=figsize, facecolor='none')
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
 
     # Histogram of null distribution
     n_hist, bins, patches = ax.hist(
