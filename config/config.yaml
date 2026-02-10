@@ -26,6 +26,20 @@ gene_sets:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_Fu_ASD_185.gw"
   SCZ:
     geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/SCZ.top61.nopLI.LGD_Dmis_SameWeight.exclude_Mis2.gw"
+  SCZ_Protective:
+    geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/SCZ.top61.protect.gw"
+  SCZ_ExclNDD61:
+    geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/SCZ.top61.ExlNDD61.gw"
+  SCZ_ExclNDD297:
+    geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/SCZ.top61.ExlNDD297.gw"
+
+  # VNR (Verbal Numerical Reasoning) gene sets from UKBB
+  VNR_Positive:
+    geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/UKBB_VNR_Pos_GW_61.csv"
+  VNR_Negative:
+    geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/UKBB_VNR_Neg_GW_61.csv"
+  VNR_NoEffect:
+    geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/UKBB_VNR_NoEff_GW_61.csv"
 
   # Constraint_top_decile_LOEUF:
   #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/constraint_top_decile_LOEUF.gw"
