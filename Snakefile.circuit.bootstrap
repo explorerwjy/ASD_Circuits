@@ -1,7 +1,7 @@
 """
 Snakemake pipeline for Bootstrap Circuit Search
 
-This pipeline extends Snakefile.circuit.refactored to support bootstrap analysis.
+This pipeline extends Snakefile.circuit to support bootstrap analysis.
 It automatically discovers bootstrap bias files and runs circuit search on all of them,
 then aggregates results to compute 95% confidence intervals.
 
@@ -104,7 +104,7 @@ AGG_OUTPUT_DIR = config.get("aggregation_output_dir", "results/CircuitSearch_Boo
 # ============================================================================
 
 # Import all rules from main Snakefile
-include: "Snakefile.circuit.refactored"
+include: "Snakefile.circuit"
 
 # ============================================================================
 # Bootstrap-specific aggregation rules

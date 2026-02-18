@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, 'src')
+sys.path.insert(0, 'scripts/workflow')
 
 # Try to import optimized version (6-15x faster!)
 try:
@@ -60,9 +61,6 @@ if not dataset_config:
 
 # Extract the config (first and only entry)
 config_data = list(dataset_config.values())[0]
-
-# Get bias file path
-bias_df_path = config_data['bias_df']
 
 
 # Helper functions
@@ -122,9 +120,10 @@ def run_CircuitOpt(BiasDF, adj_mat, InfoMat, topN, keepN, minbias, measure, sa_s
     return res, score
 
 
-# Load data
+# Load data (supports both CSV and parquet+sim_id)
+from sibling_utils import load_bias_df
 print(f"[{dataset_name}] Loading bias data...")
-BiasDF = pd.read_csv(bias_df_path, index_col=0)
+BiasDF = load_bias_df(config_data)
 
 print(f"[{dataset_name}] Loading connectivity matrices...")
 adj_mat = pd.read_csv(snakemake.input.weight_mat, index_col=0)

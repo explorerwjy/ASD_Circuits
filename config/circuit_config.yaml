@@ -1,5 +1,5 @@
 # Configuration file for GENCIC Circuit Search Pipeline
-# Usage: snakemake -s Snakefile.circuit.refactored --configfile config/circuit_config.yaml --cores 10
+# Usage: snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml --cores 10
 
 # ============================================================================
 # Input Data Files

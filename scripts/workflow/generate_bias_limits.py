@@ -23,7 +23,9 @@ import os
 import pandas as pd
 
 sys.path.insert(0, 'src')
+sys.path.insert(0, 'scripts/workflow')
 from ASD_Circuits import BiasLim
+from sibling_utils import load_bias_df
 
 # Get Snakemake variables
 dataset_name = snakemake.params.dataset_name
@@ -38,12 +40,10 @@ if not dataset_config:
 # Extract the config (first and only entry)
 config_data = list(dataset_config.values())[0]
 
-# Get bias file path
-bias_df_path = config_data['bias_df']
-
-# Load bias dataframe
-print(f"[{dataset_name}] Loading bias data from: {bias_df_path}")
-BiasDF = pd.read_csv(bias_df_path, index_col=0)
+# Load bias dataframe (supports both CSV and parquet+sim_id)
+source = config_data.get('bias_df') or config_data.get('bias_parquet', '?')
+print(f"[{dataset_name}] Loading bias data from: {source}")
+BiasDF = load_bias_df(config_data)
 
 # Generate bias limits
 print(f"[{dataset_name}] Generating bias limits for size {size}...")

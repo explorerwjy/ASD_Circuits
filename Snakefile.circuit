@@ -7,6 +7,11 @@ This pipeline performs:
 3. Output of circuit search results for downstream analysis
 
 Usage:
+    # Run specific dataset
+    snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml \
+        --config dataset=ASD_All --cores 10
+
+    # Run all datasets
     snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml --cores 10
 """
 
@@ -18,95 +23,60 @@ import os
 # Configuration
 # ============================================================================
 
-# Default configuration (can be overridden by config file)
-configfile: "config/circuit_config.yaml"
-
-# ============================================================================
-# Dataset Configuration
-# ============================================================================
+# Config file is loaded by top-level Snakefile
+# When using this file standalone, specify: --configfile config/circuit_config.yaml
+# When including this file, the parent Snakefile should load the config
 
 # Get all datasets from config
 INPUT_STR_BIAS = config.get("Input_str_bias", {})
 
 # Allow user to specify which dataset to run via --config dataset=ASD_All
-# If not specified, run all datasets
 SELECTED_DATASET = config.get("dataset", None)
 
 if SELECTED_DATASET:
-    # Run only the specified dataset
     if SELECTED_DATASET not in INPUT_STR_BIAS:
         raise ValueError(f"Dataset '{SELECTED_DATASET}' not found in Input_str_bias. "
                         f"Available: {list(INPUT_STR_BIAS.keys())}")
     DATASETS = [SELECTED_DATASET]
 else:
-    # Run all datasets
     DATASETS = list(INPUT_STR_BIAS.keys())
 
-# Connectivity matrices (shared across all datasets)
+# Shared parameters
 WEIGHT_MAT = config["weight_mat"]
 INFO_MAT = config["info_mat"]
 OUTPUT_DIR = config["output_dir"]
-
-# Optional parameters with defaults
-CIRCUIT_SIZES = config.get("circuit_sizes", [46])  # Default to size 46
-TOP_N = config.get("top_n", 213)  # Number of top structures to consider
-MIN_BIAS_RANK = config.get("min_bias_rank", 50)  # Use 50th ranked bias as minimum
-SA_RUNTIMES = config.get("sa_runtimes", 5)  # Number of SA runs per bias limit
-SA_STEPS = config.get("sa_steps", 50000)  # Number of SA steps per run
-MEASURE = config.get("measure", "SI")  # Measure type: "SI" or "Connectivity"
-N_CORES = config.get("n_cores", 10)  # Number of cores for parallel execution
-
-# Helper function to get dataset info
-def get_dataset_info(dataset_key):
-    """Get name, bias_df, and description for a dataset"""
-    dataset_config = INPUT_STR_BIAS[dataset_key]
-    return {
-        'key': dataset_key,
-        'name': dataset_config['name'],
-        'bias_df': dataset_config['bias_df'],
-        'description': dataset_config.get('description', '')
-    }
-
-# Helper function to get dataset paths
-def get_dataset_paths(dataset_key):
-    """Get all paths for a dataset"""
-    dataset_name = INPUT_STR_BIAS[dataset_key]['name']
-    dataset_dir = os.path.join(OUTPUT_DIR, dataset_name)
-    return {
-        'dataset_dir': dataset_dir,
-        'biaslim_dir': os.path.join(dataset_dir, "biaslims"),
-        'results_dir': os.path.join(dataset_dir, "SA_results"),
-        'best_dir': os.path.join(dataset_dir, "best_circuits"),
-        'pareto_dir': os.path.join(dataset_dir, "pareto_fronts")
-    }
+CIRCUIT_SIZES = config.get("circuit_sizes", [46])
+TOP_N = config.get("top_n", 213)
+MIN_BIAS_RANK = config.get("min_bias_rank", 50)
+SA_RUNTIMES = config.get("sa_runtimes", 5)
+SA_STEPS = config.get("sa_steps", 50000)
+MEASURE = config.get("measure", "SI")
+N_CORES = config.get("n_cores", 10)
+VERBOSE = config.get("verbose", False)
 
 # ============================================================================
-# Helper Functions
+# Dynamic Input Functions
 # ============================================================================
 
-def get_bias_limits_for_size(wildcards):
-    """Get list of bias limits for a given circuit size"""
-    biaslim_file = os.path.join(BIASLIM_DIR, f"biaslim.size.{wildcards.size}.filtered.txt")
-    if os.path.exists(biaslim_file):
-        df = pd.read_csv(biaslim_file)
-        return df["bias"].tolist()
-    return []
+def get_sa_results_for_size(wildcards):
+    """Dynamically generate list of SA result files for a given size"""
+    checkpoint_output = checkpoints.generate_bias_limits.get(
+        output_dir=wildcards.output_dir,
+        dataset_name=wildcards.dataset_name,
+        size=wildcards.size
+    ).output.filtered_biaslim
 
-def get_all_sa_outputs():
-    """Generate list of all expected SA output files"""
-    outputs = []
-    for size in CIRCUIT_SIZES:
-        biaslim_file = os.path.join(BIASLIM_DIR, f"biaslim.size.{size}.filtered.txt")
-        if os.path.exists(biaslim_file):
-            df = pd.read_csv(biaslim_file)
-            for _, row in df.iterrows():
-                bias = row["bias"]
-                output_file = os.path.join(
-                    RESULTS_DIR, f"size_{size}",
-                    f"SA..topN_{TOP_N}-keepN_{size}-minbias_{bias}.txt"
-                )
-                outputs.append(output_file)
-    return outputs
+    df = pd.read_csv(checkpoint_output)
+    results = []
+    for _, row in df.iterrows():
+        bias = row["bias"]
+        result_file = os.path.join(
+            wildcards.output_dir, wildcards.dataset_name, "SA_results",
+            f"size_{wildcards.size}",
+            f"SA..topN_{TOP_N}-keepN_{wildcards.size}-minbias_{bias}.txt"
+        )
+        results.append(result_file)
+    return results
 
 # ============================================================================
 # Rules
@@ -123,11 +93,11 @@ rule all:
                output_dir=OUTPUT_DIR,
                dataset_name=[INPUT_STR_BIAS[d]['name'] for d in DATASETS])
 
+
 checkpoint generate_bias_limits:
     """
     Generate bias limits for each circuit size and dataset.
-    Produces bias limits with varying step sizes based on bias magnitude.
-    This is a checkpoint so downstream rules can dynamically depend on the generated bias limits.
+    Uses external script for clean separation of concerns.
     """
     output:
         raw_biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.txt",
@@ -135,54 +105,20 @@ checkpoint generate_bias_limits:
     params:
         size = "{size}",
         dataset_name = "{dataset_name}",
-        min_bias_rank = MIN_BIAS_RANK
-    run:
-        import sys
-        sys.path.insert(1, 'src')
-        from ASD_Circuits import BiasLim
+        min_bias_rank = MIN_BIAS_RANK,
+        # Only pass the specific dataset config (not entire dict) to avoid spurious reruns
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        }
+    script:
+        "scripts/workflow/generate_bias_limits.py"
 
-        # Find which dataset key corresponds to this dataset_name
-        dataset_key = None
-        for key, config_data in INPUT_STR_BIAS.items():
-            if config_data['name'] == params.dataset_name:
-                dataset_key = key
-                break
-
-        if dataset_key is None:
-            raise ValueError(f"Dataset name '{params.dataset_name}' not found in config")
-
-        # Get bias file path
-        bias_df_path = INPUT_STR_BIAS[dataset_key]['bias_df']
-
-        # Load bias dataframe
-        BiasDF = pd.read_csv(bias_df_path, index_col=0)
-
-        # Generate bias limits
-        lims = BiasLim(BiasDF, int(params.size))
-
-        # Save raw bias limits
-        os.makedirs(os.path.dirname(output.raw_biaslim), exist_ok=True)
-        with open(output.raw_biaslim, 'w') as fout:
-            fout.write("size,bias\n")
-            for size, bias in lims:
-                fout.write(f"{size},{bias}\n")
-
-        # Filter bias limits to reduce computation
-        # Use the bias value at min_bias_rank as threshold
-        min_bias_threshold = BiasDF.iloc[params.min_bias_rank - 1]["EFFECT"]
-
-        # Read raw limits and filter
-        df = pd.read_csv(output.raw_biaslim)
-        df_filtered = df[df["bias"] >= min_bias_threshold].reset_index(drop=True)
-        df_filtered.to_csv(output.filtered_biaslim, index=False)
-
-        print(f"[{params.dataset_name}] Generated {len(lims)} bias limits for size {params.size}")
-        print(f"[{params.dataset_name}] Filtered to {len(df_filtered)} bias limits (>= {min_bias_threshold:.3f})")
 
 rule run_sa_search:
     """
     Run simulated annealing circuit search for a specific size and bias limit.
-    Each run performs multiple SA iterations to find optimal circuits.
+    Uses external script with optimized SA implementation.
     """
     input:
         weight_mat = WEIGHT_MAT,
@@ -195,146 +131,30 @@ rule run_sa_search:
         size = "{size}",
         bias = "{bias}",
         dataset_name = "{dataset_name}",
-        runtimes = SA_RUNTIMES,
+        runtimes = lambda wildcards: next(
+            (v.get('sa_runtimes', SA_RUNTIMES)
+             for v in INPUT_STR_BIAS.values()
+             if v['name'] == wildcards.dataset_name),
+            SA_RUNTIMES),
         sa_steps = SA_STEPS,
-        measure = MEASURE
+        measure = MEASURE,
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        },
+        verbose = VERBOSE
     threads: 1
     resources:
         mem_mb = 2000,
         runtime = 360  # 6 hours max
-    run:
-        import sys
-        sys.path.insert(1, 'src')
+    script:
+        "scripts/workflow/run_sa_search.py"
 
-        # Try to import optimized version (6-15x faster!)
-        try:
-            from SA_optimized import (
-                CircuitSearch_SA_InfoContent_Optimized as CircuitSearch_SA_InfoContent,
-                CircuitSearch_SA_Connectivity_Optimized as CircuitSearch_SA_Connectivity
-            )
-            print("Using optimized SA implementation (6-15x faster)")
-        except ImportError:
-            # Fallback to original version
-            from ASD_Circuits import CircuitSearch_SA_InfoContent, CircuitSearch_SA_Connectivity
-            print("Warning: Using original SA implementation. Install numba for 15x speedup: pip install numba")
 
-        # Import the SA search function from the script
-        def FindInitState(tmpDF, size, BiasLim):
-            STRs = tmpDF.index.values
-            Biases = tmpDF["EFFECT"].values
-            minBias = np.min(Biases)
-            PsudoBiases = Biases - minBias + 1
-            PsudoBiases = np.power(PsudoBiases, BiasLim*150-17)
-            Probs = PsudoBiases/np.sum(PsudoBiases)
-            Probs[-1] = 1 - np.sum(Probs[0:-1])
-            rand_count = 0
-            while True:
-                init_STRs = np.random.choice(STRs, size=size, replace=False, p=Probs)
-                avg_bias_init_STRs = tmpDF.loc[init_STRs, "EFFECT"].mean()
-                if avg_bias_init_STRs >= BiasLim:
-                    return init_STRs, rand_count
-                else:
-                    rand_count += 1
-                    if rand_count > 10000:  # Safety break
-                        raise ValueError(f"Cannot find initial state with bias >= {BiasLim}")
-
-        def run_CircuitOpt(BiasDF, adj_mat, InfoMat, topN, keepN, minbias, measure, sa_steps):
-            tmpBiasDF = BiasDF.head(topN)
-            CandidateNodes = tmpBiasDF.index.values
-            Init_States = np.zeros(topN)
-            init_STRs, rand_count = FindInitState(tmpBiasDF, keepN, minbias)
-            for i, _STR in enumerate(CandidateNodes):
-                if _STR in init_STRs:
-                    Init_States[i] = 1
-
-            if measure == "SI":
-                ins = CircuitSearch_SA_InfoContent(tmpBiasDF, Init_States, adj_mat,
-                                                   InfoMat, CandidateNodes, minbias=minbias)
-            elif measure == "Connectivity":
-                ins = CircuitSearch_SA_Connectivity(BiasDF, Init_States, adj_mat,
-                                                    InfoMat, CandidateNodes, minbias=minbias)
-
-            # Use method copy for faster state copying (numpy arrays have .copy())
-            ins.copy_strategy = "method"
-            ins.Tmax = 1e-2
-            ins.Tmin = 5e-5
-            ins.steps = sa_steps  # User-configurable speed vs quality tradeoff
-            Tmps, Energys, state, e = ins.anneal()
-            res = CandidateNodes[np.where(state == 1)[0]]
-            score = -e
-            return res, score
-
-        # Find which dataset key corresponds to this dataset_name
-        dataset_key = None
-        for key, config_data in INPUT_STR_BIAS.items():
-            if config_data['name'] == params.dataset_name:
-                dataset_key = key
-                break
-
-        if dataset_key is None:
-            raise ValueError(f"Dataset name '{params.dataset_name}' not found in config")
-
-        # Get bias file path
-        bias_df_path = INPUT_STR_BIAS[dataset_key]['bias_df']
-
-        # Load data
-        BiasDF = pd.read_csv(bias_df_path, index_col=0)
-        adj_mat = pd.read_csv(input.weight_mat, index_col=0)
-        InfoMat = pd.read_csv(input.info_mat, index_col=0)
-
-        topN = int(params.topn)
-        keepN = int(params.size)
-        minbias = float(params.bias)
-
-        print(f"[{params.dataset_name}] Running SA search: topN={topN}, keepN={keepN}, minbias={minbias}, measure={params.measure}")
-
-        # Run SA optimization multiple times
-        with open(output.result, 'w') as fout:
-            for i in range(params.runtimes):
-                try:
-                    res, score = run_CircuitOpt(BiasDF, adj_mat, InfoMat,
-                                               topN=topN, keepN=keepN,
-                                               minbias=minbias, measure=params.measure,
-                                               sa_steps=params.sa_steps)
-                    meanbias = BiasDF.loc[res, "EFFECT"].mean()
-                    fout.write(f"{score}\t{meanbias}\t" + ",".join(res) + "\n")
-                except Exception as e:
-                    print(f"Warning: SA run {i+1} failed: {e}")
-                    continue
-
-        print(f"[{params.dataset_name}] Completed {params.runtimes} SA runs for size={keepN}, bias={minbias}")
-
-        # Create output directory
-        os.makedirs(os.path.dirname(output.result), exist_ok=True)
-
-# ============================================================================
-# Dynamic input function for aggregate rule
-# ============================================================================
-
-def get_sa_results_for_size(wildcards):
-    """Dynamically generate list of SA result files for a given size"""
-    # Use checkpoints to get the biaslim file
-    checkpoint_output = checkpoints.generate_bias_limits.get(
-        output_dir=wildcards.output_dir,
-        dataset_name=wildcards.dataset_name,
-        size=wildcards.size
-    ).output.filtered_biaslim
-
-    # Read the bias limits
-    df = pd.read_csv(checkpoint_output)
-    results = []
-    for _, row in df.iterrows():
-        bias = row["bias"]
-        result_file = os.path.join(
-            wildcards.output_dir, wildcards.dataset_name, "SA_results",
-            f"size_{wildcards.size}",
-            f"SA..topN_{TOP_N}-keepN_{wildcards.size}-minbias_{bias}.txt"
-        )
-        results.append(result_file)
-    return results
-
-# Update the aggregate rule to use dynamic input
 rule aggregate_sa_results:
+    """
+    Create completion marker after all SA runs for a size are complete.
+    """
     input:
         biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt",
         sa_results = get_sa_results_for_size
@@ -342,21 +162,23 @@ rule aggregate_sa_results:
         complete = "{output_dir}/{dataset_name}/SA_results/size_{size}/COMPLETE"
     params:
         size = "{size}",
-        dataset_name = "{dataset_name}"
+        dataset_name = "{dataset_name}",
+        measure = MEASURE,
+        sa_runtimes = SA_RUNTIMES
     run:
-        # Create completion marker
         os.makedirs(os.path.dirname(output.complete), exist_ok=True)
         with open(output.complete, 'w') as f:
             f.write(f"Circuit search completed for size {params.size}\n")
             f.write(f"Dataset: {params.dataset_name}\n")
             f.write(f"Total SA results: {len(input.sa_results)}\n")
-            f.write(f"Measure: {MEASURE}\n")
-            f.write(f"SA runtimes per limit: {SA_RUNTIMES}\n")
+            f.write(f"Measure: {params.measure}\n")
+            f.write(f"SA runtimes per limit: {params.sa_runtimes}\n")
+
 
 rule extract_best_circuits:
     """
     Extract the best circuit from each SA result file.
-    Keeps only the circuit with the highest score for each bias limit.
+    Uses external script for clean logic.
     """
     input:
         biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt",
@@ -366,105 +188,41 @@ rule extract_best_circuits:
     params:
         size = "{size}",
         dataset_name = "{dataset_name}",
-        output_dir = "{output_dir}"
-    run:
-        import csv
+        output_dir = "{output_dir}",
+        topn = TOP_N
+    script:
+        "scripts/workflow/extract_best_circuits.py"
 
-        # Read bias limits
-        df_biaslim = pd.read_csv(input.biaslim)
-
-        best_results = []
-        for _, row in df_biaslim.iterrows():
-            bias_limit = row["bias"]
-            sa_file = os.path.join(
-                params.output_dir, params.dataset_name, "SA_results",
-                f"size_{params.size}",
-                f"SA..topN_{TOP_N}-keepN_{params.size}-minbias_{bias_limit}.txt"
-            )
-
-            # Read all SA runs and find the best one
-            best_score = -float('inf')
-            best_line = None
-
-            try:
-                with open(sa_file, 'r') as f:
-                    for line in f:
-                        parts = line.strip().split('\t')
-                        if len(parts) >= 3:
-                            score = float(parts[0])
-                            if score > best_score:
-                                best_score = score
-                                best_line = line.strip()
-            except FileNotFoundError:
-                print(f"Warning: SA file not found: {sa_file}")
-                continue
-
-            if best_line:
-                best_results.append((bias_limit, best_line))
-
-        # Write best results
-        os.makedirs(os.path.dirname(output.best_circuits), exist_ok=True)
-        with open(output.best_circuits, 'w') as f:
-            f.write("# Best circuit for each bias limit\n")
-            f.write("# Format: score<tab>mean_bias<tab>structure1,structure2,...\n")
-            for bias_limit, line in best_results:
-                f.write(f"# Bias limit: {bias_limit}\n")
-                f.write(line + "\n")
-
-        print(f"[{params.dataset_name}] Extracted {len(best_results)} best circuits for size {params.size}")
 
 rule create_pareto_front:
     """
-    Create a consolidated Pareto front CSV file with all best circuits.
-    This CSV is easy to load and analyze in notebooks.
+    Create a consolidated Pareto front CSV file.
+    Uses external script for clean data processing.
     """
     input:
         best_circuits = "{output_dir}/{dataset_name}/best_circuits/size_{size}_best_circuits.txt",
-        biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt"
+        biaslim = "{output_dir}/{dataset_name}/biaslims/biaslim.size.{size}.filtered.txt",
+        weight_mat = WEIGHT_MAT,
+        info_mat = INFO_MAT
     output:
         pareto_csv = "{output_dir}/{dataset_name}/pareto_fronts/{dataset_name}_size_{size}_pareto_front.csv"
     params:
         size = "{size}",
-        dataset_name = "{dataset_name}"
-    run:
-        # Parse best circuits file
-        circuits_data = []
-        current_bias_limit = None
+        dataset_name = "{dataset_name}",
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        },
+        topn = TOP_N,
+        measure = MEASURE
+    script:
+        "scripts/workflow/create_pareto_front.py"
 
-        with open(input.best_circuits, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("# Bias limit:"):
-                    current_bias_limit = float(line.split(":")[1].strip())
-                elif line and not line.startswith("#"):
-                    parts = line.split('\t')
-                    if len(parts) >= 3:
-                        score = float(parts[0])
-                        mean_bias = float(parts[1])
-                        structures = parts[2]
-                        n_structures = len(structures.split(','))
-
-                        circuits_data.append({
-                            'bias_limit': current_bias_limit,
-                            'circuit_score': score,
-                            'mean_bias': mean_bias,
-                            'n_structures': n_structures,
-                            'structures': structures
-                        })
-
-        # Create DataFrame and save
-        df_pareto = pd.DataFrame(circuits_data)
-        df_pareto = df_pareto.sort_values('bias_limit').reset_index(drop=True)
-
-        os.makedirs(os.path.dirname(output.pareto_csv), exist_ok=True)
-        df_pareto.to_csv(output.pareto_csv, index=False)
-
-        print(f"[{params.dataset_name}] Created Pareto front CSV with {len(df_pareto)} circuits")
-        print(f"[{params.dataset_name}] Output: {output.pareto_csv}")
 
 rule create_metadata:
     """
     Create a metadata file documenting the analysis parameters.
+    Uses external script for YAML generation.
     """
     input:
         pareto_fronts = lambda wildcards: expand(
@@ -476,52 +234,18 @@ rule create_metadata:
     output:
         metadata = "{output_dir}/{dataset_name}/analysis_metadata.yaml"
     params:
-        dataset_name = "{dataset_name}"
-    run:
-        import yaml
-        from datetime import datetime
-
-        # Find which dataset key corresponds to this dataset_name
-        dataset_key = None
-        for key, config_data in INPUT_STR_BIAS.items():
-            if config_data['name'] == params.dataset_name:
-                dataset_key = key
-                break
-
-        if dataset_key is None:
-            raise ValueError(f"Dataset name '{params.dataset_name}' not found in config")
-
-        # Get dataset info
-        dataset_info = INPUT_STR_BIAS[dataset_key]
-
-        metadata = {
-            'dataset_key': dataset_key,
-            'dataset_name': params.dataset_name,
-            'description': dataset_info.get('description', ''),
-            'analysis_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'input_files': {
-                'bias_df': dataset_info['bias_df'],
-                'weight_mat': WEIGHT_MAT,
-                'info_mat': INFO_MAT
-            },
-            'parameters': {
-                'circuit_sizes': CIRCUIT_SIZES,
-                'top_n': TOP_N,
-                'min_bias_rank': MIN_BIAS_RANK,
-                'sa_runtimes': SA_RUNTIMES,
-                'sa_steps': SA_STEPS,
-                'measure': MEASURE
-            },
-            'output_files': {
-                'pareto_fronts': [f"{params.dataset_name}_size_{size}_pareto_front.csv"
-                                  for size in CIRCUIT_SIZES],
-                'best_circuits': [f"size_{size}_best_circuits.txt"
-                                  for size in CIRCUIT_SIZES]
-            }
-        }
-
-        os.makedirs(os.path.dirname(output.metadata), exist_ok=True)
-        with open(output.metadata, 'w') as f:
-            yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
-
-        print(f"[{params.dataset_name}] Created metadata file: {output.metadata}")
+        dataset_name = "{dataset_name}",
+        dataset_config = lambda wildcards: {
+            k: v for k, v in INPUT_STR_BIAS.items()
+            if v['name'] == wildcards.dataset_name
+        },
+        weight_mat = WEIGHT_MAT,
+        info_mat = INFO_MAT,
+        circuit_sizes = CIRCUIT_SIZES,
+        top_n = TOP_N,
+        min_bias_rank = MIN_BIAS_RANK,
+        sa_runtimes = SA_RUNTIMES,
+        sa_steps = SA_STEPS,
+        measure = MEASURE
+    script:
+        "scripts/workflow/create_metadata.py"

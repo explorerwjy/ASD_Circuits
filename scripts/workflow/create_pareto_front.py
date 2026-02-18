@@ -28,7 +28,9 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, 'src')
+sys.path.insert(0, 'scripts/workflow')
 from ASD_Circuits import ScoreCircuit_SI_Joint, ScoreCircuit_NEdges
+from sibling_utils import load_bias_df
 
 # Get Snakemake variables
 dataset_name = snakemake.params.dataset_name
@@ -74,8 +76,7 @@ with open(snakemake.input.best_circuits, 'r') as f:
 # Load data for baseline circuit calculation
 print(f"[{dataset_name}] Calculating baseline circuit (top {size} structures by bias)...")
 
-bias_df_path = config_data['bias_df']
-BiasDF = pd.read_csv(bias_df_path, index_col=0)
+BiasDF = load_bias_df(config_data)
 adj_mat = pd.read_csv(snakemake.input.weight_mat, index_col=0)
 InfoMat = pd.read_csv(snakemake.input.info_mat, index_col=0)
 

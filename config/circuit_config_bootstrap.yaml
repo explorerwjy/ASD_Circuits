@@ -1,5 +1,5 @@
 # Configuration file for GENCIC Circuit Search Pipeline - Bootstrap Mode
-# Usage: snakemake -s Snakefile.circuit.refactored --configfile config/circuit_config_bootstrap.yaml --cores 20
+# Usage: snakemake -s Snakefile.circuit.bootstrap --configfile config/circuit_config_bootstrap.yaml --cores 20
 
 # ============================================================================
 # Bootstrap Configuration
@@ -85,18 +85,18 @@ aggregation_output_dir: "results/CircuitSearch_Bootstrap_Summary"
 
 # This config automatically discovers bootstrap files matching the pattern.
 # Run with:
-#   snakemake -s Snakefile.circuit.refactored \
+#   snakemake -s Snakefile.circuit.bootstrap \
 #     --configfile config/circuit_config_bootstrap.yaml \
 #     --cores 20
 
 # To run only specific bootstrap iterations:
-#   snakemake -s Snakefile.circuit.refactored \
+#   snakemake -s Snakefile.circuit.bootstrap \
 #     --configfile config/circuit_config_bootstrap.yaml \
 #     --config n_bootstrap=10 \
 #     --cores 20
 
 # To aggregate results:
-#   snakemake -s Snakefile.circuit.refactored \
+#   snakemake -s Snakefile.circuit.bootstrap \
 #     --configfile config/circuit_config_bootstrap.yaml \
 #     aggregate_bootstrap \
 #     --cores 1
