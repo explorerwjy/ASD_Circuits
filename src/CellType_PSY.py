@@ -206,8 +206,172 @@ def PlotBiasContrast_v2(MergeDF, name1, name2, dataset="Human", title=""):
         
         plt.xticks(fontsize=10, fontweight='bold')
         plt.yticks(fontsize=10, fontweight='bold')
-        
+
         plt.tight_layout()
         plt.show()
         return
+
+
+####################################################
+# Gene Discovery Statistical Tests
+# For downsampling analysis (TRA-18)
+####################################################
+
+def _combine_pvalues_fisher(p1, p2):
+    """
+    Combine two independent p-values using Fisher's method.
+
+    χ² = -2(ln p₁ + ln p₂), df=4
+
+    Parameters:
+    -----------
+    p1 : float
+        First p-value (from LGD test)
+    p2 : float
+        Second p-value (from Dmis test)
+
+    Returns:
+    --------
+    float : Combined p-value
+    """
+    from scipy.stats import chi2
+
+    # Handle edge cases
+    if p1 <= 0 or p2 <= 0:
+        return 0.0  # Extremely significant
+    if p1 >= 1 and p2 >= 1:
+        return 1.0
+
+    # Clip p-values to avoid log(0)
+    p1 = max(p1, 1e-300)
+    p2 = max(p2, 1e-300)
+
+    # Fisher's method: χ² = -2 * (ln(p1) + ln(p2))
+    chi2_stat = -2 * (np.log(p1) + np.log(p2))
+
+    # Combined p-value from chi-squared distribution with df=4 (2*2 tests)
+    p_combined = 1 - chi2.cdf(chi2_stat, df=4)
+
+    return p_combined
+
+
+def poisson_test_denovo(obs_lgd, obs_dmis, exp_rate_lgd, exp_rate_dmis, N_probands):
+    """
+    Test for de novo mutation enrichment against BGMR using Poisson tests.
+
+    Tests LGD and Dmis separately, then combines p-values via Fisher's method.
+
+    Parameters:
+    -----------
+    obs_lgd : int
+        Observed LGD (loss-of-function) mutation count
+    obs_dmis : int
+        Observed damaging missense mutation count
+    exp_rate_lgd : float
+        Expected per-proband LGD mutation rate from BGMR (p_LGD)
+    exp_rate_dmis : float
+        Expected per-proband Dmis mutation rate from BGMR (prevel_0.5 or p_misense)
+    N_probands : int
+        Number of probands in the cohort
+
+    Returns:
+    --------
+    tuple : (p_combined, p_lgd, p_dmis)
+        - p_combined: Fisher-combined p-value
+        - p_lgd: One-sided Poisson p-value for LGD enrichment
+        - p_dmis: One-sided Poisson p-value for Dmis enrichment
+    """
+    from scipy.stats import poisson
+
+    # Expected counts = rate * 2 * N_probands (diploid genome)
+    exp_lgd = exp_rate_lgd * 2 * N_probands
+    exp_dmis = exp_rate_dmis * 2 * N_probands
+
+    # One-sided Poisson test: P(X >= obs) = 1 - P(X < obs) = 1 - CDF(obs - 1)
+    # This tests for enrichment (more mutations than expected)
+    if exp_lgd > 0:
+        p_lgd = 1 - poisson.cdf(obs_lgd - 1, exp_lgd) if obs_lgd > 0 else 1.0
+    else:
+        p_lgd = 1.0 if obs_lgd == 0 else 0.0  # No expected mutations but observed some
+
+    if exp_dmis > 0:
+        p_dmis = 1 - poisson.cdf(obs_dmis - 1, exp_dmis) if obs_dmis > 0 else 1.0
+    else:
+        p_dmis = 1.0 if obs_dmis == 0 else 0.0
+
+    # Combine p-values using Fisher's method
+    p_combined = _combine_pvalues_fisher(p_lgd, p_dmis)
+
+    return p_combined, p_lgd, p_dmis
+
+
+def fisher_test_case_control(case_lgd, case_dmis, ctrl_lgd, ctrl_dmis, n_case, n_ctrl):
+    """
+    Test for case-control mutation enrichment using Fisher's exact test.
+
+    Tests LGD and Dmis separately, then combines p-values via Fisher's method.
+
+    Parameters:
+    -----------
+    case_lgd : int
+        LGD mutation count in cases
+    case_dmis : int
+        Damaging missense mutation count in cases
+    ctrl_lgd : int
+        LGD mutation count in controls
+    ctrl_dmis : int
+        Damaging missense mutation count in controls
+    n_case : int
+        Number of cases
+    n_ctrl : int
+        Number of controls
+
+    Returns:
+    --------
+    tuple : (p_combined, p_lgd, p_dmis)
+        - p_combined: Fisher-combined p-value
+        - p_lgd: One-sided Fisher's exact p-value for LGD enrichment in cases
+        - p_dmis: One-sided Fisher's exact p-value for Dmis enrichment in cases
+    """
+    from scipy.stats import fisher_exact
+
+    # Construct 2x2 contingency tables
+    # Rows: mutation present / absent
+    # Cols: case / control
+
+    # For LGD:
+    # [[case_lgd, ctrl_lgd], [n_case - case_lgd, n_ctrl - ctrl_lgd]]
+    # Simplified: use [case_lgd, ctrl_lgd] vs [n_case, n_ctrl] as totals
+    # Actually, contingency table should be:
+    # [[case_mut, ctrl_mut], [case_no_mut, ctrl_no_mut]]
+
+    # LGD test
+    table_lgd = [
+        [case_lgd, ctrl_lgd],
+        [n_case - case_lgd, n_ctrl - ctrl_lgd]
+    ]
+    # Ensure non-negative counts
+    table_lgd = [[max(0, x) for x in row] for row in table_lgd]
+
+    try:
+        _, p_lgd = fisher_exact(table_lgd, alternative='greater')
+    except ValueError:
+        p_lgd = 1.0
+
+    # Dmis test
+    table_dmis = [
+        [case_dmis, ctrl_dmis],
+        [n_case - case_dmis, n_ctrl - ctrl_dmis]
+    ]
+    table_dmis = [[max(0, x) for x in row] for row in table_dmis]
+
+    try:
+        _, p_dmis = fisher_exact(table_dmis, alternative='greater')
+    except ValueError:
+        p_dmis = 1.0
+
+    # Combine p-values using Fisher's method
+    p_combined = _combine_pvalues_fisher(p_lgd, p_dmis)
+
+    return p_combined, p_lgd, p_dmis
 
