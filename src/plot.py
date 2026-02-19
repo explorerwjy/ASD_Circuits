@@ -1407,8 +1407,7 @@ def cluster_residual_boxplot(
         tests.append({"x1": x1, "x2": x2, "p": p, "local_top": local_top})
 
     if len(tests) == 0:
-        bot = 0.32 if group_brackets else 0.28
-        plt.subplots_adjust(bottom=bot, top=0.92)
+        plt.subplots_adjust(bottom=0.28, top=0.92)
         if show:
             plt.show()
         return plot_df
@@ -1427,9 +1426,34 @@ def cluster_residual_boxplot(
     clearance = 0.03 * y_range
     y_step = 0.10 * y_range
 
+    # draw group bars above boxplots (before p-value brackets so brackets clear them)
+    placed = []
+    if group_brackets:
+        for bracket in group_brackets:
+            grp_names = bracket["groups"]
+            grp_label = bracket["label"]
+            positions = [cluster_labels.index(g) for g in grp_names if g in cluster_labels]
+            if len(positions) < 2:
+                continue
+            xlo_b = min(positions) - box_width / 2
+            xhi_b = max(positions) + box_width / 2
+            # find max whisker top among these groups
+            grp_top = max(
+                float(np.nanmax(plot_df.loc[plot_df["Cluster"] == g, metric].values))
+                for g in grp_names if g in cluster_labels
+            )
+            bar_y = grp_top + clearance
+            ax.plot([xlo_b, xhi_b], [bar_y, bar_y], lw=1.8, c="k", alpha=0.75,
+                    solid_capstyle="round", zorder=4)
+            ax.text((min(positions) + max(positions)) / 2, bar_y + 0.005 * y_range,
+                    grp_label, ha='center', va='bottom', fontsize=fontsize,
+                    fontstyle='italic', color='0.25', zorder=5)
+            # reserve space so p-value brackets clear this bar + label
+            label_h = 0.06 * y_range
+            placed.append((xlo_b, xhi_b, bar_y, bar_y + label_h))
+
     tests_sorted = sorted(tests, key=lambda t: (t["local_top"], abs(t["x2"] - t["x1"])))
 
-    placed = []
     for t in tests_sorted:
         p_use = t["p_adj"] if p_adjust else t["p"]
         label = p_to_star(p_use) if p_style == "stars" else f"$p$={p_use:.2e}"
@@ -1456,38 +1480,7 @@ def cluster_residual_boxplot(
         ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=1.1, c="k", alpha=0.9)
         ax.text((x1 + x2) / 2, y + h - 2*h, label, ha="center", va="bottom", fontsize=fontsize*2.0)
 
-    # draw group brackets below x-axis
-    if group_brackets:
-        # Use axes transform for y so brackets stay below tick labels
-        for bracket in group_brackets:
-            grp_names = bracket["groups"]
-            grp_label = bracket["label"]
-            positions = [cluster_labels.index(g) for g in grp_names if g in cluster_labels]
-            if len(positions) < 2:
-                continue
-            xlo_b, xhi_b = min(positions), max(positions)
-            # Draw in axes coordinates for x, figure-relative for y
-            inv = ax.transData.inverted()
-            # Place bracket below the x-tick labels using axis coords
-            bracket_y = -0.18   # in axes fraction (below x-labels)
-            tick_y = bracket_y + 0.025
-            label_y = bracket_y - 0.04
-            ax.annotate('', xy=(xlo_b, bracket_y), xytext=(xhi_b, bracket_y),
-                        xycoords=('data', 'axes fraction'),
-                        textcoords=('data', 'axes fraction'),
-                        arrowprops=dict(arrowstyle='-', lw=1.5, color='0.3'))
-            # small ticks at ends
-            for xpos in [xlo_b, xhi_b]:
-                ax.annotate('', xy=(xpos, bracket_y), xytext=(xpos, tick_y),
-                            xycoords=('data', 'axes fraction'),
-                            textcoords=('data', 'axes fraction'),
-                            arrowprops=dict(arrowstyle='-', lw=1.5, color='0.3'))
-            ax.text((xlo_b + xhi_b) / 2, label_y, grp_label,
-                    transform=ax.get_xaxis_transform(),
-                    ha='center', va='top', fontsize=fontsize * 1.3,
-                    fontstyle='italic', color='0.25')
-
-    bot = 0.32 if group_brackets else 0.28
+    bot = 0.28
     plt.subplots_adjust(bottom=bot, top=0.92)
     if show:
         plt.show()
