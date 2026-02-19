@@ -1344,3 +1344,157 @@ def GetPermutationP(null_dist, observed_val, greater_than=True):
     obs_adj = observed_val - np.mean(null_dist)
     
     return z_score, p_value, obs_adj
+
+
+#####################################################################################
+#####################################################################################
+#### Bias Dataset Comparison Utilities
+#####################################################################################
+#####################################################################################
+
+def fit_structure_bias_linear_model(merged_data, metric='EFFECT', suffixes=('_1', '_2')):
+    """Fit a linear regression between two bias datasets and compute residuals.
+
+    Parameters
+    ----------
+    merged_data : DataFrame
+        Merged bias data with columns ``{metric}{suffix}`` for each suffix.
+    metric : str
+        Column base name to use (default ``'EFFECT'``).
+    suffixes : tuple of str
+        Column suffixes identifying the two datasets.
+
+    Returns
+    -------
+    DataFrame
+        Copy of *merged_data* with added ``predicted`` and ``residual`` columns.
+    """
+    from sklearn.linear_model import LinearRegression
+
+    col_x = f'{metric}{suffixes[1]}'
+    col_y = f'{metric}{suffixes[0]}'
+
+    # Drop rows with NaN in either column before fitting
+    valid_mask = merged_data[col_x].notna() & merged_data[col_y].notna()
+    X_all = merged_data[col_x].values.reshape(-1, 1)
+    y_all = merged_data[col_y].values
+
+    model = LinearRegression()
+    model.fit(X_all[valid_mask], y_all[valid_mask])
+
+    results_df = merged_data.copy()
+    results_df['predicted'] = np.nan
+    results_df.loc[valid_mask, 'predicted'] = model.predict(X_all[valid_mask])
+    results_df['residual'] = results_df[col_y] - results_df['predicted']
+    return results_df
+
+
+def merge_bias_datasets(dataset1, dataset2, suffixes=('_1', '_2'),
+                        cols1=None, cols2=None):
+    """Merge two bias datasets and compute difference / residual metrics.
+
+    Works for both structure-level and cell-type-level data — just pass the
+    appropriate column lists.
+
+    Parameters
+    ----------
+    dataset1, dataset2 : DataFrame
+        Bias DataFrames indexed by structure or cell-type name.
+    suffixes : tuple of str
+        Suffixes appended to overlapping column names after merge.
+    cols1 : list of str or None
+        Columns to keep from *dataset1*.  If ``None``, defaults to
+        ``['Rank', 'EFFECT', 'Region']`` (structure level).
+    cols2 : list of str or None
+        Columns to keep from *dataset2*.  If ``None``, defaults to
+        ``['Rank', 'EFFECT']``.
+
+    Returns
+    -------
+    DataFrame
+        Merged data sorted by ``ABS_DIFF_EFFECT``, with ``predicted`` and
+        ``residual`` columns from a linear model fit.
+    """
+    if cols1 is None:
+        cols1 = ['Rank', 'EFFECT', 'Region']
+    if cols2 is None:
+        cols2 = ['Rank', 'EFFECT']
+
+    # Only keep columns that actually exist in each dataset
+    cols1 = [c for c in cols1 if c in dataset1.columns]
+    cols2 = [c for c in cols2 if c in dataset2.columns]
+
+    merged_data = pd.merge(dataset1[cols1], dataset2[cols2],
+                           left_index=True, right_index=True,
+                           suffixes=suffixes)
+
+    merged_data['DIFF_Rank'] = merged_data[f'Rank{suffixes[0]}'] - merged_data[f'Rank{suffixes[1]}']
+    merged_data['ABS_DIFF_Rank'] = np.abs(merged_data['DIFF_Rank'])
+    merged_data['DIFF_EFFECT'] = merged_data[f'EFFECT{suffixes[0]}'] - merged_data[f'EFFECT{suffixes[1]}']
+    merged_data['ABS_DIFF_EFFECT'] = np.abs(merged_data['DIFF_EFFECT'])
+
+    merged_data = merged_data.sort_values('ABS_DIFF_EFFECT', ascending=False)
+    merged_data = fit_structure_bias_linear_model(merged_data, metric='EFFECT',
+                                                  suffixes=suffixes)
+    return merged_data
+
+
+def batch_permutation_bias(STR_BiasMat, gene_pool, weights, n_perm=10000,
+                           seed=42):
+    """Run batched permutation bias for structure-level analysis.
+
+    Instead of calling ``MouseSTR_AvgZ_Weighted`` *n_perm* times, this
+    pre-computes the valid gene intersection once and performs a single
+    batched matrix multiply.
+
+    Parameters
+    ----------
+    STR_BiasMat : DataFrame
+        Expression z-score matrix (genes × structures).
+    gene_pool : list
+        Pool of Entrez gene IDs to sample from.
+    weights : list
+        Weights to assign to each sampled gene (length determines sample
+        size per permutation).
+    n_perm : int
+        Number of permutations.
+    seed : int or None
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    list of DataFrame
+        One bias DataFrame per permutation, each with ``EFFECT``, ``Rank``,
+        and ``Region`` columns, matching the format of
+        ``MouseSTR_AvgZ_Weighted``.
+    """
+    rng = np.random.default_rng(seed)
+    k = len(weights)
+    weights_arr = np.array(weights, dtype=float)
+
+    # Valid genes = intersection of gene_pool with expression matrix index
+    gene_pool_set = set(gene_pool)
+    valid_pool = [g for g in STR_BiasMat.index if g in gene_pool_set]
+    valid_pool_idx = {g: i for i, g in enumerate(valid_pool)}
+    expr_sub = STR_BiasMat.loc[valid_pool].values  # (N_valid_genes, N_structures)
+
+    str2reg = STR2Region()
+    structures = STR_BiasMat.columns
+
+    results = []
+    for _ in range(n_perm):
+        sampled = rng.choice(len(valid_pool), size=k, replace=False)
+        expr_sample = expr_sub[sampled]  # (k, N_structures)
+        mask = ~np.isnan(expr_sample)
+        w_broadcast = weights_arr[:, np.newaxis]
+        weighted_vals = expr_sample * w_broadcast * mask
+        weight_sums = w_broadcast * mask
+        effects = np.sum(weighted_vals, axis=0) / np.sum(weight_sums, axis=0)
+
+        df = pd.DataFrame({'Structure': structures, 'EFFECT': effects}).set_index('Structure')
+        df = df.sort_values('EFFECT', ascending=False)
+        df['Rank'] = np.arange(1, len(df) + 1)
+        df['Region'] = [str2reg.get(s, 'Unknown') for s in df.index]
+        results.append(df)
+
+    return results
