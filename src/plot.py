@@ -1273,7 +1273,8 @@ def cluster_residual_boxplot(
     box_width=0.6,
     fontsize=12,
     title=None,
-    show=True
+    show=True,
+    group_brackets=None
 ):
     """
     Boxplot of residuals (or any metric) grouped by cell-type clusters,
@@ -1297,6 +1298,10 @@ def cluster_residual_boxplot(
         "stars" or "exact" for annotation style
     show_ns : bool
         Whether to show non-significant comparisons
+    group_brackets : list of dict or None
+        Draw labelled brackets under x-axis to annotate grouped comparisons.
+        Each dict has: ``groups`` (list of cluster names) and ``label`` (str).
+        Example: ``[{"groups": ["CGE", "MGE", "IT_ET"], "label": "Cortical"}]``
 
     Returns:
     --------
@@ -1402,7 +1407,8 @@ def cluster_residual_boxplot(
         tests.append({"x1": x1, "x2": x2, "p": p, "local_top": local_top})
 
     if len(tests) == 0:
-        plt.subplots_adjust(bottom=0.28, top=0.92)
+        bot = 0.32 if group_brackets else 0.28
+        plt.subplots_adjust(bottom=bot, top=0.92)
         if show:
             plt.show()
         return plot_df
@@ -1450,7 +1456,39 @@ def cluster_residual_boxplot(
         ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=1.1, c="k", alpha=0.9)
         ax.text((x1 + x2) / 2, y + h - 2*h, label, ha="center", va="bottom", fontsize=fontsize*2.0)
 
-    plt.subplots_adjust(bottom=0.28, top=0.92)
+    # draw group brackets below x-axis
+    if group_brackets:
+        # Use axes transform for y so brackets stay below tick labels
+        for bracket in group_brackets:
+            grp_names = bracket["groups"]
+            grp_label = bracket["label"]
+            positions = [cluster_labels.index(g) for g in grp_names if g in cluster_labels]
+            if len(positions) < 2:
+                continue
+            xlo_b, xhi_b = min(positions), max(positions)
+            # Draw in axes coordinates for x, figure-relative for y
+            inv = ax.transData.inverted()
+            # Place bracket below the x-tick labels using axis coords
+            bracket_y = -0.18   # in axes fraction (below x-labels)
+            tick_y = bracket_y + 0.025
+            label_y = bracket_y - 0.04
+            ax.annotate('', xy=(xlo_b, bracket_y), xytext=(xhi_b, bracket_y),
+                        xycoords=('data', 'axes fraction'),
+                        textcoords=('data', 'axes fraction'),
+                        arrowprops=dict(arrowstyle='-', lw=1.5, color='0.3'))
+            # small ticks at ends
+            for xpos in [xlo_b, xhi_b]:
+                ax.annotate('', xy=(xpos, bracket_y), xytext=(xpos, tick_y),
+                            xycoords=('data', 'axes fraction'),
+                            textcoords=('data', 'axes fraction'),
+                            arrowprops=dict(arrowstyle='-', lw=1.5, color='0.3'))
+            ax.text((xlo_b + xhi_b) / 2, label_y, grp_label,
+                    transform=ax.get_xaxis_transform(),
+                    ha='center', va='top', fontsize=fontsize * 1.3,
+                    fontstyle='italic', color='0.25')
+
+    bot = 0.32 if group_brackets else 0.28
+    plt.subplots_adjust(bottom=bot, top=0.92)
     if show:
         plt.show()
     return plot_df

@@ -221,6 +221,8 @@ pairwise_tests_main = [
     ("CNU_HYA_Glut", ["CTX_CGE_GABA", "CTX_MGE_GABA", "NP_CT_L6b_Glut", "IT_ET_Glut"]),
     ("CNU_HYA_GABA", ["CTX_CGE_GABA", "CTX_MGE_GABA", "NP_CT_L6b_Glut", "IT_ET_Glut"]),
 ]
+cortical_ref_bracket = [{"groups": ["CTX_CGE_GABA", "IT_ET_Glut", "NP_CT_L6b_Glut", "CTX_MGE_GABA"],
+                          "label": "Cortical Reference"}]
 
 # %% [markdown]
 # ## 2.4 Residual boxplot (DDD excl ASD vs ASD)
@@ -231,7 +233,8 @@ _ = cluster_residual_boxplot(
     palette=palette_main, figsize=(12, 8),
     pairwise_tests=pairwise_tests_main,
     p_adjust="fdr_bh", p_style="stars", show_ns=False,
-    wrap_xticks=True, wrap_len=16, point_size=2.2, point_alpha=0.16
+    wrap_xticks=True, wrap_len=16, point_size=2.2, point_alpha=0.16,
+    group_brackets=cortical_ref_bracket
 )
 
 # %% [markdown]
@@ -407,7 +410,8 @@ _ = cluster_residual_boxplot(
                     ("PF_RE_TH_Glut", "TH_Glut (Other)"),
                     ("D1/D2 MSN", ["CTX_CGE_GABA", "CTX_MGE_GABA", "NP_CT_L6b_Glut", "IT_ET_Glut"])],
     p_adjust="fdr_bh", p_style="stars", show_ns=False,
-    wrap_xticks=True, wrap_len=16, point_size=2.2, point_alpha=0.16
+    wrap_xticks=True, wrap_len=16, point_size=2.2, point_alpha=0.16,
+    group_brackets=cortical_ref_bracket
 )
 
 # %%
