@@ -1,0 +1,184 @@
+# Configuration for supplementary tables
+# All paths are relative to the project root
+
+output_excel: "results/Supplementary_Tables.xlsx"
+
+tables:
+  S1:
+    sheet_name: "Table S1 - Structure Bias"
+    title: "ASD mutation biases across all mouse brain structures"
+    description: >
+      Comprehensive analysis of mutation biases calculated for 213 brain structures
+      using the Allen Mouse Brain Atlas ISH data. Bias values reflect the weighted
+      average of gene-specific expression biases from SPARK exome-wide significant genes.
+      Statistical significance determined by comparison with 10,000 subsampled sibling
+      gene sets.
+    sources:
+      bias_fdr: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+      bias_male: "dat/Unionize_bias/ASD.Male.ALL.bias.csv"
+      bias_female: "dat/Unionize_bias/ASD.Female.ALL.bias.csv"
+      bias_spark159: "dat/Unionize_bias/ASD.159.pLI.z2.csv"
+      bias_fu72: "results/STR_ISH/Fu_ASD_72_bias_addP_sibling.csv"
+      bias_fu185: "results/STR_ISH/Fu_ASD_185_bias_addP_sibling.csv"
+      bias_neuron_density: "dat/Unionize_bias/ASD.neuron.density.norm.bias.csv"
+      bias_neuro_glia: "dat/Unionize_bias/ASD.neuro2glia.norm.bias.csv"
+    # Circuit membership: 46-node and 32-node circuit structure lists
+    circuit_46_file: "/home/jw3514/Work/ASD_Circuits/notebooks/ASD.SA.Circuits.Size46.csv"
+    circuit_46_row: 3  # row index in the CSV
+    circuit_32:
+      - Anterior_cingulate_area_dorsal_part
+      - Anterior_olfactory_nucleus
+      - Anterior_pretectal_nucleus
+      - Anteromedial_visual_area
+      - Bed_nuclei_of_the_stria_terminalis
+      - Caudoputamen
+      - Claustrum
+      - Dentate_gyrus
+      - Endopiriform_nucleus_dorsal_part
+      - Field_CA2
+      - Infralimbic_area
+      - Lateral_amygdalar_nucleus
+      - Lateral_posterior_nucleus_of_the_thalamus
+      - Lateral_visual_area
+      - Mediodorsal_nucleus_of_thalamus
+      - Nucleus_accumbens
+      - Nucleus_of_reuniens
+      - Orbital_area_lateral_part
+      - Orbital_area_ventrolateral_part
+      - Parafascicular_nucleus
+      - Parataenial_nucleus
+      - Posterior_parietal_association_areas
+      - Prelimbic_area
+      - Primary_motor_area
+      - Primary_somatosensory_area_lower_limb
+      - Primary_somatosensory_area_trunk
+      - Primary_visual_area
+      - Retrosplenial_area_lateral_agranular_part
+      - Rhomboid_nucleus
+      - Secondary_motor_area
+      - Subiculum_ventral_part
+      - Submedial_nucleus_of_the_thalamus
+
+  S2:
+    sheet_name: "Table S2 - Connectome Info"
+    title: "Connectome information score matrix for mouse brain structure connections"
+    description: >
+      Matrix of connectome weights representing the information content (-log probability)
+      of connections between brain structure pairs, derived from the Allen Mouse Brain
+      Connectivity Atlas.
+    sources:
+      info_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
+
+  S3:
+    sheet_name: "Table S3 - Cell Type Bias"
+    title: "ASD mutation biases for cell types (ABC atlas 10x v3)"
+    description: >
+      Analysis of mutation biases at the cell type cluster level based on the Allen
+      Brain Cell (ABC) atlas 10x v3 RNA sequencing data.
+    sources:
+      bias: "results/CT_Z2/ASD_All_bias_addP_sibling.csv"
+      annotation: "dat/MouseCT_Cluster_Anno.csv"
+
+  S4:
+    sheet_name: "Table S4 - Cell Composition"
+    title: "Cellular composition of brain structures within the ASD circuit"
+    description: >
+      Analysis of cell type distributions across circuit structures based on the Allen
+      Brain Cell (ABC) atlas MERFISH data. Cell proportions sum to 1 within each
+      structure; only cell types with >= 500 cells per structure are included.
+    sources:
+      composition: "notebooks_mouse_sc/dat/ASD.Cir.SubClassCellComp.csv"
+
+  S5:
+    sheet_name: "Table S5 - Structure Bias IQ"
+    title: "ASD mutation biases stratified by proband cognitive function"
+    description: >
+      Comparison of structure-specific mutation biases between probands with higher
+      cognitive function (FSIQ > 70) and lower cognitive function (FSIQ <= 70).
+      Statistical significance based on IQ-mutation permutation test.
+    sources:
+      bias_hiq: "dat/Unionize_bias/ASD.HIQ_spec.bias.csv"
+      bias_liq: "dat/Unionize_bias/ASD.LIQ_spec.bias.csv"
+      iq_pvalues: "/home/jw3514/Work/ASD_Circuits/dat/Unionize_bias/IQ_Bias_Diff.Pvalues.csv"
+    # Only include structures in the 46-node circuit
+    filter_circuit_46: true
+
+  S6:
+    sheet_name: "Table S6 - NT Genes"
+    title: "Genes included in the neurotransmitter systems analysis"
+    description: >
+      List of genes included in the dopamine (14 genes), serotonin (11 genes), and
+      oxytocin (3 genes) gene sets used to validate the GENCIC method.
+    sources:
+      genes: "notebook_rebuttal/NeuralSystem.csv"
+    # Filter to dopamine, serotonin, oxytocin only (exclude acetylcholine)
+    systems: ["dopamine", "serotonin", "oxytocin"]
+
+  S7:
+    sheet_name: "Table S7 - Dopamine Bias"
+    title: "Dopamine brain structure-level bias"
+    description: >
+      Expression biases for the dopamine gene set across 213 mouse brain structures.
+    sources:
+      bias: "results/STR_ISH/NT_Dopamine_combined_bias_addP_sibling.csv"
+
+  S8:
+    sheet_name: "Table S8 - Serotonin Bias"
+    title: "Serotonin brain structure-level bias"
+    description: >
+      Expression biases for the serotonin gene set across 213 mouse brain structures.
+    sources:
+      bias: "results/STR_ISH/NT_Serotonin_combined_bias_addP_sibling.csv"
+
+  S9:
+    sheet_name: "Table S9 - Oxytocin Bias"
+    title: "Oxytocin brain structure-level bias"
+    description: >
+      Expression biases for the oxytocin gene set across 213 mouse brain structures.
+    sources:
+      bias: "results/STR_ISH/NT_Oxytocin_combined_bias_addP_sibling.csv"
+
+  S10:
+    sheet_name: "Table S10 - DD Structure Bias"
+    title: "Developmental Disorder brain structure bias"
+    description: >
+      Mutation biases calculated for 213 brain structures using 285 high-confidence
+      DD genes (Kaplanis et al. 2020), excluding genes overlapping with SPARK ASD set.
+    sources:
+      bias: "results/STR_ISH/DDD_293_ExcludeASD_bias_addP_sibling.csv"
+
+  S11:
+    sheet_name: "Table S11 - DD Cell Type Bias"
+    title: "Developmental Disorder cell type mutation bias"
+    description: >
+      Mutation biases calculated for cell type clusters in the ABC atlas using the
+      DD gene set.
+    sources:
+      bias: "results/CT_Z2/DDD_293_ExcludeASD_bias_addP_sibling.csv"
+
+  S12:
+    sheet_name: "Table S12 - Constrained STR Bias"
+    title: "Constrained gene structure bias"
+    description: >
+      Mutation biases for 213 brain structures using the top 25% of genes with lowest
+      LOEUF scores from gnomAD v4.0. Uniform mutation weight (W=1) applied.
+    sources:
+      bias: "results/STR_ISH/Constraint_top25_LOEUF_bias_addP_random.csv"
+
+  S13:
+    sheet_name: "Table S13 - Constrained CT Bias"
+    title: "Constrained gene cell type mutation bias"
+    description: >
+      Mutation biases for cell type clusters in the ABC atlas using the top 25%
+      LOEUF constrained gene set from gnomAD v4.0.
+    sources:
+      bias: "results/CT_Z2/Constraint_top25_LOEUF_bias_addP_random.csv"
+
+  S14:
+    sheet_name: "Table S14 - Region Mapping"
+    title: "Mapping of homologous human and mouse brain regions"
+    description: >
+      Anatomical correspondence between mouse brain structures and human brain
+      regions (Power atlas), including homology confidence scores.
+    sources:
+      mapping: "notebook_rebuttal/Buch_et_al/claude_mapping_v6_DCG.xlsx"
