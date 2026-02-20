@@ -8,6 +8,7 @@
 !*.py
 !*.ipynb
 !*.yaml
+!*.md
 !.gitignore
 
 # 4. Explicitly ignore Mac system files (the .DS_Store files in your status)
