@@ -2043,3 +2043,141 @@ def plot_avg_positive_bias_histogram(
 
     plt.tight_layout()
     return fig, ax
+
+
+def plot_circuit_scores_with_bootstrap_ci(
+    topNs,
+    mean_scores,
+    boot_scores,
+    cont_distance_dict,
+    ci_type='percentile',
+    percentile_range=95,
+    viz_style='shade',
+    xlim=(0, 121),
+    colors=None,
+    labels=None,
+    show_asd_ci=True,
+    show_sib_ci=True,
+):
+    """
+    Plot circuit connectivity scores with bootstrap confidence intervals.
+
+    Parameters
+    ----------
+    topNs : list
+        List of top N structure ranks.
+    mean_scores : dict
+        {conn_type: mean_scores_array}
+    boot_scores : dict
+        {conn_type: bootstrap_scores_array (n_boot, n_topNs)}
+    cont_distance_dict : dict
+        {conn_type: control_distance_array (n_iter, n_topNs)}
+    ci_type : str
+        'percentile' or 'std'.
+    percentile_range : float
+        Percentile range for CI (default 95).
+    viz_style : str
+        'shade' or 'errorbar'.
+    xlim : tuple
+        X-axis limits.
+    colors, labels : dict or None
+        Custom colors/labels per connection type.
+    show_asd_ci : bool
+        Show ASD bootstrap CI shading/errorbars.
+    show_sib_ci : bool
+        Show sibling error bars.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    """
+    conn_types = list(mean_scores.keys())
+    n_conn = len(conn_types)
+    fig, axes = plt.subplots(n_conn, 1, dpi=480, figsize=(8, 4 * n_conn))
+    fig.patch.set_alpha(0)
+
+    if n_conn == 1:
+        axes = [axes]
+
+    BarLen = 34.1
+
+    default_colors = {"Standard": "blue", "Short": "red", "Long": "purple"}
+    default_labels = {
+        "Standard": "ASD Probands\n(Full Connectome)",
+        "Short": "ASD Probands\n(Short Distance Connectome)",
+        "Long": "ASD Probands\n(Long Distance Connectome)",
+    }
+    if colors is None:
+        colors = default_colors
+    if labels is None:
+        labels = default_labels
+
+    for i, conn_type in enumerate(conn_types):
+        ax = axes[i]
+        ax.patch.set_alpha(0)
+
+        mean_score = mean_scores[conn_type]
+        boot_score = boot_scores[conn_type]
+
+        # Confidence intervals
+        if ci_type == 'percentile':
+            lo_p = (100 - percentile_range) / 2
+            hi_p = 100 - lo_p
+            lower_ci = np.nanpercentile(boot_score, lo_p, axis=0)
+            upper_ci = np.nanpercentile(boot_score, hi_p, axis=0)
+            ci_label = f'ASD Probands {percentile_range}% CI'
+        elif ci_type == 'std':
+            std = np.nanstd(boot_score, axis=0)
+            lower_ci = mean_score - std
+            upper_ci = mean_score + std
+            ci_label = 'ASD Probands +/-1 std'
+        else:
+            raise ValueError(f"Unknown ci_type: {ci_type}")
+
+        # ASD mean line
+        color = colors.get(conn_type, "blue")
+        label = labels.get(conn_type, conn_type)
+        ax.plot(topNs, mean_score, color=color, marker='o', markersize=5,
+                lw=1.5, label=label, zorder=3)
+
+        # ASD CI
+        if show_asd_ci:
+            if viz_style == 'shade':
+                ax.fill_between(topNs, lower_ci, upper_ci, color=color,
+                                alpha=0.2, label=ci_label, zorder=2)
+            elif viz_style == 'errorbar':
+                step = max(1, len(topNs) // 20)
+                idx = list(range(0, len(topNs), step))
+                ax.errorbar(
+                    [topNs[j] for j in idx],
+                    [mean_score[j] for j in idx],
+                    yerr=[[mean_score[j] - lower_ci[j] for j in idx],
+                          [upper_ci[j] - mean_score[j] for j in idx]],
+                    fmt='none', ecolor=color, alpha=0.5, capsize=2,
+                    label=ci_label, zorder=2,
+                )
+
+        # Sibling controls
+        cont_func = np.median if not conn_type.lower().startswith("long") else np.nanmean
+        cont_profile = cont_func(cont_distance_dict[conn_type], axis=0)
+        ax.plot(topNs, cont_profile, color="grey", marker="o", markersize=3,
+                lw=1.5, label="Siblings", zorder=4)
+
+        if show_sib_ci:
+            lower = np.nanpercentile(cont_distance_dict[conn_type], 50 - BarLen, axis=0)
+            upper = np.nanpercentile(cont_distance_dict[conn_type], 50 + BarLen, axis=0)
+            ax.errorbar(
+                topNs, cont_profile, color="grey", marker="o", markersize=1.5, lw=1,
+                yerr=(cont_profile - lower, np.abs(upper - cont_profile)),
+                ls="dashed", label="Siblings (IQR)", zorder=1, alpha=0.77,
+            )
+
+        if i == n_conn - 1:
+            ax.set_xlabel("Structure Rank", fontsize=25)
+        ax.set_ylabel("CCS", fontsize=20)
+        ax.legend(fontsize=13, loc='upper right', frameon=False)
+        ax.set_xlim(*xlim)
+        ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    return fig

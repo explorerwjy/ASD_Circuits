@@ -184,6 +184,21 @@ def GeneList2GW(GeneListFil):
     GW = dict(zip(GeneList, np.ones(len(GeneList))))
     return GW
 
+def LoadList(filename):
+    """Read a text file and return a list of stripped lines."""
+    with open(filename, 'rt') as f:
+        return [x.strip() for x in f.readlines()]
+
+
+def modify_str(x):
+    """Clean up Allen Brain Atlas structure names for use as identifiers."""
+    x = re.sub("[()]", "", x)
+    x = re.sub("-", "_", x)
+    x = re.sub("reunions", "reuniens", x)
+    x = "_".join(x.split(" "))
+    return x
+
+
 def Dict2Fil(dict_, fil_):
     with open(fil_, 'wt') as f:
         writer = csv.writer(f)
@@ -333,6 +348,138 @@ def SPARK_Gene_Weights(
                 writer.writerow([k, v])
 
     return gene2None, gene2MutN
+
+
+def CountMut(DF, DmisSTR="REVEL", DmisCut=0.5):
+    """Count LGD, missense, damaging missense, and synonymous mutations.
+
+    Parameters
+    ----------
+    DF : DataFrame
+        Mutation-level DataFrame with columns 'GeneEff' and 'REVEL'.
+    DmisSTR : str
+        Column name for damaging missense score (default: 'REVEL').
+    DmisCut : float
+        Threshold for damaging missense (default: 0.5).
+
+    Returns
+    -------
+    tuple : (N_LGD, N_mis, N_Dmis, N_syn)
+    """
+    N_LGD, N_mis, N_Dmis, N_syn = 0, 0, 0, 0
+    for _, row in DF.iterrows():
+        GeneEff = row["GeneEff"].split(";")[0]
+        if GeneEff in ["frameshift", "splice_acceptor", "splice_donor",
+                        "start_lost", "stop_gained", "stop_lost"]:
+            N_LGD += 1
+        elif GeneEff == "missense":
+            N_mis += 1
+            revel = str(row[DmisSTR]).split(";")[0]
+            if revel != ".":
+                try:
+                    if float(revel) > DmisCut:
+                        N_Dmis += 1
+                except (ValueError, TypeError):
+                    pass
+        elif GeneEff == "synonymous":
+            N_syn += 1
+    return N_LGD, N_mis, N_Dmis, N_syn
+
+
+def Mut2GeneDF(MutDF, PPVs=(0.554, 0.333, 0.138, 0.130), LGD=True, Dmis=True,
+               gene_col="HGNC", gene_symbol_to_entrez=None):
+    """Convert mutation-level DataFrame to gene-level weights using PPV + pLI.
+
+    Parameters
+    ----------
+    MutDF : DataFrame
+        Mutation-level DataFrame with columns for gene symbol, GeneEff, REVEL, ExACpLI.
+    PPVs : tuple
+        (PPV_LGD_highpLI, PPV_Dmis_highpLI, PPV_LGD_lowpLI, PPV_Dmis_lowpLI).
+    LGD : bool
+        Include LGD mutations in weights.
+    Dmis : bool
+        Include damaging missense mutations in weights.
+    gene_col : str
+        Column containing gene identifiers. If 'HGNC', uses gene_symbol_to_entrez
+        to map to Entrez IDs. If 'Entrez', uses values directly.
+    gene_symbol_to_entrez : dict or None
+        Mapping from gene symbol to Entrez ID. Required when gene_col='HGNC'.
+        If None and gene_col='HGNC', loads via LoadGeneINFO().
+
+    Returns
+    -------
+    dict : {Entrez_ID: weight}
+    """
+    if gene_col == "HGNC" and gene_symbol_to_entrez is None:
+        _, _, gene_symbol_to_entrez, _ = LoadGeneINFO()
+
+    genes = list(set(MutDF[gene_col].values))
+    gene2MutN = {}
+    for g in genes:
+        if gene_col == "HGNC":
+            try:
+                entrez = int(gene_symbol_to_entrez[g])
+            except (KeyError, ValueError, TypeError):
+                continue
+        else:
+            try:
+                entrez = int(g)
+            except (ValueError, TypeError):
+                continue
+
+        Muts = MutDF[MutDF[gene_col] == g]
+        try:
+            pLI = float(Muts["ExACpLI"].values[0])
+        except (ValueError, TypeError, IndexError):
+            pLI = 0.0
+
+        N_LGD, _, N_Dmis, _ = CountMut(Muts)
+        if not LGD:
+            N_LGD = 0
+        if not Dmis:
+            N_Dmis = 0
+        if pLI >= 0.5:
+            gene2MutN[entrez] = N_LGD * PPVs[0] + N_Dmis * PPVs[1]
+        else:
+            gene2MutN[entrez] = N_LGD * PPVs[2] + N_Dmis * PPVs[3]
+    return gene2MutN
+
+
+def Filt_LGD_Mis(DF, Dmis=True):
+    """Filter mutation DataFrame to keep only LGD and (optionally) damaging missense.
+
+    Parameters
+    ----------
+    DF : DataFrame
+        Mutation-level DataFrame with columns 'GeneEff' and 'REVEL'.
+    Dmis : bool
+        If True, keep only damaging missense (REVEL > 0.5).
+        If False, keep all missense.
+
+    Returns
+    -------
+    DataFrame : filtered mutations
+    """
+    dat = []
+    for _, row in DF.iterrows():
+        GeneEff = row["GeneEff"].split(";")[0]
+        if GeneEff in ["frameshift", "splice_acceptor", "splice_donor",
+                        "start_lost", "stop_gained", "stop_lost"]:
+            dat.append(row.values)
+        elif GeneEff == "missense":
+            if Dmis:
+                revel = str(row["REVEL"]).split(";")[0]
+                if revel != ".":
+                    try:
+                        if float(revel) > 0.5:
+                            dat.append(row.values)
+                    except (ValueError, TypeError):
+                        pass
+            else:
+                dat.append(row.values)
+    return pd.DataFrame(dat, columns=DF.columns.values)
+
 
 def RegionDistributionsList(List, topN=50):
     str2reg_df = pd.read_csv(os.path.join(_ProjDIR, _config["data_files"]["major_brain_divisions"]), delimiter="\t")
