@@ -11,6 +11,34 @@ from scipy.stats import hypergeom
 
 
 #################################################
+# Z1 Conversion
+#################################################
+def Z1Conversion(ExpMat, outname=None):
+    """Z-score each gene (row) across samples (columns).
+
+    Parameters
+    ----------
+    ExpMat : pd.DataFrame
+        Expression matrix (genes x samples).
+    outname : str, optional
+        If provided, save the result to this CSV path.
+
+    Returns
+    -------
+    pd.DataFrame
+        Z-scored matrix (same shape as ExpMat).
+    """
+    z1_data = []
+    for idx in ExpMat.index:
+        row = ExpMat.loc[idx].values
+        z1_data.append(ZscoreConverting(row))
+    Z1Mat = pd.DataFrame(data=z1_data, index=ExpMat.index, columns=ExpMat.columns)
+    if outname is not None:
+        Z1Mat.to_csv(outname)
+    return Z1Mat
+
+
+#################################################
 # Allen SC data related Functions
 #################################################
 ABC_ALL_Class = ['01 IT-ET Glut', '02 NP-CT-L6b Glut', '03 OB-CR Glut',

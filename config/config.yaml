@@ -76,8 +76,12 @@ gene_sets:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/T2D.top61.gw"
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
-  STR_ISH: 
-    expr_matrix: "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet"
+  STR_ISH:
+    # TODO: Switch back to new Z2 (17198 genes) after validating downstream results.
+    # New Z2 vs old: r=0.949, ASD bias r=0.971. Diff from 279 ISH section IDs.
+    # See docs/preprocessing_Z2_comparison.md for full comparison.
+    expr_matrix: "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet.bak"  # old reference (17180 genes)
+    # expr_matrix: "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet"   # new regenerated (17198 genes)
     mode: "mouse_str_bias"
   # CT_Spec: 
   #   expr_matrix: "dat/BiasMatrices/MouseCT.TPM.1.Filt.Spec.clip.lowexp.100000.qn.parquet"
@@ -96,8 +100,58 @@ n_random_weights: 10000
 
 # Data file paths
 data_files:
+  # Allen Brain Atlas ISH expression data (structure-unionized, ~26K CSV files)
+  ish_expression_dir: "/mnt/data0/AllenBrainAtlas/ISH"
+  # Allen Brain Atlas metadata
+  allen_metadata_dir: "dat/allen-mouse-exp"
   sibling_weights: "dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv"
   mouse_ct_annotation: "dat/MouseCT_Cluster_Anno.csv"
+  cell_type_hierarchy: "dat/CellTypeHierarchy.csv"
   protein_coding_genes: "dat/Genetics/protein-coding_gene.txt"
   major_brain_divisions: "dat/structure2region.tsv"
   Denovo_mut_rate: "/home/jw3514/Work/Resources/MutationRate_20170710_rate.CorrectSymbol.txt"
+  # Single-cell cluster-level expression matrices (Allen Brain Cell Atlas)
+  cluster_mean_log_umi: "dat/SC_UMI_Mats/cluster_MeanLogUMI.parquet"
+  cluster_mean_log_umi_csv: "dat/SC_UMI_Mats/cluster_MeanLogUMI.csv"
+  cluster_expression_quantiles: "dat/SC_UMI_Mats/ABC_LogUMI.Match.10xV3.parquet"
+  # MERFISH spatial transcriptomics data
+  merfish_annotation: "dat/MERFISH/MERFISH.ISH_Annot.csv"
+  merfish_annotation_parquet: "dat/MERFISH/MERFISH.ISH_Annot.parquet"
+  merfish_ccf_ontology: "dat/MERFISH/CCF_V3_ISH_MERFISH.csv"
+  # Structure-level bias (FDR-adjusted, used as ISH structure reference list)
+  str_bias_fdr: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+  asd_gene_weights_v2: "dat/Unionize_bias/Spark_Meta_EWS.GeneWeight.v2.csv"
+  # MERFISH Z2 expression matrices (structure-level, ISH-matched)
+  merfish_z2_cell_mean: "dat/MERFISH/STR_Cell_Mean_Z2Mat_ISHMatch.csv"
+  merfish_z2_vol_mean: "dat/MERFISH/STR_Vol_Mean_Z2Mat_ISHMatch.csv"
+  merfish_z2_neur_mean: "dat/MERFISH/STR_NEUR_Mean_Z2Mat_ISHMatch.csv"
+  merfish_z2_neur_vol_mean: "dat/MERFISH/STR_NEUR_Vol_Mean_Z2Mat_ISHMatch.csv"
+  # Cell-type bias with sibling-null p-values (produced by 05.Bias_Controls)
+  ct_bias_addp: "notebooks_mouse_sc/dat/Bias/ASD.ClusterV3.top60.UMI.Z2.z1clip3.addP.csv"
+  # ASD circuit (SA search result, Size 46 Pareto front index 3)
+  asd_circuit_size46: "results/STR_ISH/ASD.SA.Circuits.Size46.csv"
+  # Connectivity scoring matrices (InfoMat)
+  infomat_ipsi: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
+  infomat_ipsi_short: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.Short.3900.csv"
+  infomat_ipsi_long: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.Long.3900.csv"
+  # Null connectivity scores (RankScore permutations)
+  rankscore_ipsi: "dat/allen-mouse-conn/RankScores/RankScore.Ipsi.Cont.npy"
+  rankscore_ipsi_short: "dat/allen-mouse-conn/RankScores/RankScore.Ipsi.Short.3900.Cont.npy"
+  rankscore_ipsi_long: "dat/allen-mouse-conn/RankScores/RankScore.Ipsi.Long.3900.Cont.npy"
+  # ISH structure bias (without FDR)
+  str_bias_raw: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.csv"
+  # MERFISH raw UMI expression matrices (structure-level, pre-normalization)
+  merfish_cell_mean_umi: "dat/MERFISH/STR_Cell_Mean_DF.UMI.csv"
+  merfish_vol_mean_umi: "dat/MERFISH/STR_Vol_Mean_DF.UMI.csv"
+  merfish_neur_mean_umi: "dat/MERFISH/STR_NEU_Mean_DF.UMI.csv"
+  merfish_neur_vol_mean_umi: "dat/MERFISH/STR_NEU_Vol_Mean_DF.UMI.csv"
+  # Zhuang MERFISH dataset (optional)
+  merfish_zhuang_cell_mean_umi: "dat/MERFISH_Zhuang/STR_Cell_Mean_DF.UMI.csv"
+  merfish_zhuang_vol_mean_umi: "dat/MERFISH_Zhuang/STR_Vol_Mean_DF.UMI.csv"
+  # Cell-type gene weights (DN = expressed in Allen ISH + matched gene set)
+  asd_gene_weights_dn: "dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw"
+  ddd_gene_weights_dn: "dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw"
+  # MERFISH cells annotated with ASD bias (produced by 06.Bias_Display)
+  merfish_cells_bias_annotated: "notebooks_mouse_sc/dat/MERFISH/MERFISH.cells.ASD.Bias.Anno.parquet"
+  # Z2 split files (external dependency, on data mount)
+  z2_split_base: "/mnt/data0/home_backup/Work/CellType_Psy/AllenBrainCellAtlas/dat/Z2.Split"
