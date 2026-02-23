@@ -24,7 +24,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.markers import TICKDOWN
 
-ProjDIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
+ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType"
 sys.path.insert(1, os.path.join(ProjDIR, "src"))
 sys.path.insert(1, os.path.join(ProjDIR, "scripts"))
 from ASD_Circuits import (

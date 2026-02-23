@@ -24,7 +24,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-ProjDIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
+ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType"
 sys.path.insert(1, os.path.join(ProjDIR, "src"))
 from ASD_Circuits import (
     LoadGeneINFO, GetPermutationP, ScoreCircuit_SI_Joint,

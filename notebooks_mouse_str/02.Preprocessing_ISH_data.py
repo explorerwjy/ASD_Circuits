@@ -24,7 +24,7 @@ import subprocess
 import numpy as np
 import pandas as pd
 
-ProjDIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
+ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType"
 sys.path.insert(1, os.path.join(ProjDIR, "src"))
 from ASD_Circuits import (
     modify_str, LoadList, ZscoreConverting, quantileNormalize_withNA
