@@ -1735,6 +1735,9 @@ merge_res_dict["CSF_merge"]["chd8"].sort_values(by="conn_diff").tail(50)
 
 
 # %%
+from itertools import combinations
+
+
 def compare_models_spearman(merge_results_dict, stat_type="conn_diff", merge_key="CSF_merge"):
     """
     Compare models pairwise by Spearman correlation of MWU p-values using the new merge_res_dict structure.

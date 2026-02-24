@@ -416,8 +416,8 @@ ASD_Neuron_den_norm_bias = pd.read_csv("../dat/Unionize_bias/ASD.neuron.density.
                                         index_col="STR")
 ASD_Glia_norm_bias = pd.read_csv("../dat/Unionize_bias/ASD.neuro2glia.norm.bias.csv",
                                   index_col="STR")
-ASD_Male = pd.read_csv("../dat/Unionize_bias/ASD.Male.ALL.bias.csv", index_col="STR")
-ASD_Female = pd.read_csv("../dat/Unionize_bias/ASD.Female.ALL.bias.csv", index_col="STR")
+ASD_Male = pd.read_csv("../dat/Unionize_bias/ASD.Male.ALL.bias.csv", index_col=0)
+ASD_Female = pd.read_csv("../dat/Unionize_bias/ASD.Female.ALL.bias.csv", index_col=0)
 
 ref_bias = bias_results["SPARK 61"]
 
