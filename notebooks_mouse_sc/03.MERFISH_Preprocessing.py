@@ -16,17 +16,11 @@
 # %% [markdown]
 # # 03. MERFISH Preprocessing
 #
-# Map MERFISH (Multiplexed Error-Robust Fluorescence In Situ Hybridization) cells
-# from the Allen Brain Cell Atlas to ISH brain structures used in the connectome.
-#
-# **Pipeline** (already run, output exists):
-# 1. Load CCF v3 parcellation ontology
-# 2. Map each MERFISH cell's parcellation structure/substructure to an ISH structure
-# 3. Save annotated cell metadata with `ISH_STR` column
-#
-# **Input**: Raw Allen Brain Cell Atlas MERFISH cell metadata + CCF v3 ontology
-#
-# **Output**: `dat/MERFISH/MERFISH.ISH_Annot.csv` (~3.7M cells, 39 columns)
+# Prepare MERFISH data for structure-level analysis:
+# 1. Map MERFISH cells to ISH brain structures (via CCF v3 ontology)
+# 2. Compute Z1 matrices (Allen + Zhuang MERFISH)
+# 3. Assemble Z2 matrices from pre-computed splits
+# 4. Compute expression matching quantiles
 
 # %%
 # %load_ext autoreload
@@ -41,7 +35,7 @@ import matplotlib.pyplot as plt
 
 ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType/"
 sys.path.insert(1, f"{ProjDIR}/src/")
-from ASD_Circuits import *
+from CellType_PSY import *
 
 os.chdir(f"{ProjDIR}/notebooks_mouse_sc/")
 
@@ -170,3 +164,126 @@ if not os.path.exists(merfish_parquet):
     print(f"CSV: {csv_size:.0f} MB → Parquet: {parquet_size:.0f} MB")
 else:
     print(f"Parquet already exists: {merfish_parquet}")
+
+# %% [markdown]
+# ## 5. Allen MERFISH Z1 Matrices
+#
+# Compute Z1-normalized expression matrices from raw UMI counts for both
+# all-cell and neuron-only aggregations (cell-mean and volume-weighted).
+
+# %%
+# Allen MERFISH — all cells
+MERFISH_CellMeanExp = pd.read_csv(f"../{config['data_files']['merfish_cell_mean_umi']}", index_col=0)
+MERFISH_VolMeanExp = pd.read_csv(f"../{config['data_files']['merfish_vol_mean_umi']}", index_col=0)
+print(f"Allen MERFISH Cell-mean: {MERFISH_CellMeanExp.shape}")
+print(f"Allen MERFISH Vol-mean:  {MERFISH_VolMeanExp.shape}")
+
+MERFISH_CellMean_Z1 = Z1Conversion(MERFISH_CellMeanExp, "../dat/MERFISH/STR_Cell_Mean_Z1Mat.csv")
+MERFISH_VolMean_Z1 = Z1Conversion(MERFISH_VolMeanExp, "../dat/MERFISH/STR_Vol_Mean_Z1Mat.csv")
+
+MERFISH_CellMean_Z1.clip(upper=5, lower=-5).to_csv("../dat/MERFISH/STR_Cell_Mean_Z1Mat.clip.csv")
+MERFISH_VolMean_Z1.clip(upper=5, lower=-5).to_csv("../dat/MERFISH/STR_Vol_Mean_Z1Mat.clip.csv")
+
+# %%
+# Allen MERFISH — neuron-only
+MERFISH_NEU_MeanExp = pd.read_csv(f"../{config['data_files']['merfish_neur_mean_umi']}", index_col=0)
+MERFISH_NEU_VolMeanExp = pd.read_csv(f"../{config['data_files']['merfish_neur_vol_mean_umi']}", index_col=0)
+print(f"Allen MERFISH Neuron Cell-mean: {MERFISH_NEU_MeanExp.shape}")
+print(f"Allen MERFISH Neuron Vol-mean:  {MERFISH_NEU_VolMeanExp.shape}")
+
+MERFISH_NEU_Z1 = Z1Conversion(MERFISH_NEU_MeanExp, "../dat/MERFISH/STR_NEU_Mean_Z1Mat.csv")
+MERFISH_NEU_Z1.clip(upper=5, lower=-5).to_csv("../dat/MERFISH/STR_NEU_Mean_Z1Mat.clip.csv")
+
+MERFISH_NEU_Vol_Z1 = Z1Conversion(MERFISH_NEU_VolMeanExp, "../dat/MERFISH/STR_NEU_Vol_Mean_Z1Mat.csv")
+MERFISH_NEU_Vol_Z1.clip(upper=5, lower=-5).to_csv("../dat/MERFISH/STR_NEU_Vol_Mean_Z1Mat.clip.csv")
+
+# %% [markdown]
+# ## 6. Zhuang/MIT MERFISH Z1 Matrices
+#
+# Same Z1 normalization for the Zhuang Lab MERFISH dataset (if available).
+
+# %%
+if os.path.exists(f"../{config['data_files']['merfish_zhuang_cell_mean_umi']}"):
+    Zhuang_CellMeanExp = pd.read_csv(f"../{config['data_files']['merfish_zhuang_cell_mean_umi']}", index_col=0)
+    Zhuang_VolMeanExp = pd.read_csv(f"../{config['data_files']['merfish_zhuang_vol_mean_umi']}", index_col=0)
+    print(f"Zhuang MERFISH Cell-mean: {Zhuang_CellMeanExp.shape}")
+    print(f"Zhuang MERFISH Vol-mean:  {Zhuang_VolMeanExp.shape}")
+
+    Zhuang_CellMean_Z1 = Z1Conversion(Zhuang_CellMeanExp, "../dat/MERFISH_Zhuang/STR_Cell_Mean_Z1Mat.csv")
+    Zhuang_VolMean_Z1 = Z1Conversion(Zhuang_VolMeanExp, "../dat/MERFISH_Zhuang/STR_Vol_Mean_Z1Mat.csv")
+
+    Zhuang_CellMean_Z1.clip(upper=5, lower=-5).to_csv("../dat/MERFISH_Zhuang/STR_Cell_Mean_Z1Mat.clip.csv")
+    Zhuang_VolMean_Z1.clip(upper=5, lower=-5).to_csv("../dat/MERFISH_Zhuang/STR_Vol_Mean_Z1Mat.clip.csv")
+else:
+    print("Zhuang MERFISH data not found — skipping")
+
+# %% [markdown]
+# ## 7. MERFISH Z2 Matrices (from pre-computed splits)
+#
+# Z2 normalization is ISH expression-matched. The Z2 computation was run externally
+# and split across multiple CSV files. Here we reassemble them into single matrices.
+
+# %%
+Z2_SPLIT_BASE = config["data_files"]["z2_split_base"]
+
+
+def assemble_z2_splits(split_dir, outpath):
+    """Concatenate Z2 split CSVs into a single matrix."""
+    if not os.path.isdir(split_dir):
+        print(f"  SKIP (not found): {split_dir}")
+        return None
+    dfs = []
+    for f in sorted(os.listdir(split_dir)):
+        dfs.append(pd.read_csv(os.path.join(split_dir, f), index_col=0))
+    z2 = pd.concat(dfs)
+    z2.to_csv(outpath)
+    print(f"  {outpath}: {z2.shape}")
+    return z2
+
+
+# Allen MERFISH Z2
+print("Allen MERFISH Z2:")
+assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_CellMean_UMI_ISHMatch_Z2",
+                   "../dat/MERFISH/STR_Cell_Mean_Z2Mat_ISHMatch.csv")
+assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_VolMean_UMI_ISHMatch_Z2",
+                   "../dat/MERFISH/STR_Vol_Mean_Z2Mat_ISHMatch.csv")
+
+# Allen MERFISH — neuron-only Z2
+print("Allen MERFISH Neuron Z2:")
+assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_NEU_Mean_UMI_ISHMatch_Z2",
+                   "../dat/MERFISH/STR_NEUR_Mean_Z2Mat_ISHMatch.csv")
+assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_NEU_Vol_Mean_UMI_ISHMatch_Z2",
+                   "../dat/MERFISH/STR_NEUR_Vol_Mean_Z2Mat_ISHMatch.csv")
+
+# Zhuang MERFISH Z2
+print("Zhuang MERFISH Z2:")
+assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_MIT_CellMean_UMI_ISHMatch_Z2",
+                   "../dat/MERFISH_Zhuang/STR_Cell_Mean_Z2Mat_ISHMatch.csv")
+assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_MIT_VolMean_UMI_ISHMatch_Z2",
+                   "../dat/MERFISH_Zhuang/STR_Vol_Mean_Z2Mat_ISHMatch.csv")
+
+# %% [markdown]
+# ## 8. MERFISH Expression Matching Quantiles
+#
+# Compute per-gene expression quantiles across all MERFISH clusters. These quantiles
+# are used for ISH expression-level matching during Z2 normalization.
+
+# %%
+ClusterExpDF = pd.read_csv(f"../{config['data_files']['cluster_mean_log_umi_csv']}", index_col=0)
+MERFISH_STRAnn = pd.read_csv(f"../{config['data_files']['merfish_annotation']}")
+
+Total_Exp_Genes = np.zeros(ClusterExpDF.shape[0])
+matched_clusters = 0
+for _, row in MERFISH_STRAnn.iterrows():
+    cluster = row.get("cluster")
+    if cluster is not None and cluster in ClusterExpDF.columns:
+        Total_Exp_Genes += ClusterExpDF[cluster].values
+        matched_clusters += 1
+print(f"Matched {matched_clusters} MERFISH entries to clusters")
+
+WB_ExpDF = pd.DataFrame(Total_Exp_Genes, index=ClusterExpDF.index, columns=["TotalExp"])
+WB_ExpDF = WB_ExpDF.sort_values("TotalExp")
+WB_ExpDF["Rank"] = range(1, len(WB_ExpDF) + 1)
+WB_ExpDF["quantile"] = WB_ExpDF["Rank"] / len(WB_ExpDF)
+WB_ExpDF.to_csv("../dat/MERFISH/MouseMERFISHGeneMatchQuantile.csv")
+print(f"Saved expression quantiles: {WB_ExpDF.shape}")
