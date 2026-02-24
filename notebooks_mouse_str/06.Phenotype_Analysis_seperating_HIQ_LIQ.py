@@ -110,7 +110,7 @@ ASC_LIQ = ASC_IQ_dat[ASC_IQ_dat["IQ"] <= 70]["Phenotype_ID"].values
 
 # Load SPARK phenotype data
 Spark_IQ_dat = pd.read_csv(
-    "/home/jw3514/Work/ASD_Phenotype/Old/SPARK_Collection_Version6/core_descriptive_variables.csv"
+    "../dat/Genetics/SPARK/core_descriptive_variables.csv"
 )
 Spark_IQ_dat = Spark_IQ_dat[Spark_IQ_dat["asd"] == True]
 Spark_IQ_dat = Spark_IQ_dat.dropna(subset=['fsiq'])
@@ -660,7 +660,7 @@ ASC_Male = ASC_sex_dat[ASC_sex_dat["Sex"] == "Male"]["Phenotype_ID"].values
 ASC_Female = ASC_sex_dat[ASC_sex_dat["Sex"] == "Female"]["Phenotype_ID"].values
 
 Spark_sex_dat = pd.read_csv(
-    "/home/jw3514/Work/ASD_Phenotype/Old/SPARK_Collection_Version6/core_descriptive_variables.csv"
+    "../dat/Genetics/SPARK/core_descriptive_variables.csv"
 )
 Spark_sex_dat = Spark_sex_dat[Spark_sex_dat["asd"] == True]
 Spark_sex_dat = Spark_sex_dat.dropna(subset=['fsiq'])

@@ -199,6 +199,98 @@ files:
     size_approx: "~5 MB total"
     notes: "Key file: Spark_Meta_EWS.Z2.bias.FDR.csv (main ASD results)"
 
+  # ===== External Data Files (Migrated from legacy paths) =====
+  dat/Genetics/SPARK/core_descriptive_variables.csv:
+    description: "SPARK phenotype data — demographics, cognitive/behavioral measures for participants"
+    format: "CSV"
+    key_fields:
+      subject_sp_id: "SPARK subject ID"
+      sex: "Sex"
+      age_at_registration_months: "Age at registration"
+      cog_test_score: "Cognitive test score"
+    source: "SPARK Consortium (Simons Foundation)"
+    size_approx: "26 MB"
+    notes: "Used by notebooks 06 (HIQ/LIQ phenotype split) and 11 (gene clustering). Previously at /home/jw3514/Work/ASD_Phenotype/"
+
+  dat/Genetics/SCZ.ALLGENE.MutCountModified.csv:
+    description: "Schizophrenia de novo mutation counts per gene"
+    format: "CSV"
+    key_fields:
+      Gene: "Gene name"
+      EntrezGene: "Entrez gene ID"
+      columns: "Mutation type counts (LoF, missense, etc.)"
+    source: "SCZ exome sequencing studies"
+    size_approx: "4.5 MB"
+    notes: "Used by notebook 04 for SCZ gene weight computation. Previously at /mnt/data0/home_backup/Work/CellType_Psy/"
+
+  dat/Genetics/gnomad.v4.0.constraint_metrics.tsv:
+    description: "gnomAD v4.0 gene constraint metrics — LOEUF, pLI, z-scores for all genes"
+    format: "TSV (tab-separated)"
+    key_fields:
+      gene: "Gene symbol"
+      transcript: "Ensembl transcript ID (ENST)"
+      mane_select: "Whether this is the MANE Select transcript"
+      lof.oe_ci.upper: "LOEUF — loss-of-function observed/expected upper CI bound"
+      lof.pLI: "Probability of LoF intolerance"
+      lof.z_score: "LoF z-score"
+    source: "gnomAD v4.0 (https://gnomad.broadinstitute.org/)"
+    size_approx: "82 MB"
+    notes: "Used by notebooks 08, 09 for LOEUF25 constrained gene set. Previously at /home/jw3514/Work/data/gnomad/"
+
+  dat/Genetics/41586_2020_2832_MOESM4_ESM.xlsx:
+    description: "DDD/NDD exome-wide significant genes — de novo mutation counts from Kaplanis et al. 2020"
+    format: "Excel"
+    key_fields:
+      symbol: "Gene symbol"
+      denovoWEST_p_full: "DenovoWEST p-value"
+      frameshift_variant: "Frameshift variant count"
+      missense_variant: "Missense variant count"
+      stop_gained: "Stop gained variant count"
+    source: "Kaplanis et al. 2020 Nature (PMID: 33057194), Supplementary Table 4"
+    size_approx: "4.3 MB"
+    notes: "Used by notebooks 08, 09 for DDD comparison and mutation bootstrap. Previously at /home/jw3514/Work/data/DDD/"
+
+  dat/Clusters_Values.xlsx:
+    description: "Mouse fMRI cluster values — Verbitsky et al. connectivity analysis results"
+    format: "Excel"
+    key_fields:
+      Cluster_ID: "fMRI cluster identifier"
+      value: "Cluster value/score"
+    source: "Verbitsky et al. mouse fMRI study"
+    size_approx: "28 KB"
+    notes: "Used by notebook 13 for fMRI validation. Previously at /home/jw3514/Work/FuncConnectome/ASD_Mouse/Clusters_Images/"
+
+  dat/MouseFMRI/:
+    description: "Mouse model fMRI global connectivity data — Shank3b, Chd8, Cntnap2, Mecp2 models"
+    format: "MATLAB .mat files + CSV parcel metadata"
+    files:
+      global_connectivity_allsubjs_CSF.mat: "Global connectivity with CSF regression (312 KB)"
+      global_connectivity_allsubjs_GSR.mat: "Global connectivity with GSR regression (320 KB)"
+      parcel_indices_424.csv: "Parcel indices for 424 brain regions (4 KB)"
+      parc_labels_424_LR.csv: "Parcel labels left/right hemisphere (16 KB)"
+    source: "Mouse fMRI study collaboration"
+    size_approx: "~650 KB total"
+    notes: "Used by notebook 13 Section Mouse Model fMRI. Previously at /home/jw3514/Work/FuncConnectome/ASD_Mouse/OneDrive_1_7-31-2025/"
+
+  dat/Other/ontology.csv:
+    description: "Allen Brain Atlas structure ontology — hierarchical structure annotations"
+    format: "CSV"
+    key_fields:
+      id: "Allen structure ID"
+      name: "Structure name"
+      acronym: "Structure abbreviation"
+      parent_structure_id: "Parent in hierarchy"
+    source: "Allen Brain Atlas API"
+    size_approx: "~200 KB"
+    notes: "Used by notebook 13 for structure name-to-acronym mapping"
+
+  dat/Other/IQ_Mutation.Mar17.2023.csv:
+    description: "IQ mutation data — cognitive scores and mutation annotations"
+    format: "CSV"
+    source: "SPARK analysis (March 2023)"
+    size_approx: "~500 KB"
+    notes: "Used by notebook 11. Was previously a symlink, now a real file copy"
+
   # ===== Results (Generated) =====
   results/:
     description: "All pipeline outputs — null distributions, circuit search results, bootstrap, sibling analysis"

@@ -113,8 +113,7 @@ def plot_permutation_results(results):
 
 
 # %%
-# TODO: copy to dat/
-FMRI = pd.read_excel("/home/jw3514/Work/FuncConnectome/ASD_Mouse/Clusters_Images/Clusters_Values.xlsx", index_col="Name")
+FMRI = pd.read_excel(os.path.join(ProjDIR, "dat/Clusters_Values.xlsx"), index_col="Name")
 
 # %%
 FMRI.head(10)
@@ -168,7 +167,7 @@ GENCIC.head(2)
 
 # %%
 # TODO: copy to dat/
-ABA_Ontology = pd.read_csv("/home/jw3514/Work/ASD_Circuits/dat/Other/ontology.csv", index_col = "KEY")
+ABA_Ontology = pd.read_csv(os.path.join(ProjDIR, "dat/Other/ontology.csv"), index_col="KEY")
 ABA_Ontology.head(3)
 
 # %%
@@ -1166,8 +1165,7 @@ FMRI_annotated['GENCIC_Circuits_46'] = FMRI_annotated['GENCIC_Circuits_46'].fill
 FMRI_annotated
 
 # %%
-# TODO: copy to dat/
-FMRI_annotated.to_csv('/home/jw3514/Work/FuncConnectome/ASD_Mouse/Clusters_Images/FMRI_annotated.csv')
+FMRI_annotated.to_csv(os.path.join(ProjDIR, 'results/FMRI_annotated.csv'))
 
 # %%
 FMRI_annotated.head(2)
@@ -1248,8 +1246,7 @@ print(f"Fmri only: {fmri_only}")
 # # Mouse Model fMRI
 
 # %%
-# TODO: copy to dat/
-DataDIR = "/home/jw3514/Work/FuncConnectome/ASD_Mouse/OneDrive_1_7-31-2025/"
+DataDIR = os.path.join(ProjDIR, "dat/MouseFMRI/")
 data_csf = sio.loadmat(DataDIR + "global_connectivity_allsubjs_CSF.mat")
 data_gsr = sio.loadmat(DataDIR + "global_connectivity_allsubjs_GSR.mat")
 
