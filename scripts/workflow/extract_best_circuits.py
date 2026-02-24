@@ -50,7 +50,7 @@ for _, row in df_biaslim.iterrows():
             for line in f:
                 parts = line.strip().split('\t')
                 if len(parts) >= 3:
-                    score = float(parts[1])
+                    score = float(parts[0])
                     if score > best_score:
                         best_score = score
                         best_line = line.strip()
