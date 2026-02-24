@@ -88,10 +88,13 @@ def significance_bar(start, end, height, displaystring, linewidth=1.2,
 REGION_COLORS = {
     'Isocortex': '#268ad5',
     'Olfactory_areas': '#5ab4ac',
+    'Cortical_subplate': '#7ac3fa',
     'Hippocampus': '#2c9d39',
     'Amygdala': '#742eb5',
     'Striatum': '#ed8921',
     'Thalamus': '#e82315',
+    'Midbrain': '#f6b26b',
+    'Pallidum': '#2ECC71',
 }
 
 # %% [markdown]
@@ -306,15 +309,18 @@ ASD_Circuits = ASD_CircuitsSet.loc[3, "STRs"].split(";")
 print(f"ASD circuit structures: {len(ASD_Circuits)}")
 print(f"Region distribution:\n{RegionDistributionsList(ASD_Circuits)}")
 
-CIR_REGIONS = ['Isocortex', 'Hippocampus', 'Amygdala', 'Striatum',
-               'Thalamus', 'Olfactory_areas']
+CIR_REGIONS = ['Isocortex', 'Olfactory_areas', 'Cortical_subplate',
+               'Hippocampus', 'Amygdala', 'Striatum',
+               'Thalamus', 'Midbrain', 'Pallidum']
 CIR_REGIONS_Dict = {reg: [] for reg in CIR_REGIONS}
 for _str in ASD_Circuits:
-    for reg in CIR_REGIONS:
-        if str2reg[_str] == reg:
-            CIR_REGIONS_Dict[reg].append(_str)
-            break
+    reg = str2reg[_str]
+    if reg in CIR_REGIONS_Dict:
+        CIR_REGIONS_Dict[reg].append(_str)
+# Reassign Bed nuclei (Pallidum) to Amygdala for display
 CIR_REGIONS_Dict["Amygdala"].append("Bed_nuclei_of_the_stria_terminalis")
+if "Bed_nuclei_of_the_stria_terminalis" in CIR_REGIONS_Dict.get("Pallidum", []):
+    CIR_REGIONS_Dict["Pallidum"].remove("Bed_nuclei_of_the_stria_terminalis")
 
 # %%
 # Extract circuit structures for HIQ/LIQ
@@ -486,7 +492,108 @@ fig = PlotPhenotype_dots(HIQ_Cir, LIQ_Cir, HIQ_boot, LIQ_boot,
 
 
 # %%
-# Bar plot version (per region) — used in main text figure
+# Combined bar plot: all regions on one figure (manuscript version)
+def PlotPhenotype_bars_combined(HIQ_Cir, LIQ_Cir, HIQ_boot, LIQ_boot,
+                                IQ_PhenotypeDF, CIR_REGIONS, region_colors):
+    """Bar plot of HIQ vs LIQ bias for all circuit structures, grouped by region.
+
+    HIQ bars are outlined (unfilled), LIQ bars are solid-filled. Both use
+    the region-specific colour so the only visual distinction is fill vs outline.
+    """
+    fig = plt.figure(dpi=100, figsize=(30, 12))
+    ax = fig.add_axes([0.1, 0.1, 0.7, 0.8])
+
+    x_offset = 0
+    all_ticks = []
+    all_positions = []
+    bar_width = 0.4
+
+    for REG in CIR_REGIONS:
+        color = region_colors.get(REG, '#888888')
+        HIQ_dat = HIQ_Cir[HIQ_Cir["REGION"] == REG]
+        LIQ_dat = LIQ_Cir[LIQ_Cir["REGION"] == REG]
+        if len(HIQ_dat) == 0:
+            continue
+
+        REG_STRs = HIQ_dat.index.values
+        sort_idx = np.argsort(HIQ_dat["EFFECT"].values)
+        X = np.arange(len(REG_STRs))
+
+        HIQ_err = HIQ_boot.loc[REG_STRs].std(axis=1).values[sort_idx]
+        LIQ_err = LIQ_boot.loc[REG_STRs].std(axis=1).values[sort_idx]
+        dat1 = HIQ_dat["EFFECT"].values[sort_idx]
+        dat2 = LIQ_dat["EFFECT"].values[sort_idx]
+
+        # HIQ: outlined (unfilled)
+        ax.bar(X + x_offset - 0.2, dat1, yerr=HIQ_err,
+               color='none', width=bar_width,
+               edgecolor=color, linewidth=4)
+        # LIQ: solid filled
+        ax.bar(X + x_offset + 0.2, dat2, yerr=LIQ_err,
+               color=color, width=bar_width,
+               edgecolor=color, linewidth=1)
+
+        # Significance bars
+        Pvalues = IQ_PhenotypeDF.loc[REG_STRs, "Pvalue"].values[sort_idx]
+        for i, p in enumerate(Pvalues):
+            if p >= 0.05:
+                continue
+            elif p < 0.001:
+                ds = r'***'
+            elif p < 0.01:
+                ds = r'**'
+            else:
+                ds = r'*'
+            height = 0.05 + max(dat1[i] + HIQ_err[i], dat2[i] + LIQ_err[i])
+            bar_centers = (X[i] + x_offset - 0.4) + np.array([0.5, 1.5]) * bar_width
+            significance_bar(bar_centers[0], bar_centers[1], height, ds,
+                             markersize=20, fontsize=20)
+
+        all_positions.extend(X + x_offset)
+        all_ticks.extend(drop_fromList(REG_STRs[sort_idx]))
+        x_offset += len(REG_STRs)
+
+    ax.set_xticks(all_positions)
+    ax.set_xticklabels(all_ticks, rotation=45, ha='right',
+                       rotation_mode="anchor", fontsize=25)
+    ax.set_ylabel('Mutation Bias', fontsize=30)
+    ax.set_ylim(-0.2, 0.84)
+    ax.grid(True, axis="y", alpha=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis='y', labelsize=25)
+
+    # IQ group legend
+    leg1 = fig.add_axes([0.85, 0.7, 0.1, 0.2])
+    leg1.axis('off')
+    h1 = plt.Rectangle((0, 0), 1, 1, facecolor='none', edgecolor='black', linewidth=3)
+    h2 = plt.Rectangle((0, 0), 1, 1, facecolor='gray', edgecolor='black')
+    leg1.legend([h1, h2], ['Higher IQ', 'Lower IQ'], fontsize=25, frameon=False)
+
+    # Region legend
+    leg2 = fig.add_axes([0.88, 0.4, 0.1, 0.3])
+    leg2.axis('off')
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=region_colors.get(r, '#888'),
+               edgecolor='black') for r in CIR_REGIONS]
+    leg2.legend(handles, CIR_REGIONS, fontsize=25, frameon=False)
+
+    # P-value legend
+    leg3 = fig.add_axes([0.85, 0.1, 0.1, 0.1])
+    leg3.axis('off')
+    stars = [plt.Line2D([], [], color='black', marker='', linestyle='None')
+             for _ in range(3)]
+    leg3.legend(stars, ['* p < 0.05', '** p < 0.01', '*** p < 0.001'],
+                fontsize=25, frameon=False)
+
+    plt.show()
+    return fig
+
+
+fig_bars = PlotPhenotype_bars_combined(HIQ_Cir, LIQ_Cir, HIQ_boot, LIQ_boot,
+                                       IQ_PhenotypeDF, CIR_REGIONS, REGION_COLORS)
+
+
+# %%
+# Bar plot version (per region)
 def PlotPhenotype_bars(Dat1, Err1, Dat2, Err2, REG, IQ_PhenotypeDF,
                        label1="", label2="", fig_size=0):
     """Bar plot of HIQ vs LIQ bias per structure within a brain region."""
@@ -764,11 +871,16 @@ Male_dat = []
 Female_dat = []
 Male_err = []
 Female_err = []
+sex_regions = []
 for REG in CIR_REGIONS:
+    strs = CIR_REGIONS_Dict[REG]
+    if len(strs) == 0:
+        continue
+    sex_regions.append(REG)
     Male_dat.append(Male_ALL_Cir[Male_ALL_Cir["REGION"] == REG]["EFFECT"].mean())
     Female_dat.append(Female_ALL_Cir[Female_ALL_Cir["REGION"] == REG]["EFFECT"].mean())
-    Male_err.append(Male_boot.loc[CIR_REGIONS_Dict[REG]].mean(axis=0).std())
-    Female_err.append(Female_boot.loc[CIR_REGIONS_Dict[REG]].mean(axis=0).std())
+    Male_err.append(Male_boot.loc[strs].mean(axis=0).std())
+    Female_err.append(Female_boot.loc[strs].mean(axis=0).std())
 
 Male_dat = np.array(Male_dat)
 Female_dat = np.array(Female_dat)
@@ -778,14 +890,14 @@ Female_err = np.array(Female_err)
 sort_idx = np.argsort(Male_dat)
 
 fig, ax = plt.subplots(dpi=480)
-X = np.arange(len(CIR_REGIONS))
+X = np.arange(len(sex_regions))
 ax.bar(X - 0.1, Male_dat[sort_idx], yerr=Male_err[sort_idx],
        color="#e31a1c", width=0.2, label="Male", edgecolor='black')
 ax.bar(X + 0.1, Female_dat[sort_idx], yerr=Female_err[sort_idx],
        color="#ff7f00", width=0.2, label="Female", edgecolor='black')
 
 ax.set_ylabel('Mutation Bias', fontsize=20)
-plt.xticks(X, np.array(CIR_REGIONS)[sort_idx], rotation=45, fontsize=10,
+plt.xticks(X, np.array(sex_regions)[sort_idx], rotation=45, fontsize=10,
            ha='right', rotation_mode="anchor")
 ax.legend(loc="upper left")
 ax.grid(True, axis="y", alpha=0.5)
