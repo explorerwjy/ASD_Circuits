@@ -125,8 +125,8 @@ print(f"Low IQ subjects:  {len(LowIQ)} (ASC: {len(ASC_LIQ)}, SPARK: {len(Spark_L
 
 # %%
 # Load SPARK de novo mutations
-ASD_Discov_Muts = pd.read_csv("../dat/genes/SPARK/ASD_Discov_DNVs.txt", delimiter="\t")
-ASD_Rep_Muts = pd.read_csv("../dat/genes/SPARK/ASD_Rep_DNVs.txt", delimiter="\t")
+ASD_Discov_Muts = pd.read_csv("../dat/Genetics/SPARK/ASD_Discov_DNVs.txt", delimiter="\t")
+ASD_Rep_Muts = pd.read_csv("../dat/Genetics/SPARK/ASD_Rep_DNVs.txt", delimiter="\t")
 ASD_Muts = pd.concat([ASD_Discov_Muts, ASD_Rep_Muts])
 
 # Filter to exome-wide significant genes (Zhou et al. 2022)
