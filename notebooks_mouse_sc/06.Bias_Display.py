@@ -93,7 +93,8 @@ from alpha_shapes import Alpha_Shaper
 from alpha_shapes.boundary import get_boundaries
 
 
-def plot_section_bias(section_df, structures, title, vmin=-0.5, vmax=0.5, dpi=300):
+def plot_section_bias(section_df, structures, title, vmin=-0.5, vmax=0.5, dpi=300,
+                      show_labels=True):
     """Plot ASD bias on a single brain section with structure boundaries."""
     fig, ax = plt.subplots(dpi=dpi, figsize=(10, 8))
     fig.patch.set_alpha(0)
@@ -109,7 +110,7 @@ def plot_section_bias(section_df, structures, title, vmin=-0.5, vmax=0.5, dpi=30
     cbar = plt.colorbar(sc, ax=ax)
     cbar.set_label("ASD Bias", fontsize=14)
 
-    # Draw structure boundaries
+    # Draw structure boundaries and labels
     for reg in structures:
         sub = section_df[section_df["parcellation_structure"] == reg]
         if len(sub) < 10:
@@ -122,10 +123,12 @@ def plot_section_bias(section_df, structures, title, vmin=-0.5, vmax=0.5, dpi=30
             for bound in get_boundaries(alpha_shape):
                 ext = bound._exterior
                 ax.plot(ext[:, 0], ext[:, 1], color="black", ls="--", lw=1.2)
-            center = points[points[:, 0] < points[:, 0].median()].mean(axis=0)
-            if np.isnan(center).any():
-                center = points.mean(axis=0)
-            ax.text(center[0] - 0.3, center[1], reg, fontsize=8, fontweight="bold")
+            if show_labels:
+                left_mask = points[:, 0] < np.median(points[:, 0])
+                center = points[left_mask].mean(axis=0) if left_mask.any() else points.mean(axis=0)
+                if np.isnan(center).any():
+                    center = points.mean(axis=0)
+                ax.text(center[0] - 0.3, center[1], reg, fontsize=8, fontweight="bold")
         except Exception:
             pass
 
@@ -139,11 +142,13 @@ def plot_section_bias(section_df, structures, title, vmin=-0.5, vmax=0.5, dpi=30
 # %% [markdown]
 # ## 3. Representative Brain Sections
 #
-# Show four sections highlighting key brain regions:
+# Show six sections highlighting key brain regions:
 # - **Section 38**: Thalamus (MD), hippocampus (CA1, DG)
 # - **Section 51**: Striatum (ACB, CP), cortex (MOp, SSp)
 # - **Section 36**: Amygdala (BLA, LA, MEA), temporal cortex
 # - **Section 56**: Prefrontal cortex (PL, ILA, MOs)
+# - **Section 15**: Midbrain (VTA, IC), hindbrain (PB, PRNc)
+# - **Section 14**: Cerebellum (CENT, CUL, SIM, AN) — negative control
 
 # %%
 sections = {
@@ -164,6 +169,16 @@ sections = {
     "C57BL6J-638850.56": {
         "title": "Section 56 — Prefrontal Cortex",
         "structures": ["MOp", "MOs", "PIR", "PL", "ILA", "AId", "ORBl", "AON", "ACAd", "TT"],
+    },
+    "C57BL6J-638850.15": {
+        "title": "Section 15 — Midbrain & Hindbrain (VTA)",
+        "structures": ["IC", "PRNc", "VCO", "PB", "PSV", "PCG", "PARN", "MV", "GRN",
+                        "AN", "CENT", "SIM", "PFL", "CUL", "FL"],
+    },
+    "C57BL6J-638850.14": {
+        "title": "Section 14 — Cerebellum (Negative Control)",
+        "structures": ["CENT", "CUL", "SIM", "AN", "PFL", "FL", "MV", "GRN", "VCO",
+                        "PARN", "PCG", "DCO"],
     },
 }
 
