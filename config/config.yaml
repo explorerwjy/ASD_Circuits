@@ -2,30 +2,42 @@
 ProjDIR: "/home/jw3514/Work/ASD_Circuits_CellType/"  # Change to your project directory
 
 gene_sets:
-  #ASD_All:
- #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD_All.gw"
+  ASD_All:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Spark_Meta_EWS.gw"
+    null_model: "mutability"
   ASD_HIQ:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD.HIQ.gw.csv"
+    null_model: "mutability"
   ASD_LIQ:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/ASD.LIQ.gw.csv"
-  ASD_SPARK_159: 
+    null_model: "mutability"
+  ASD_SPARK_159:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Spark_Meta_160.GeneWeight.csv"
+    null_model: "mutability"
   DDD_61:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top61.gw"
-  DDD_293:  
+    null_model: "mutability"
+  DDD_293:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.gw"
-  DDD_293_ExcludeASD: 
+    null_model: "mutability"
+  DDD_293_ExcludeASD:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.ExcludeASD.gw"
+    null_model: "mutability"
   ASC_102:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_ASC_102.gw"
+    null_model: "mutability"
   Spark_top20:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/Spark_top20.gw"
+    null_model: "mutability"
   Fu_ASD_72:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_Fu_ASD_72.gw"
-  Fu_ASD_185: 
+    null_model: "mutability"
+  Fu_ASD_185:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_Fu_ASD_185.gw"
+    null_model: "mutability"
   SCZ:
     geneweights: "/home/jw3514/Work/CellType_Psy/CellTypeBias_VIP/dat/GeneWeights/SCZ.top61.nopLI.LGD_Dmis_SameWeight.exclude_Mis2.gw"
+    null_model: "mutability"
 
   # Constraint_top_decile_LOEUF:
   #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/constraint_top_decile_LOEUF.gw"
@@ -77,11 +89,10 @@ gene_sets:
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
   STR_ISH:
-    # TODO: Switch back to new Z2 (17198 genes) after validating downstream results.
-    # New Z2 vs old: r=0.949, ASD bias r=0.971. Diff from 279 ISH section IDs.
-    # See docs/preprocessing_Z2_comparison.md for full comparison.
-    expr_matrix: "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet.bak"  # old reference (17180 genes)
-    # expr_matrix: "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet"   # new regenerated (17198 genes)
+    # Z2 (17,208 genes) from Jon's R log2+QN → Z1 → Z2.
+    # Bit-exact CCS profile, local peak at size 46 confirmed.
+    # See notebook_validation/Validate_ISH_Z2_Pipeline for details.
+    expr_matrix: "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet"
     mode: "mouse_str_bias"
   # CT_Spec: 
   #   expr_matrix: "dat/BiasMatrices/MouseCT.TPM.1.Filt.Spec.clip.lowexp.100000.qn.parquet"
@@ -104,7 +115,16 @@ data_files:
   ish_expression_dir: "/mnt/data0/AllenBrainAtlas/ISH"
   # Allen Brain Atlas metadata
   allen_metadata_dir: "dat/allen-mouse-exp"
+  # Jon's raw expression energy matrix (arithmetic mean of raw, 17208 genes × 213 structures)
+  jon_exp_raw: "dat/allen-mouse-exp/Jon_ExpMat.raw.csv"
+  # Jon's R-generated log2+QN expression matrix (THE input for legacy Z2)
+  jon_exp_log2_qn: "dat/allen-mouse-exp/Jon_ExpMat.log2.qn.csv"
+  # Legacy Z1 reference (from Jon's QN data, used to compute legacy Z2)
+  legacy_z1: "dat/allen-mouse-exp/AllenMouse_z1_mat.0511.csv"
+  # Legacy expression match files (symlink to old project, 17189 files)
+  legacy_match_dir: "dat/allen-mouse-exp/ExpMatch_Legacy"
   sibling_weights: "dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv"
+  gene_prob: "dat/Genetics/GeneWeights/GeneProb_LGD_Dmis.csv"
   mouse_ct_annotation: "dat/MouseCT_Cluster_Anno.csv"
   cell_type_hierarchy: "dat/CellTypeHierarchy.csv"
   protein_coding_genes: "dat/Genetics/protein-coding_gene.txt"
@@ -153,5 +173,12 @@ data_files:
   ddd_gene_weights_dn: "dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw"
   # MERFISH cells annotated with ASD bias (produced by 06.Bias_Display)
   merfish_cells_bias_annotated: "notebooks_mouse_sc/dat/MERFISH/MERFISH.cells.ASD.Bias.Anno.parquet"
+  # Subclass expression matrices split by 10x chemistry (V2 vs V3, for DN weighting)
+  subclass_v2_exp: "dat/ExpressionMats/Subclass_V2_ExpMat.csv"
+  subclass_v3_exp: "dat/ExpressionMats/Subclass_V3_ExpMat.csv"
+  # V2-V3 cross-platform gene correlation (ISH/MERFISH/V2/V3, cached)
+  gene_cross_platform_corr: "dat/ISH_MERFISH_Gene_CorssSTR_Corr.v3.csv"
+  # ISH log-mean expression (legacy, for correlation computation only)
+  ish_log_mean_exp: "dat/allen-mouse-exp/JW_ExpMat.LogMean.0418.csv"
   # Z2 split files (external dependency, on data mount)
   z2_split_base: "/mnt/data0/home_backup/Work/CellType_Psy/AllenBrainCellAtlas/dat/Z2.Split"
