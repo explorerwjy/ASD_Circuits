@@ -23,3 +23,7 @@ __pycache__/
 **/draft/
 **/drafts/
 docs/
+
+# Validation and test files (not for publication)
+notebook_validation/
+scripts/test_*.py
