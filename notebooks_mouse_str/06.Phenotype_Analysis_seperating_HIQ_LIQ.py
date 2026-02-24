@@ -324,12 +324,39 @@ HIQ_Cir.loc["Bed_nuclei_of_the_stria_terminalis", "REGION"] = "Amygdala"
 LIQ_Cir.loc["Bed_nuclei_of_the_stria_terminalis", "REGION"] = "Amygdala"
 
 # %%
+# Build IQ_Mutation table: each high-confidence mutation annotated with subject IQ
+# This is the input for the permutation test below.
+ASC_IQ_search = ASC_IQ_dat.set_index("Phenotype_ID")
+Spark_IQ_search = Spark_IQ_dat.set_index("subject_sp_id")
+
+Mut_n_IQ = HighConfMuts[["IID", "Sex", "Pheno", "VarID", "GeneID", "HGNC",
+                          "GeneEff", "REVEL", "ExACpLI"]].copy()
+Mut_n_IQ["Entrez"] = Mut_n_IQ["HGNC"].map(
+    lambda h: int(GeneSymbol2Entrez[h]) if h in GeneSymbol2Entrez else -1
+)
+iq_vals = []
+for iid in Mut_n_IQ["IID"]:
+    if iid in ASC_IQ_search.index:
+        iq_vals.append(ASC_IQ_search.loc[iid, "IQ"])
+    elif iid in Spark_IQ_search.index:
+        iq_vals.append(Spark_IQ_search.loc[iid, "fsiq"])
+    else:
+        iq_vals.append(-1)
+Mut_n_IQ["IQ"] = iq_vals
+Mut_n_IQ = Mut_n_IQ[Mut_n_IQ["IQ"] != -1]
+Mut_n_IQ["Entrez"] = Mut_n_IQ["Entrez"].astype(int)
+
+IQ_MUT_PATH = "../dat/Other/IQ_Mutation.csv"
+Mut_n_IQ.to_csv(IQ_MUT_PATH, index=False)
+print(f"IQ_Mutation table: {len(Mut_n_IQ)} mutations with known IQ → {IQ_MUT_PATH}")
+
+# %%
 # Load IQ permutation p-values (cached or computed from legacy permutation files)
 PERM_CACHE = "../results/Phenotype_permutation/IQ_Bias_Diff.Pvalues.csv"
 LEGACY_PERM_DIR = "../dat/Unionize_bias/Permutations/IQ_permut"
 
 IQ_PhenotypeDF = permutation_test_phenotype(
-    pd.read_csv("../dat/Other/IQ_Mutation.Mar17.2023.csv"),
+    Mut_n_IQ,
     "IQ", 70, ExpZ2Mat, GeneSymbol2Entrez,
     n_perm=10000, n_jobs=10, cache_path=PERM_CACHE,
     legacy_perm_dir=LEGACY_PERM_DIR,
