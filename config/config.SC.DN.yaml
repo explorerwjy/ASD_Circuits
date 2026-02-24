@@ -8,9 +8,9 @@ gene_sets:
   DDD_293_ExcludeASD:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw"
     null_model: "mutability"
-  Constraint_top25_LOEUF:
-    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights_DN/constraint_top25_LOEUF.DN.gw"
-    null_model: "mutability"
+  # Constraint_top25_LOEUF:
+  #   geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights_DN/constraint_top25_LOEUF.DN.gw"
+  #   null_model: "mutability"
 
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
