@@ -128,45 +128,60 @@ for cls, count in class_counts.items():
     print(f"  {cls}: {count}/{total_in_class}")
 
 # %% [markdown]
-# ## 5. QQ Plot of P-values by Major Cell Class
+# ## 5. QQ Plot of P-values by Cell Class
 
 # %%
-# Define major cell classes for QQ plot
-forebrain_glut = ["01 IT-ET Glut", "02 NP-CT-L6b Glut"]
-forebrain_gaba = ["06 CTX-CGE GABA", "07 CTX-MGE GABA", "09 CNU-LGE GABA"]
-subcortical = ["12 HY GABA", "14 HY Glut", "18 TH Glut"]
-hindbrain = ["23 P Glut", "24 MY Glut", "26 P GABA", "27 MY GABA", "28 CB GABA", "29 CB Glut"]
-nonneuronal = ["30 Astro-Epen", "31 OPC-Oligo", "32 OEC", "33 Vascular", "34 Immune"]
+# 7 highlight classes with distinct colors; everything else as gray "Other"
+highlight_classes = [
+    "01 IT-ET Glut",
+    "02 NP-CT-L6b Glut",
+    "06 CTX-CGE GABA",
+    "09 CNU-LGE GABA",
+    "11 CNU-HYa GABA",
+    "13 CNU-HYa Glut",
+    "18 TH Glut",
+]
+highlight_colors = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#a65628", "#f781bf"]
 
-class_groups = {
-    "Forebrain Glut": forebrain_glut,
-    "Forebrain GABA": forebrain_gaba,
-    "Subcortical": subcortical,
-    "Hindbrain": hindbrain,
-    "Non-neuronal": nonneuronal,
-}
-
-fig, ax = plt.subplots(figsize=(5, 5), dpi=150)
+fig, ax = plt.subplots(figsize=(6, 6), dpi=150)
 fig.patch.set_alpha(0)
 ax.patch.set_alpha(0)
 
-for group_name, classes in class_groups.items():
-    mask = CT_Bias["class_id_label"].isin(classes)
+# Plot "Other" first (gray, behind)
+other_mask = ~CT_Bias["class_id_label"].isin(highlight_classes)
+pvals = np.sort(CT_Bias.loc[other_mask, "Pvalue"].values)
+n = len(pvals)
+expected = -np.log10(np.arange(1, n + 1) / (n + 1))
+observed = -np.log10(pvals)
+ax.scatter(np.sort(expected)[::-1], observed, s=4, alpha=0.3, color="0.6", label=f"Other (n={n})", zorder=1)
+
+# Plot each highlighted class
+for cls, color in zip(highlight_classes, highlight_colors):
+    mask = CT_Bias["class_id_label"] == cls
     pvals = np.sort(CT_Bias.loc[mask, "Pvalue"].values)
     n = len(pvals)
     if n == 0:
         continue
     expected = -np.log10(np.arange(1, n + 1) / (n + 1))
     observed = -np.log10(pvals)
-    ax.scatter(np.sort(expected)[::-1], observed, s=5, alpha=0.5, label=f"{group_name} (n={n})")
+    ax.scatter(np.sort(expected)[::-1], observed, s=8, alpha=0.7, color=color, label=f"{cls} (n={n})", zorder=2)
+
+# FDR threshold lines
+for fdr_thresh, ls in [(0.05, "-"), (0.10, "--")]:
+    mask_fdr = CT_Bias["qvalues"] < fdr_thresh
+    if mask_fdr.any():
+        p_cutoff = CT_Bias.loc[mask_fdr, "Pvalue"].max()
+        ax.axhline(-np.log10(p_cutoff), color="0.3", ls=ls, lw=0.8, alpha=0.7, zorder=0)
+        ax.text(ax.get_xlim()[1] * 0.02, -np.log10(p_cutoff) + 0.05,
+                f"FDR {fdr_thresh:.0%}", fontsize=7, color="0.3", va="bottom")
 
 # Diagonal reference
-max_val = ax.get_xlim()[1]
+max_val = max(ax.get_xlim()[1], ax.get_ylim()[1])
 ax.plot([0, max_val], [0, max_val], "k--", lw=0.5, alpha=0.5)
 ax.set_xlabel("Expected -log10(p)")
 ax.set_ylabel("Observed -log10(p)")
-ax.set_title("QQ Plot: Sibling-Null P-values")
-ax.legend(fontsize=7, loc="upper left")
+ax.set_title("QQ Plot: Sibling-Null P-values by Cell Class")
+ax.legend(fontsize=7, loc="lower right", markerscale=1.5)
 plt.tight_layout()
 plt.show()
 
