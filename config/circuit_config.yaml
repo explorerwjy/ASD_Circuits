@@ -10,12 +10,8 @@
 Input_str_bias:
   ASD_All:
     name: "ASD_SPARK_61"
-    bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
-    description: "ASD SPARK cohort with meta-analysis gene weights"
-  Boot9:
-    name: "ASD_SPARK_Boot9"
-    bias_df: "results/Bootstrap_bias/Spark_ExomeWide/Weighted_Resampling/Spark_ExomeWide.GeneWeight.boot9.csv"
-    description: "ASD SPARK cohort with bootstrapped gene weights"
+    bias_df: "results/STR_ISH/ASD_All_bias_addP_sibling.csv"
+    description: "ASD SPARK 61-gene bias with mutability-weighted sibling null p-values"
 
 
 
@@ -36,12 +32,12 @@ output_dir: "results/CircuitSearch"
 # ============================================================================
 
 # Circuit sizes to search (list of integers)
-# Default: [46] (the size with highest CCS score in the paper)
-# You can specify multiple sizes: [33, 46, 60, 75]
+# Size 46 is the primary CCS peak; 40, 45, 50 demonstrate robustness
 circuit_sizes:
-  - 46
+  - 40
   - 45
-  - 41
+  - 46
+  - 50
 
 # Number of top-ranked structures to consider as candidates
 # Default: 213 (structures with significant bias)
@@ -54,7 +50,7 @@ min_bias_rank: 50
 
 # Number of SA optimization runs per bias limit
 # Default: 10 (each run may find a different optimal circuit)
-sa_runtimes: 20
+sa_runtimes: 100
 
 # Number of SA steps per run (speed vs quality tradeoff)
 # Default: 50000 (higher = better quality but slower, lower = faster but may miss optimal)
@@ -68,7 +64,7 @@ measure: "SI"
 
 # Number of parallel cores for execution
 # Default: 10
-n_cores: 40
+n_cores: 20
 
 # Verbose output during SA runs
 # Default: False (suppress individual run details during pipeline execution)
