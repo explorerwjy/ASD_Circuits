@@ -60,77 +60,97 @@ _ProjDIR = _config["ProjDIR"]
 def quantileNormalize_withNA(expression_matrix):
     """
     Perform quantile normalization on gene expression matrix while ignoring NA values.
-    
+
+    Reimplements R's preprocessCore::normalize.quantiles (qnorm_c_handleNA).
+    Key behavior for columns with NAs: the column's sorted non-NA values are
+    linearly interpolated to fill all row positions before averaging, so every
+    column contributes equally at every position regardless of NA count.
+
     Parameters:
     -----------
     expression_matrix : pandas.DataFrame or numpy.ndarray
         Expression matrix with genes as rows and structures as columns.
         May contain NA/NaN values.
-        
+
     Returns:
     --------
     pandas.DataFrame
         Quantile normalized expression matrix with the same shape as input.
         NA values remain NA in the output.
     """
-    # Convert to DataFrame if numpy array
     if isinstance(expression_matrix, np.ndarray):
         df = pd.DataFrame(expression_matrix)
     else:
         df = expression_matrix.copy()
-    
-    # Store column names and index for later
+
     original_columns = df.columns if hasattr(df, 'columns') else None
     original_index = df.index if hasattr(df, 'index') else None
-    
-    # Create a mask for NA values
-    na_mask = df.isna()
-    
-    # Calculate ranks for each column, ignoring NAs
-    ranks_df = df.rank(method='average', na_option='keep')
-    
-    # For each column, sort the non-NA values
+
+    n_rows = len(df)
+    n_cols = len(df.columns)
+
+    # --- Step 1: Compute target distribution (matches R's determine_target) ---
+    # For each column, sort non-NA values and interpolate to n_rows positions.
+    # Then average across columns (each contributing 1/n_cols).
+    target = np.zeros(n_rows)
+
     sorted_values = {}
     for col in df.columns:
-        # Get non-NA values for this column
-        valid_values = df[col].dropna().values
-        # Sort them
-        valid_values.sort()
-        sorted_values[col] = valid_values
-    
-    # Find the maximum number of non-NA values in any column
-    max_valid_count = max(len(values) for values in sorted_values.values())
-    
-    # Create a matrix of sorted values (columns with fewer non-NA values will have NaNs)
-    sorted_matrix = np.full((max_valid_count, len(df.columns)), np.nan)
-    for i, col in enumerate(df.columns):
-        values = sorted_values[col]
-        sorted_matrix[:len(values), i] = values
-    
-    # Calculate the mean of each row, ignoring NaNs
-    sorted_df = pd.DataFrame(sorted_matrix)
-    mean_values = sorted_df.mean(axis=1, skipna=True).values
-    
-    # Create normalized dataframe with same shape as input
-    normalized_df = pd.DataFrame(np.full(df.shape, np.nan), 
-                                index=df.index, 
-                                columns=df.columns)
-    
-    # Assign normalized values based on ranks, keeping NA values as NA
+        valid = df[col].dropna().values.copy()
+        valid.sort()
+        sorted_values[col] = valid
+        n_valid = len(valid)
+
+        if n_valid == n_rows:
+            # No NAs: direct contribution
+            target += valid / n_cols
+        elif n_valid > 1:
+            # Has NAs: interpolate sorted values to fill all n_rows positions.
+            # R maps target position i to sorted index:
+            #   idx = 1 + (n_valid - 1) * i / (n_rows - 1)  (1-based)
+            # which is linear interpolation from sorted[0] to sorted[n_valid-1].
+            source_positions = np.linspace(0, n_valid - 1, n_rows)
+            interpolated = np.interp(source_positions,
+                                     np.arange(n_valid, dtype=float), valid)
+            target += interpolated / n_cols
+        elif n_valid == 1:
+            target += valid[0] / n_cols
+
+    # --- Step 2: Assign target values back (matches R's using_target) ---
+    # Vectorized: use np.interp for interpolation, handle ties via averaging.
+    normalized_df = pd.DataFrame(np.full(df.shape, np.nan),
+                                 index=df.index, columns=df.columns)
+    target_xp = np.arange(n_rows, dtype=float)  # 0-based positions in target
+
     for col in df.columns:
-        # Get the ranks for non-NA values
-        col_ranks = ranks_df[col].dropna()
-        # Convert ranks to array indices (0-based)
-        rank_indices = (col_ranks - 1).astype(int).values
-        # For each non-NA value, assign the corresponding mean value
-        normalized_df.loc[col_ranks.index, col] = mean_values[rank_indices]
-    
-    # Restore original column names and index
+        col_data = df[col].dropna()
+        n_valid = len(col_data)
+        if n_valid == 0:
+            continue
+
+        ranks = col_data.rank(method='average').values  # 1-based
+
+        if n_valid == n_rows:
+            # No NAs: map rank directly to target index (0-based)
+            target_idx = ranks - 1.0  # continuous 0-based indices
+            # Integer ranks: direct lookup; fractional ranks (ties): interp
+            result = np.interp(target_idx, target_xp, target)
+        elif n_valid > 1:
+            # Has NAs: map rank percentile to target position via interpolation
+            pctiles = (ranks - 1.0) / (n_valid - 1.0)
+            target_idx = pctiles * (n_rows - 1.0)
+            result = np.interp(target_idx, target_xp, target)
+        else:
+            # Single value: maps to target[0]
+            result = np.array([target[0]])
+
+        normalized_df.loc[col_data.index, col] = result
+
     if original_columns is not None:
         normalized_df.columns = original_columns
     if original_index is not None:
         normalized_df.index = original_index
-    
+
     return normalized_df
 
 def ZscoreConverting(values, mean = np.nan, std = np.nan):
@@ -691,7 +711,7 @@ def load_expression_matrix_cached(file_path: str, force_reload: bool = False) ->
     
     # Load matrix
     logging.info(f"Loading expression matrix: {file_path}")
-    if file_path.endswith('.parquet'):
+    if '.parquet' in file_path:
         matrix = pd.read_parquet(file_path)
     elif file_path.endswith('.csv') or file_path.endswith('.csv.gz'):
         matrix = pd.read_csv(file_path, index_col=0)
@@ -1172,12 +1192,13 @@ def analyze_neurotransmitter_systems_source_target(
 
         # Target genes analysis
         target_weights = create_gene_weights_by_system_category(
-            neural_system_df, 
-            system=system, 
+            neural_system_df,
+            system=system,
             group='target',
-            SOURCE_CATEGORIES=SOURCE_CATEGORIES, 
-            TARGET_CATEGORIES=TARGET_CATEGORIES, 
-            save_dir=save_dir
+            SOURCE_CATEGORIES=SOURCE_CATEGORIES,
+            TARGET_CATEGORIES=TARGET_CATEGORIES,
+            save_dir=save_dir,
+            weights=weights
         )
         if generate_bias and target_weights:
             target_bias = MouseSTR_AvgZ_Weighted(bias_mat, target_weights)
