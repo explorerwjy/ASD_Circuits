@@ -299,6 +299,21 @@ files:
     size_approx: "~50 KB"
     notes: "221 mutations with known IQ. Used by notebook 06 permutation test. Replaces legacy IQ_Mutation.Mar17.2023.csv."
 
+  # ===== Cell Composition Data =====
+  dat/cell_composition/Cell_Atlas_for_the_Mouse_brain_2.csv:
+    description: "Cell density (cells/mm³) per brain structure from the Cell Atlas for the Mouse Brain"
+    format: "CSV, comma-separated, 955 rows × 10 columns"
+    key_fields:
+      Regions: "Brain structure name (hierarchical Allen ontology)"
+      "Neurons [mm-3]": "Neuron density (cells per mm³)"
+      "Glia [mm-3]": "Total glia density"
+      "Astrocytes [mm-3]": "Astrocyte density"
+      "Oligodendrocytes [mm-3]": "Oligodendrocyte density"
+      "Microglia [mm-3]": "Microglia density"
+    source: "Erö et al. 2018, Frontiers in Neuroinformatics. Copied from old project dat/cell_composition/"
+    size_approx: "143 KB"
+    notes: "Used by notebook 02 to produce neuron density and neuro-to-glia normalized Z2 matrices"
+
   # ===== Results (Generated) =====
   results/:
     description: "All pipeline outputs — null distributions, circuit search results, bootstrap, sibling analysis"

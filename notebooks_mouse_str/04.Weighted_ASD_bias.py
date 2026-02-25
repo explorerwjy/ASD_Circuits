@@ -412,10 +412,13 @@ for name, gw in all_geneweights.items():
 # and male vs female donor normalization.
 
 # %%
-ASD_Neuron_den_norm_bias = pd.read_csv("../dat/Unionize_bias/ASD.neuron.density.norm.bias.csv",
-                                        index_col="STR")
-ASD_Glia_norm_bias = pd.read_csv("../dat/Unionize_bias/ASD.neuro2glia.norm.bias.csv",
-                                  index_col="STR")
+# Compute neuron density and neuro-to-glia bias from Z2 matrices (produced by notebook 02)
+NeuroDen_Z2 = pd.read_parquet("../dat/BiasMatrices/NeuroDensityNorm_Z2.parquet")
+Neuro2Glia_Z2 = pd.read_parquet("../dat/BiasMatrices/Neuro2GliaNorm_Z2.parquet")
+
+ASD_Neuron_den_norm_bias = MouseSTR_AvgZ_Weighted(NeuroDen_Z2, GW_Spark61)
+ASD_Glia_norm_bias = MouseSTR_AvgZ_Weighted(Neuro2Glia_Z2, GW_Spark61)
+
 ASD_Male = pd.read_csv("../dat/Unionize_bias/ASD.Male.ALL.bias.csv", index_col=0)
 ASD_Female = pd.read_csv("../dat/Unionize_bias/ASD.Female.ALL.bias.csv", index_col=0)
 
