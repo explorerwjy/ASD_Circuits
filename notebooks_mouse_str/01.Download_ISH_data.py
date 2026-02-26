@@ -42,19 +42,36 @@ ISH_DIR = config["data_files"]["ish_expression_dir"]
 print(f"ISH expression directory: {ISH_DIR}")
 
 # %% [markdown]
-# # 01. Download ISH Data from Allen Brain Atlas
+# # 01. Download ISH Data and Build Expression Matrix
 #
-# This notebook downloads and preprocesses input data for the GENCIC pipeline:
+# This notebook downloads input data from the Allen Brain Atlas and builds the
+# gene expression matrix used for all structure-level analyses.
 #
 # 1. **Allen ISH experiment metadata** — list of all mouse brain ISH experiments with gene info
 # 2. **Allen gene catalog** — all genes with Entrez IDs in the Allen Mouse Brain Atlas
 # 3. **ISH expression energy** — per-structure unionized expression for each experiment (bulk download)
 # 4. **Human-Mouse gene homology** — ortholog mapping from MGI/JAX
-# 5. **Gene mapping construction** — match human genes → mouse orthologs → Allen section IDs
-# 6. **Structure metadata** — 213 selected brain structures
+# 5. **HGNC ortholog mappings** — human↔mouse gene mappings via homology groups
+# 6. **Discontinued mouse Entrez IDs** — update Allen data with current Entrez IDs
+# 7. **Human gene → Allen section IDs** — union of Entrez-based and symbol-based routes (Jon's strategy)
+# 8. **Structure metadata** — 213 selected brain structures
+# 9. **Expression matrix** — arithmetic mean of raw expression energy across ISH sections per gene
 #
 # All outputs are saved to `dat/allen-mouse-exp/`.
 # Data downloads are guarded by `os.path.exists()` checks to avoid re-downloading.
+#
+# ### Gene mapping strategy
+#
+# Following Jon's R pipeline (`human_gene.R`), each human gene is mapped to
+# Allen ISH section IDs via **two independent routes**, then the results are
+# **unioned**:
+#
+# - **Entrez route**: human Entrez → mouse Entrez (HGNC) → Allen section IDs
+# - **Symbol route**: human Entrez → human symbol → mouse symbol (HGNC) → Allen section IDs
+#
+# Before mapping, discontinued mouse Entrez IDs in the Allen data are updated
+# to their current equivalents (414 sections affected, 253 mouse genes recovered).
+# See `docs/Jon_Exp_Mat.md` for full documentation.
 
 # %% [markdown]
 # ## 1. Download Allen ISH Experiment Metadata
@@ -192,7 +209,7 @@ else:
     print(f"Already exists: {hom_path}")
 
 # %% [markdown]
-# ## 4. Build Human-Mouse Gene Mapping
+# ## 4. Load Data for Gene Mapping
 
 # %%
 AllenMouseGenes = pd.read_csv(
@@ -202,13 +219,55 @@ Human2MouseHom = pd.read_csv(hom_path, delimiter="\t")
 print(f"Allen ISH experiments: {len(AllenMouseGenes)}")
 print(f"Homology entries: {len(Human2MouseHom)}")
 
-# %%
-# Build bidirectional Human <-> Mouse gene mappings using homology IDs
-Homo_IDs = set(Human2MouseHom["DB Class Key"].values)
-print(f"Unique homology groups: {len(Homo_IDs)}")
+# %% [markdown]
+# ## 5. Build HGNC Ortholog Mappings
+#
+# Three mappings needed for Jon's union strategy:
+# - human Entrez → mouse Entrez (via DB Class Key homology groups)
+# - human symbol → mouse symbol (via DB Class Key homology groups)
+# - human Entrez → human symbol (for the symbol route)
 
-Human2Mouse_Genes = {}
+# %%
+hum_dat = Human2MouseHom[Human2MouseHom["NCBI Taxon ID"] == 9606]
+mus_dat = Human2MouseHom[Human2MouseHom["NCBI Taxon ID"] == 10090]
+
+# human Entrez → mouse Entrez
+# For each human gene, find its homology groups, expand to related human genes,
+# then find all mouse genes in those groups (Jon: mapl$human.entrez.to.mouse.entrez)
+human_entrez_to_mouse_entrez = {}
+for hentrez in hum_dat["EntrezGene ID"].unique():
+    db_keys = set(hum_dat[hum_dat["EntrezGene ID"] == hentrez]["DB Class Key"])
+    related_human = set(hum_dat[hum_dat["DB Class Key"].isin(db_keys)]["EntrezGene ID"])
+    all_db_keys = set(hum_dat[hum_dat["EntrezGene ID"].isin(related_human)]["DB Class Key"])
+    mouse_genes = set(mus_dat[mus_dat["DB Class Key"].isin(all_db_keys)]["EntrezGene ID"])
+    if mouse_genes:
+        human_entrez_to_mouse_entrez[int(hentrez)] = [int(m) for m in mouse_genes]
+
+# human symbol → mouse symbol (Jon: mapl$human.symbol.to.mouse.symbol)
+human_symbol_to_mouse_symbol = {}
+for hsym in hum_dat["Symbol"].unique():
+    db_keys = set(hum_dat[hum_dat["Symbol"] == hsym]["DB Class Key"])
+    related_human = set(hum_dat[hum_dat["DB Class Key"].isin(db_keys)]["Symbol"])
+    all_db_keys = set(hum_dat[hum_dat["Symbol"].isin(related_human)]["DB Class Key"])
+    mouse_syms = set(mus_dat[mus_dat["DB Class Key"].isin(all_db_keys)]["Symbol"])
+    if mouse_syms:
+        human_symbol_to_mouse_symbol[hsym] = list(mouse_syms)
+
+# human Entrez → human symbol (Jon uses org.Hs.eg.db; we use HGNC directly)
+human_entrez_to_symbol = {}
+for _, row in hum_dat[["EntrezGene ID", "Symbol"]].drop_duplicates().iterrows():
+    eid = int(row["EntrezGene ID"])
+    human_entrez_to_symbol.setdefault(eid, []).append(row["Symbol"])
+
+print(f"human Entrez → mouse Entrez: {len(human_entrez_to_mouse_entrez)} genes")
+print(f"human symbol → mouse symbol: {len(human_symbol_to_mouse_symbol)} genes")
+print(f"human Entrez → human symbol: {len(human_entrez_to_symbol)} genes")
+
+# %%
+# Save pickle files for backward compatibility
 Mouse2Human_Genes = {}
+Human2Mouse_Genes = {}
+Homo_IDs = set(Human2MouseHom["DB Class Key"].values)
 
 for ID in Homo_IDs:
     tmp_df = Human2MouseHom[Human2MouseHom["DB Class Key"] == ID]
@@ -230,127 +289,155 @@ for ID in Homo_IDs:
 
     for (Symbol, Entrez) in mou_genes:
         if Entrez not in Mouse2Human_Genes:
-            Mouse2Human_Genes[Entrez] = {
-                "symbol": Symbol,
-                "humanHomo": hum_genes,
-                "allen_section_data_set_id": [],
-            }
+            Mouse2Human_Genes[Entrez] = {"symbol": Symbol, "humanHomo": hum_genes}
         else:
             Mouse2Human_Genes[Entrez]["humanHomo"].extend(hum_genes)
 
-print(f"Human genes with mouse orthologs: {len(Human2Mouse_Genes)}")
-print(f"Mouse genes with human orthologs: {len(Mouse2Human_Genes)}")
-
-# %%
-# Create symbol-keyed version for convenience
 Mouse2Human_Genes_2 = {}
 for k, v in Mouse2Human_Genes.items():
     Mouse2Human_Genes_2[v["symbol"]] = {"Entrez": k, "humanHomo": v["humanHomo"]}
 
-# Save pickle files
 pk.dump(Mouse2Human_Genes_2, open(os.path.join(ProjDIR, "dat/Mouse2Human_Symbol.pk"), "wb"))
 pk.dump(Mouse2Human_Genes, open(os.path.join(ProjDIR, "dat/Mouse2Human_Entrez.pk"), "wb"))
+print(f"Human genes with mouse orthologs: {len(Human2Mouse_Genes)}")
+print(f"Mouse genes with human orthologs: {len(Mouse2Human_Genes)}")
 print("Saved Mouse2Human_Symbol.pk and Mouse2Human_Entrez.pk")
 
 # %% [markdown]
-# ## 5. Match Allen Section IDs to Mouse Genes
+# ## 6. Update Discontinued Mouse Entrez IDs in Allen Data
+#
+# Allen ISH experiments reference mouse Entrez IDs that may be discontinued.
+# Before mapping, update these to current IDs (Jon: `download.R` + `human_gene.R`).
+# This recovers ~414 sections across ~253 mouse genes that would otherwise be lost.
 
 # %%
-# Load discontinued Entrez IDs to handle gene ID changes
 df_disc = pd.read_csv(os.path.join(ProjDIR, "dat/gene_history.human.mouse.tsv"), delimiter="\t")
-Discontinued_ID = dict(zip(df_disc["Discontinued_GeneID"].values, df_disc["GeneID"].values))
-print(f"Discontinued gene ID mappings: {len(Discontinued_ID)}")
+
+# Build discontinued → current mapping for mouse genes (tax_id=10090)
+disc_mouse = df_disc[(df_disc["#tax_id"] == 10090) & (df_disc["GeneID"] != "-")].copy()
+disc_mouse["GeneID"] = disc_mouse["GeneID"].astype(int)
+disc_mouse["Discontinued_GeneID"] = disc_mouse["Discontinued_GeneID"].astype(int)
+disc_mouse_map = dict(zip(disc_mouse["Discontinued_GeneID"], disc_mouse["GeneID"]))
+
+# Resolve chains: if A→B and B→C, then A→C (Jon's while-loop logic)
+changed = True
+while changed:
+    changed = False
+    for old_id, new_id in list(disc_mouse_map.items()):
+        if new_id in disc_mouse_map:
+            disc_mouse_map[old_id] = disc_mouse_map[new_id]
+            changed = True
+
+print(f"Discontinued mouse Entrez mappings: {len(disc_mouse_map)} (chain-resolved)")
 
 # %%
-# Match Allen section IDs to mouse genes via Entrez ID (primary) or discontinued ID (fallback)
-Entrez_Failed_ID = []
-for _, row in AllenMouseGenes.iterrows():
-    allen_entrez = int(row["genes_entrez_id"]) if str(row["genes_entrez_id"]) != "nan" else None
-    allen_section_id = row["section_data_set_id"]
+# Update Allen experiment table with current Entrez IDs
+allen_work = AllenMouseGenes[AllenMouseGenes["genes_entrez_id"].notna()].copy()
+allen_work["genes_entrez_id"] = allen_work["genes_entrez_id"].astype(int)
 
-    potential_ID = Discontinued_ID.get(allen_entrez, -1)
-    if isinstance(potential_ID, (int, float)) and not np.isnan(potential_ID):
-        potential_ID = int(potential_ID)
-    else:
-        potential_ID = -1
-
-    if allen_entrez in Mouse2Human_Genes:
-        Mouse2Human_Genes[allen_entrez]["allen_section_data_set_id"].append(allen_section_id)
-    elif potential_ID in Mouse2Human_Genes:
-        Mouse2Human_Genes[potential_ID]["allen_section_data_set_id"].append(allen_section_id)
-    else:
-        Entrez_Failed_ID.append(allen_section_id)
-
-print(f"Section IDs matched by Entrez: {len(AllenMouseGenes) - len(Entrez_Failed_ID)}")
-print(f"Section IDs unmatched: {len(Entrez_Failed_ID)}")
-
-# %%
-# Count genes still missing section IDs
-Mouse_MissSectionID = [k for k, v in Mouse2Human_Genes.items() if len(v["allen_section_data_set_id"]) == 0]
-print(f"Mouse genes with no Allen section IDs yet: {len(Mouse_MissSectionID)}")
-
-# %%
-# Second pass: match unlinked section IDs by gene symbol or alias
-Unlinked_AllenMouseGenes = AllenMouseGenes[AllenMouseGenes["section_data_set_id"].isin(Entrez_Failed_ID)]
-Symbol_Failed_ID = []
-mapped_by_symbol = 0
-mapped_by_alias = 0
-
-for _, row in Unlinked_AllenMouseGenes.iterrows():
-    allen_symbol = row["gene_acronym"] if str(row["gene_acronym"]) != "nan" else None
-    allen_alias = row["gene_alias_tags"].split() if str(row["gene_alias_tags"]) != "nan" else []
-    allen_section_id = row["section_data_set_id"]
-
-    found = False
-    for k in Mouse_MissSectionID:
-        symbol = Mouse2Human_Genes[k]["symbol"]
-        if allen_symbol and symbol.lower() == allen_symbol.lower():
-            Mouse2Human_Genes[k]["allen_section_data_set_id"].append(allen_section_id)
-            found = True
-            mapped_by_symbol += 1
-            break
-        else:
-            for alias in allen_alias:
-                if alias.lower() == symbol.lower():
-                    Mouse2Human_Genes[k]["allen_section_data_set_id"].append(allen_section_id)
-                    found = True
-                    mapped_by_alias += 1
-                    break
-            if found:
-                break
-    if not found:
-        Symbol_Failed_ID.append(allen_section_id)
-
-print(f"Matched by symbol: {mapped_by_symbol}")
-print(f"Matched by alias: {mapped_by_alias}")
-print(f"Still unmatched: {len(Symbol_Failed_ID)}")
-
-# %%
-# Final count of genes still missing
-Mouse_MissSectionID = [k for k, v in Mouse2Human_Genes.items() if len(v["allen_section_data_set_id"]) == 0]
-print(f"Mouse genes with no Allen section IDs (final): {len(Mouse_MissSectionID)}")
+n_updated = allen_work["genes_entrez_id"].isin(disc_mouse_map.keys()).sum()
+allen_work["genes_entrez_id"] = allen_work["genes_entrez_id"].map(
+    lambda x: disc_mouse_map.get(x, x)
+)
+print(f"Updated {n_updated} Allen section entries (discontinued → current Entrez)")
 
 # %% [markdown]
-# ## 6. Save Gene Mapping and Unlinked IDs
+# ## 7. Map Human Genes → Allen Section IDs (Union Strategy)
+#
+# Following Jon's `human_gene.R`, we map each human gene to Allen ISH
+# section IDs via **two independent routes**, then **union** the results:
+#
+# 1. **Entrez route**: human Entrez → mouse Entrez → section IDs
+# 2. **Symbol route**: human Entrez → human symbol → mouse symbol → section IDs
+#
+# This union approach recovers additional sections for genes where the Allen
+# database uses different identifiers (e.g., deprecated gene symbols) across
+# the two mapping paths.
 
 # %%
+# Build mouse gene → Allen section ID maps from updated Allen data
+mouse_entrez_to_sections = {}
+for eid, group in allen_work.groupby("genes_entrez_id"):
+    mouse_entrez_to_sections[int(eid)] = sorted(set(group["section_data_set_id"]))
+
+mouse_symbol_to_sections = {}
+for sym, group in allen_work.groupby("gene_acronym"):
+    mouse_symbol_to_sections[sym] = sorted(set(group["section_data_set_id"]))
+
+print(f"Mouse Entrez → sections: {len(mouse_entrez_to_sections)} genes")
+print(f"Mouse symbol → sections: {len(mouse_symbol_to_sections)} genes")
+
+# %%
+# Entrez route: human Entrez → mouse Entrez → sections
+human_sections_entrez = {}
+for hentrez, mouse_list in human_entrez_to_mouse_entrez.items():
+    sections = []
+    for mentrez in mouse_list:
+        sections.extend(mouse_entrez_to_sections.get(mentrez, []))
+    if sections:
+        human_sections_entrez[hentrez] = sorted(set(sections))
+
+# Symbol route: human Entrez → human symbol → mouse symbol → sections
+# Step 1: human symbol → mouse symbol → sections
+hsym_to_sections = {}
+for hsym, mouse_syms in human_symbol_to_mouse_symbol.items():
+    sections = []
+    for msym in mouse_syms:
+        sections.extend(mouse_symbol_to_sections.get(msym, []))
+    if sections:
+        hsym_to_sections[hsym] = sorted(set(sections))
+
+# Step 2: human Entrez → human symbol → sections
+human_sections_symbol = {}
+for hentrez, symbols in human_entrez_to_symbol.items():
+    sections = []
+    for sym in symbols:
+        sections.extend(hsym_to_sections.get(sym, []))
+    if sections:
+        human_sections_symbol[hentrez] = sorted(set(sections))
+
+# Union both routes
+all_human_genes = sorted(set(human_sections_entrez.keys()) | set(human_sections_symbol.keys()))
+gene_sections = {}
+for hentrez in all_human_genes:
+    ent_secs = set(human_sections_entrez.get(hentrez, []))
+    sym_secs = set(human_sections_symbol.get(hentrez, []))
+    combined = sorted(ent_secs | sym_secs)
+    if combined:
+        gene_sections[hentrez] = combined
+
+# Count contributions from each route
+n_only_entrez = len(set(human_sections_entrez) - set(human_sections_symbol))
+n_only_symbol = len(set(human_sections_symbol) - set(human_sections_entrez))
+n_both = len(set(human_sections_entrez) & set(human_sections_symbol))
+n_extra = sum(
+    1 for g in set(human_sections_entrez) & set(human_sections_symbol)
+    if set(human_sections_symbol.get(g, [])) - set(human_sections_entrez.get(g, []))
+)
+
+print(f"\nEntrez route: {len(human_sections_entrez)} genes")
+print(f"Symbol route: {len(human_sections_symbol)} genes")
+print(f"Union (final): {len(gene_sections)} genes")
+print(f"  Only via Entrez: {n_only_entrez}")
+print(f"  Only via symbol: {n_only_symbol}")
+print(f"  Both routes: {n_both} ({n_extra} gain extra sections from union)")
+
+# %%
+# Save gene mapping
 DIR = os.path.join(ProjDIR, "dat/allen-mouse-exp/")
 
 with open(os.path.join(DIR, "human2mouse.0420.json"), "w") as f:
     json.dump(Human2Mouse_Genes, f)
 
-with open(os.path.join(DIR, "mouse2sectionID.0420.json"), "w") as f:
-    json.dump(Mouse2Human_Genes, f)
-
-Unlinked_final = AllenMouseGenes[AllenMouseGenes["section_data_set_id"].isin(Symbol_Failed_ID)]
-Unlinked_final.to_csv(os.path.join(DIR, "Allen_Unlinked_SectionIDs.0415.csv"), index=False)
+# Save human gene → section ID mapping (used by section 9)
+with open(os.path.join(DIR, "human_gene_sections.json"), "w") as f:
+    json.dump(gene_sections, f)
 
 print(f"Saved human2mouse.0420.json ({len(Human2Mouse_Genes)} entries)")
-print(f"Saved mouse2sectionID.0420.json ({len(Mouse2Human_Genes)} entries)")
-print(f"Saved Allen_Unlinked_SectionIDs.0415.csv ({len(Unlinked_final)} rows)")
+print(f"Saved human_gene_sections.json ({len(gene_sections)} entries)")
 
 # %% [markdown]
-# ## 7. Structure Metadata
+# ## 8. Structure Metadata
 
 # %%
 STR_Meta = pd.read_csv(os.path.join(ProjDIR, "dat/allen-mouse-exp/allen_brain_atlas_structures.csv"))
@@ -369,3 +456,113 @@ out_path = os.path.join(ProjDIR, "dat/allen-mouse-exp/Selected_213_STRs.Meta.csv
 STR_Meta_2.to_csv(out_path)
 print(f"Selected structures: {len(STR_Meta_2)} (expected 213)")
 print(f"Saved to {out_path}")
+
+# %% [markdown]
+# ## 9. Build Expression Matrix from Raw ISH Files
+#
+# For each human gene with mapped Allen section IDs (from union strategy above),
+# read the raw ISH expression energy from per-section CSV files and compute the
+# **arithmetic mean** across ISH experiments. This produces a (genes × 213
+# structures) matrix of raw expression energy values.
+#
+# This follows Jon's original aggregation method:
+# `colMeans(expression_energy)` across all section datasets per gene.
+# The log2 and QN transforms are applied in notebook 02.
+#
+# See `docs/Jon_Exp_Mat.md` for documentation of the aggregation method.
+
+# %%
+from multiprocessing import Pool
+from functools import partial
+
+ISH_DIR = config["data_files"]["ish_expression_dir"]
+exp_mat_path = os.path.join(ProjDIR, "dat/allen-mouse-exp/ExpressionMatrix_raw.parquet")
+
+if os.path.exists(exp_mat_path):
+    print(f"Expression matrix already exists: {exp_mat_path}")
+    ExpMat = pd.read_parquet(exp_mat_path)
+    print(f"  Shape: {ExpMat.shape}")
+else:
+    # Structure mapping: Allen structure 'id' → structure name
+    structid2name = dict(zip(STR_Meta_2["id"], STR_Meta_2["Name2"]))
+    selected_struct_ids = set(structid2name.keys())
+
+    # Filter gene_sections to only include available ISH files
+    existing_files = set(os.listdir(ISH_DIR))
+    gene_sections_available = {}
+    for hentrez, sids in gene_sections.items():
+        available = [s for s in sids if f"{s}.csv" in existing_files]
+        if available:
+            gene_sections_available[hentrez] = available
+    print(f"Genes with available ISH data: {len(gene_sections_available)}")
+
+    # Function to process one gene: read ISH CSVs, compute mean expression energy
+    def process_gene(args, ish_dir, selected_struct_ids, structid2name, structures):
+        human_entrez, section_ids = args
+        acc = {s: [] for s in structures}
+        for sid in section_ids:
+            csv_path = os.path.join(ish_dir, f"{sid}.csv")
+            try:
+                df = pd.read_csv(csv_path, usecols=["structure_id", "expression_energy"])
+            except (FileNotFoundError, ValueError):
+                continue
+            for _, row in df.iterrows():
+                struct_id = int(row["structure_id"])
+                if struct_id in selected_struct_ids:
+                    name = structid2name[struct_id]
+                    ee = row["expression_energy"]
+                    if pd.notna(ee):
+                        acc[name].append(ee)
+        result = {}
+        for s in structures:
+            result[s] = np.mean(acc[s]) if acc[s] else np.nan
+        return human_entrez, result
+
+    structures = sorted(Selected_STRs)
+    gene_list = list(gene_sections_available.items())
+
+    print(f"Processing {len(gene_list)} genes from {ISH_DIR} ...")
+    worker = partial(
+        process_gene,
+        ish_dir=ISH_DIR,
+        selected_struct_ids=selected_struct_ids,
+        structid2name=structid2name,
+        structures=structures,
+    )
+    with Pool(10) as pool:
+        results = pool.map(worker, gene_list)
+
+    rows = {}
+    for human_entrez, row_data in results:
+        rows[human_entrez] = row_data
+    ExpMat = pd.DataFrame.from_dict(rows, orient="index", columns=structures)
+    ExpMat.index.name = "ROW"
+    ExpMat = ExpMat.sort_index()
+
+    ExpMat.to_parquet(exp_mat_path)
+    print(f"Saved: {exp_mat_path}")
+    print(f"  Shape: {ExpMat.shape}")
+    print(f"  NaN fraction: {ExpMat.isna().sum().sum() / ExpMat.size:.4f}")
+    print(f"  Value range: [{np.nanmin(ExpMat.values):.4f}, {np.nanmax(ExpMat.values):.4f}]")
+
+# %% [markdown]
+# ## 10. Validate Against Jon's Raw Matrix
+
+# %%
+jon_raw_path = os.path.join(ProjDIR, config["data_files"]["jon_exp_raw"])
+if os.path.exists(jon_raw_path):
+    jon_raw = pd.read_csv(jon_raw_path, index_col="ROW")
+    common = sorted(set(ExpMat.index) & set(jon_raw.index))
+    jon_only = sorted(set(jon_raw.index) - set(ExpMat.index))
+    our_only = sorted(set(ExpMat.index) - set(jon_raw.index))
+
+    diff = (ExpMat.loc[common, jon_raw.columns] - jon_raw.loc[common]).abs()
+    exact = (diff.max(axis=1) < 1e-10).sum()
+
+    print(f"Jon: {len(jon_raw)} genes | Ours: {len(ExpMat)} genes | Common: {len(common)}")
+    print(f"Jon-only: {len(jon_only)} (older HGNC version)")
+    print(f"Ours-only: {len(our_only)}")
+    print(f"Exact match: {exact}/{len(common)} ({100*exact/len(common):.1f}%)")
+    print(f"Max diff: {diff.max().max():.2e}")
+else:
+    print(f"Jon's raw matrix not found at {jon_raw_path} — skipping validation")
