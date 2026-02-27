@@ -74,6 +74,7 @@ with st.sidebar:
     st.header("Navigation")
     st.page_link("app.py", label="🏠 Home", icon=None)
     st.page_link("pages/01_bias_explorer.py", label="📊 Bias Explorer")
+    st.page_link("pages/2_Permutation.py", label="🎲 Permutation Testing")
     st.page_link("pages/02_circuit_search.py", label="🔍 Circuit Search")
     st.page_link("pages/03_circuit_viewer.py", label="🕸️ Circuit Viewer")
     st.page_link("pages/04_data_diagnostics.py", label="🔧 Data Diagnostics")
