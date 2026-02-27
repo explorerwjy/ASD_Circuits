@@ -16,6 +16,13 @@ def get_expr_path(analysis):
 def get_analysis_mode(analysis):
     return config["analysis_types"][analysis]["mode"]
 
+def get_gene_prob(geneset):
+    """Return GeneProb path for mutability null model, or 'None' for uniform."""
+    gs = config["gene_sets"][geneset]
+    if gs.get("null_model", "uniform") == "mutability":
+        return os.path.join(PROJDIR, config["data_files"]["gene_prob"])
+    return "None"
+
 rule all:
     input:
         expand(f"{OUTDIR}/{{analysis}}/{{geneset}}_bias_addP_sibling.csv",
@@ -34,7 +41,8 @@ rule generate_geneweights:
         weights_sibling=f"{OUTDIR}/{{analysis}}/null_weights/{{geneset}}_random_geneweights_sibling.csv",
         weights_random=f"{OUTDIR}/{{analysis}}/null_weights/{{geneset}}_random_geneweights_random.csv"
     params:
-        n=N_WEIGHTS
+        n=N_WEIGHTS,
+        gene_prob=lambda wc: get_gene_prob(wc.geneset)
     shell:
         """
         mkdir -p $(dirname {output.weights_random})
@@ -42,6 +50,7 @@ rule generate_geneweights:
             --WeightDF {input.geneweights} \
             --SpecMat {input.expr} \
             --n_sims {params.n} \
+            --GeneProb {params.gene_prob} \
             --outfile {output.weights_random}
         """
 

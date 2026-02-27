@@ -74,14 +74,18 @@ from ASD_Circuits import (
 SOURCE_CATEGORIES = ['synthesis', 'transporter', 'storage_release', 'processing']
 TARGET_CATEGORIES = ['receptor', 'degradation']
 
+# Weight mode: "EXP" = expression-level weights, "identical" = uniform weight 1.0
+WEIGHT_MODE = "identical"  # <-- toggle here
+
 # Run the source-target analysis using imported function
 print("="*70)
+print(f"Weight mode: {WEIGHT_MODE}")
 nt_results = analyze_neurotransmitter_systems_source_target(
-    NeuralSystem, 
-    STR_BiasMat, 
-    SOURCE_CATEGORIES=SOURCE_CATEGORIES, 
+    NeuralSystem,
+    STR_BiasMat,
+    SOURCE_CATEGORIES=SOURCE_CATEGORIES,
     TARGET_CATEGORIES=TARGET_CATEGORIES,
-    weights = "EXP",
+    weights=WEIGHT_MODE,
     generate_bias=True
 )
 
@@ -97,6 +101,37 @@ nt_results[nt]["source"].head(10)
 
 # %%
 nt_results[nt]["target"].head(10)
+
+# %% [markdown]
+# ### Run Snakemake bias pipeline (first-time setup)
+#
+# The cells below load pre-computed bias results with p-values from `results/STR_ISH/`.
+# If those files don't exist yet, run the Snakemake bias pipeline first:
+#
+# ```bash
+# conda activate gencic
+# cd /home/jw3514/Work/ASD_Circuits_CellType/
+#
+# snakemake -s Snakefile.bias --forceall --cores 10 \
+#   results/STR_ISH/NT_Dopamine_source_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Dopamine_source_bias_addP_random.csv \
+#   results/STR_ISH/NT_Dopamine_target_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Dopamine_target_bias_addP_random.csv \
+#   results/STR_ISH/NT_Dopamine_combined_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Dopamine_combined_bias_addP_random.csv \
+#   results/STR_ISH/NT_Serotonin_source_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Serotonin_source_bias_addP_random.csv \
+#   results/STR_ISH/NT_Serotonin_target_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Serotonin_target_bias_addP_random.csv \
+#   results/STR_ISH/NT_Serotonin_combined_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Serotonin_combined_bias_addP_random.csv \
+#   results/STR_ISH/NT_Oxytocin_source_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Oxytocin_source_bias_addP_random.csv \
+#   results/STR_ISH/NT_Oxytocin_target_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Oxytocin_target_bias_addP_random.csv \
+#   results/STR_ISH/NT_Oxytocin_combined_bias_addP_sibling.csv \
+#   results/STR_ISH/NT_Oxytocin_combined_bias_addP_random.csv
+# ```
 
 # %%
 # Load NT STR Bias results into a dictionary

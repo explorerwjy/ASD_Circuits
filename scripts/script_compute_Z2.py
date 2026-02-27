@@ -49,15 +49,11 @@ def compute_z2_chunk(args):
                 continue
             with open(match_path) as f:
                 match_gene_ids = [int(line.strip()) for line in f if line.strip()]
-            # Map to indices in Z1 array, deduplicate, take top max_match
-            unique_indices = []
-            seen = set()
-            for mg in match_gene_ids:
-                if mg in gene_to_idx and mg not in seen:
-                    unique_indices.append(gene_to_idx[mg])
-                    seen.add(mg)
-                    if len(unique_indices) >= max_match:
-                        break
+            # Map to indices in Z1 array, keeping ALL entries (with duplicates)
+            # to preserve frequency weighting from the sampling procedure.
+            # This matches the legacy Z2 computation which used all 10K entries.
+            all_indices = [gene_to_idx[mg] for mg in match_gene_ids
+                           if mg in gene_to_idx]
         else:
             # Generate matches on the fly from quantile window
             q = quantiles[i]
@@ -76,13 +72,14 @@ def compute_z2_chunk(args):
             sampled = rng.choice(interval_indices, size=n_sample, replace=True)
             unique_indices = list(dict.fromkeys(sampled))[:max_match]
 
-        if len(unique_indices) < 2:
+        match_indices = all_indices if match_dir is not None else unique_indices
+        if len(match_indices) < 2:
             results[i] = np.full(n_structures, np.nan)
             continue
 
         # Compute Z2 for all structures (vectorized)
         z1_gene = z1_array[i]
-        z1_matches = z1_array[unique_indices]  # (N_matched, N_structures)
+        z1_matches = z1_array[match_indices]  # (N_matched, N_structures)
         match_mean = np.nanmean(z1_matches, axis=0)
         match_std = np.nanstd(z1_matches, axis=0, ddof=0)
 

@@ -27,3 +27,9 @@ docs/
 # Validation and test files (not for publication)
 notebook_validation/
 scripts/test_*.py
+
+# Legacy rebuttal notebooks (migrated to notebooks_mouse_str/)
+notebook_rebuttal/
+
+# Astro agent directory
+.astro/

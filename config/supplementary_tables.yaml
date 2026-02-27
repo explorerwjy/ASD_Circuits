@@ -23,7 +23,7 @@ tables:
       bias_neuron_density: "dat/Unionize_bias/ASD.neuron.density.norm.bias.csv"
       bias_neuro_glia: "dat/Unionize_bias/ASD.neuro2glia.norm.bias.csv"
     # Circuit membership: 46-node and 32-node circuit structure lists
-    circuit_46_file: "/home/jw3514/Work/ASD_Circuits/notebooks/ASD.SA.Circuits.Size46.csv"
+    circuit_46_file: "results/STR_ISH/ASD.SA.Circuits.Size46.csv"
     circuit_46_row: 3  # row index in the CSV
     circuit_32:
       - Anterior_cingulate_area_dorsal_part
@@ -99,7 +99,7 @@ tables:
     sources:
       bias_hiq: "dat/Unionize_bias/ASD.HIQ_spec.bias.csv"
       bias_liq: "dat/Unionize_bias/ASD.LIQ_spec.bias.csv"
-      iq_pvalues: "/home/jw3514/Work/ASD_Circuits/dat/Unionize_bias/IQ_Bias_Diff.Pvalues.csv"
+      iq_pvalues: "results/Phenotype_permutation/IQ_Bias_Diff.Pvalues.csv"
     # Only include structures in the 46-node circuit
     filter_circuit_46: true
 

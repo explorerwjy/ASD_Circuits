@@ -41,7 +41,7 @@ def CtrlBiasCal_HumanCT(Random_GW_Fil, SpecMat, outfile, n_processes=20):
     Task_idx = Random_GW_DF.columns.values[1:]
     #print(Task_idx)
 
-    if SpecMat.endswith('.parquet'):
+    if SpecMat.endswith(('.parquet', '.parquet.bak')):
         SpecMat = pd.read_parquet(SpecMat)
     else:
         SpecMat = pd.read_csv(SpecMat, index_col=0)
@@ -76,7 +76,7 @@ def CtrlBiasCal_MouseCT(Random_GW_Fil, SpecMat, outfile, n_processes=20, DN=Fals
     Random_GW_DF = pd.read_csv(Random_GW_Fil, index_col=0) # index is real gene,first column is gene weights, rest are random gene entrez
     Task_idx = Random_GW_DF.columns.values[1:]
     #print(Task_idx)
-    if SpecMat.endswith('.parquet'):
+    if SpecMat.endswith(('.parquet', '.parquet.bak')):
         SpecMat = pd.read_parquet(SpecMat)
     else:
         SpecMat = pd.read_csv(SpecMat, index_col=0)
@@ -117,7 +117,7 @@ def CtrlBiasCal(GW_Dir, SpecMat, outDir, n_processes=20):
             Ctrl_GW_Fils.append(os.path.join(root, file_name))
     #print(Ctrl_GW_Fils)
     #print(len(Ctrl_GW_Fils))
-    if SpecMat.endswith('.parquet'):
+    if SpecMat.endswith(('.parquet', '.parquet.bak')):
         SpecMat = pd.read_parquet(SpecMat)
     else:
         SpecMat = pd.read_csv(SpecMat, index_col=0)
@@ -131,7 +131,7 @@ def CtrlBiasCal_MouseSTR(Random_GW_Fil, SpecMat, outfile, n_processes=20):
     Random_GW_DF = pd.read_csv(Random_GW_Fil, index_col=0) # index is real gene,first column is gene weights, rest are random gene entrez
     Task_idx = Random_GW_DF.columns.values[1:]
     #print(Task_idx)
-    if SpecMat.endswith('.parquet'):
+    if SpecMat.endswith(('.parquet', '.parquet.bak')):
         SpecMat = pd.read_parquet(SpecMat)
     else:
         SpecMat = pd.read_csv(SpecMat, index_col=0)

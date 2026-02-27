@@ -101,14 +101,34 @@ plt.show()
 # mean and individual Pareto front curves from sibling null SA searches.
 
 # %%
-# Load sibling circuit profiles from pipeline
-sibling_npz_path = "../results/CircuitSearch_Sibling_Summary/Mutability/size_46/sibling_profiles.npz"
+# Load sibling circuit profiles
+# Option A: New pipeline batches (when available)
+# Option B: Old sibling SA results (1000 siblings, Nov 2023, converted to NPZ)
+# Priority: new full run > old 1000 siblings > partial batch
+# Switch to new pipeline NPZ once 10K sibling run completes
+sibling_npz_candidates = [
+    ("New pipeline (10K)", "../results/CircuitSearch_Sibling_Summary/Mutability/size_46/batch_all/sibling_profiles.npz"),
+    ("Old SA (1000 siblings)", "../notebook_validation/old_sibling_profiles_SI_Nov2023.npz"),
+    ("New pipeline (batch 0)", "../results/CircuitSearch_Sibling_Summary/Mutability/size_46/batch_0/sibling_profiles.npz"),
+    ("New pipeline (100)", "../results/CircuitSearch_Sibling_Summary/Mutability/size_46/sibling_profiles.npz"),
+]
+
+sibling_npz_path = None
+for label, path in sibling_npz_candidates:
+    if os.path.exists(path):
+        sibling_npz_path = path
+        print(f"Loading sibling profiles: {label}")
+        print(f"  Path: {path}")
+        break
+
 sibling_data = np.load(sibling_npz_path)
 sib_meanbias = sibling_data['meanbias']
 sib_meanSI = sibling_data['meanSI']
 sib_topbias_sub = sibling_data['topbias_sub']
-print(f"Sibling profiles: {sib_topbias_sub.shape[0]} iterations, "
+sib_bias_limits = sibling_data['bias_limits']
+print(f"Sibling profiles: {sib_topbias_sub.shape[0]} siblings, "
       f"{sib_topbias_sub.shape[2]} bias limit points each")
+print(f"Bias limit range: [{sib_bias_limits.min():.3f}, {sib_bias_limits.max():.3f}]")
 
 # %%
 fig, ax = plt.subplots(dpi=480, figsize=(4.2, 4))

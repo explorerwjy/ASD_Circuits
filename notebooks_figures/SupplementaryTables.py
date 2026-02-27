@@ -105,7 +105,7 @@ S1["Bias.Neuron_density_normalized"] = bias_neuron_den.reindex(S1.index)["EFFECT
 S1["Bias.Neuron_glia_ratio_normalized"] = bias_glia.reindex(S1.index)["EFFECT"]
 
 # Circuit membership
-circuit_46_file = cfg["circuit_46_file"]
+circuit_46_file = resolve_path(cfg["circuit_46_file"])
 circuit_46_row = cfg["circuit_46_row"]
 circuit_46_df = pd.read_csv(circuit_46_file, index_col="idx")
 circuit_46 = circuit_46_df.loc[circuit_46_row, "STRs"].split(";")
@@ -169,9 +169,14 @@ S4.iloc[:3, :5]
 cfg = tables_cfg["S5"]
 src = cfg["sources"]
 
-# The IQ pvalues file is already the complete S5 table
-S5 = pd.read_csv(resolve_path(src["iq_pvalues"]))
-print(f"Table S5: {S5.shape}")
+# Load IQ pvalues (213 structures) and subset to 46-node circuit
+S5_all = pd.read_csv(resolve_path(src["iq_pvalues"]))
+if cfg.get("filter_circuit_46", False):
+    circuit_strs = set(circuit_46)  # from S1 cell above
+    S5 = S5_all[S5_all["STR"].isin(circuit_strs)].copy()
+else:
+    S5 = S5_all.copy()
+print(f"Table S5: {S5.shape} (filtered from {len(S5_all)} to {len(S5)} structures)")
 S5.head(3)
 
 # %% [markdown]

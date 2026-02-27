@@ -65,7 +65,7 @@ def SiblingGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
     SibWeightDF = pd.read_csv(sibling_weights_path, header=None)
     SibGenes = SibWeightDF[0].values
 
-    if ExpMat.endswith('.parquet'):
+    if '.parquet' in ExpMat:
         ExpMat = pd.read_parquet(ExpMat)
     else:
         ExpMat = pd.read_csv(ExpMat, index_col=0)
@@ -132,7 +132,7 @@ def SiblingGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
     print(f"Saved all {n_sims} sibling gene simulations to {outfile}")
 
 def RandomGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
-    if ExpMat.endswith('.parquet'):
+    if '.parquet' in ExpMat:
         ExpMat = pd.read_parquet(ExpMat)
     else:
         ExpMat = pd.read_csv(ExpMat, index_col=0)
@@ -193,6 +193,8 @@ def main():
     WeightDF = args.WeightDF
     outfile = args.outfile
     GeneProb = args.GeneProb
+    if GeneProb is not None and GeneProb.lower() == "none":
+        GeneProb = None
     n_sims = args.n_sims
     
     # The Snakefile passes the _random.csv filename, but we need both _sibling.csv and _random.csv
