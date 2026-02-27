@@ -9,7 +9,9 @@
 !*.ipynb
 !*.yaml
 !*.md
+!*.txt
 !.gitignore
+!.gitkeep
 
 # 4. Explicitly ignore Mac system files (the .DS_Store files in your status)
 .DS_Store

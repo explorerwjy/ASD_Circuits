@@ -1,0 +1,282 @@
+# ============================================================================
+# GENCIC Webapp Configuration
+# ============================================================================
+# All data file paths are relative to the webapp/ directory.
+# "../dat/" resolves to the project-root dat/ directory when running from webapp/.
+
+# ============================================================================
+# Data File Paths (relative to webapp/ directory)
+# ============================================================================
+data_files:
+  # Expression bias matrices
+  str_bias_matrix: "../dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet"
+  ct_bias_matrix: "../dat/BiasMatrices/Cluster_Z2Mat_ISHMatch.z1clip3.parquet"
+  merfish_bias_matrix: "../dat/BiasMatrices/MouseBrain_MERIFHbias.parquet"
+
+  # Connectome matrices
+  weight_matrix: "../dat/allen-mouse-conn/ConnectomeScoringMat/WeightMat.Ipsi.csv"
+  info_matrix: "../dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
+
+  # Gene annotations
+  protein_coding_genes: "../dat/Genetics/protein-coding_gene.txt"
+
+  # Reference mappings
+  major_brain_divisions: "../dat/structure2region.tsv"
+  ct_cluster_annotation: "../dat/MouseCT_Cluster_Anno.csv"
+
+  # Gene weights directory
+  gene_weights_dir: "../dat/Genetics/GeneWeights"
+
+# ============================================================================
+# Simulated Annealing Default Parameters
+# ============================================================================
+sa_params:
+  # Circuit sizes to search (number of brain structures in circuit)
+  circuit_sizes:
+    - 46
+
+  # Number of SA optimization runs per bias limit
+  # More runs = better coverage of solution space, but slower
+  sa_runtimes: 10
+
+  # Number of SA steps per run
+  # Range: 10000 (fast, less accurate) to 100000 (slow, more accurate)
+  sa_steps: 50000
+
+  # Minimum bias rank threshold
+  # Structures ranked below this are excluded as candidates
+  min_bias_rank: 50
+
+  # Number of top-ranked structures to consider as candidates
+  top_n: 213
+
+  # Circuit scoring measure: "SI" (Shannon Information) or "Connectivity"
+  measure: "SI"
+
+  # Number of parallel cores for SA runs
+  n_cores: 10
+
+  # Temperature schedule for simulated annealing
+  # Lower = more conservative search; higher = more exploratory
+  initial_temp: 1.0
+  cooling_rate: 0.995
+
+# ============================================================================
+# Gene Set Presets
+# ============================================================================
+# List of pre-defined gene sets available for analysis.
+# Each entry references a .gw or .csv file in the gene_weights_dir.
+gene_set_presets:
+  # ASD cohorts
+  - name: "ASD_HIQ"
+    label: "ASD High IQ (SPARK)"
+    file: "ASD.HIQ.gw.csv"
+    category: "ASD"
+    description: "ASD probands with high IQ from SPARK cohort"
+
+  - name: "ASD_LIQ"
+    label: "ASD Low IQ (SPARK)"
+    file: "ASD.LIQ.gw.csv"
+    category: "ASD"
+    description: "ASD probands with low IQ from SPARK cohort"
+
+  - name: "ASD_SPARK_159"
+    label: "ASD SPARK (159 genes)"
+    file: "Spark_Meta_160.GeneWeight.csv"
+    category: "ASD"
+    description: "SPARK ASD meta-analysis with 159 genes"
+
+  - name: "Spark_top20"
+    label: "ASD SPARK Top 20"
+    file: "Spark_top20.gw"
+    category: "ASD"
+    description: "Top 20 high-confidence ASD genes from SPARK"
+
+  - name: "ASC_102"
+    label: "ASC 102 genes"
+    file: "GW_ASC_102.gw"
+    category: "ASD"
+    description: "102 ASD genes from Autism Sequencing Consortium"
+
+  - name: "Fu_ASD_72"
+    label: "Fu et al. ASD (72 genes)"
+    file: "GW_Fu_ASD_72.gw"
+    category: "ASD"
+    description: "72 ASD-associated genes from Fu et al. 2022"
+
+  - name: "Fu_ASD_185"
+    label: "Fu et al. ASD (185 genes)"
+    file: "GW_Fu_ASD_185.gw"
+    category: "ASD"
+    description: "185 ASD-associated genes from Fu et al. 2022"
+
+  # NDD cohorts
+  - name: "DDD_61"
+    label: "DDD (61 genes)"
+    file: "DDD.top61.gw"
+    category: "NDD"
+    description: "Top 61 NDD genes from Deciphering Developmental Disorders study"
+
+  - name: "DDD_293"
+    label: "DDD (293 genes)"
+    file: "DDD.top293.gw"
+    category: "NDD"
+    description: "Top 293 NDD genes from Deciphering Developmental Disorders study"
+
+  - name: "DDD_293_ExcludeASD"
+    label: "DDD (293 genes, excluding ASD)"
+    file: "DDD.top293.ExcludeASD.gw"
+    category: "NDD"
+    description: "293 NDD genes from DDD, excluding ASD overlap genes"
+
+  # Constraint
+  - name: "Constraint_top25_LOEUF"
+    label: "Constrained Genes (LOEUF top 25%)"
+    file: "constraint_top25_LOEUF.gw"
+    category: "Constraint"
+    description: "Top 25% most constrained genes by LOEUF score (gnomAD)"
+
+  # Neurotransmitter systems
+  - name: "NT_Dopamine_source"
+    label: "Dopamine — Source Genes"
+    file: "NT_dopamine_source.gw"
+    category: "Neurotransmitter"
+    description: "Dopamine neurotransmitter pathway source genes"
+
+  - name: "NT_Dopamine_target"
+    label: "Dopamine — Target Genes"
+    file: "NT_dopamine_target.gw"
+    category: "Neurotransmitter"
+    description: "Dopamine neurotransmitter pathway target genes"
+
+  - name: "NT_Dopamine_combined"
+    label: "Dopamine — Combined"
+    file: "NT_dopamine_combined.gw"
+    category: "Neurotransmitter"
+    description: "Dopamine neurotransmitter pathway (source + target genes)"
+
+  - name: "NT_Serotonin_source"
+    label: "Serotonin — Source Genes"
+    file: "NT_serotonin_source.gw"
+    category: "Neurotransmitter"
+    description: "Serotonin neurotransmitter pathway source genes"
+
+  - name: "NT_Serotonin_target"
+    label: "Serotonin — Target Genes"
+    file: "NT_serotonin_target.gw"
+    category: "Neurotransmitter"
+    description: "Serotonin neurotransmitter pathway target genes"
+
+  - name: "NT_Serotonin_combined"
+    label: "Serotonin — Combined"
+    file: "NT_serotonin_combined.gw"
+    category: "Neurotransmitter"
+    description: "Serotonin neurotransmitter pathway (source + target genes)"
+
+  - name: "NT_Oxytocin_source"
+    label: "Oxytocin — Source Genes"
+    file: "NT_oxytocin_source.gw"
+    category: "Neurotransmitter"
+    description: "Oxytocin neurotransmitter pathway source genes"
+
+  - name: "NT_Oxytocin_target"
+    label: "Oxytocin — Target Genes"
+    file: "NT_oxytocin_target.gw"
+    category: "Neurotransmitter"
+    description: "Oxytocin neurotransmitter pathway target genes"
+
+  - name: "NT_Oxytocin_combined"
+    label: "Oxytocin — Combined"
+    file: "NT_oxytocin_combined.gw"
+    category: "Neurotransmitter"
+    description: "Oxytocin neurotransmitter pathway (source + target genes)"
+
+  - name: "NT_Acetylcholine_source"
+    label: "Acetylcholine — Source Genes"
+    file: "NT_acetylcholine_source.gw"
+    category: "Neurotransmitter"
+    description: "Acetylcholine neurotransmitter pathway source genes"
+
+  - name: "NT_Acetylcholine_target"
+    label: "Acetylcholine — Target Genes"
+    file: "NT_acetylcholine_target.gw"
+    category: "Neurotransmitter"
+    description: "Acetylcholine neurotransmitter pathway target genes"
+
+  - name: "NT_Acetylcholine_combined"
+    label: "Acetylcholine — Combined"
+    file: "NT_acetylcholine_combined.gw"
+    category: "Neurotransmitter"
+    description: "Acetylcholine neurotransmitter pathway (source + target genes)"
+
+  # Neurodegeneration
+  - name: "Parkinson"
+    label: "Parkinson's Disease"
+    file: "Parkinson.top61.gw"
+    category: "Neurodegeneration"
+    description: "Top 61 Parkinson's disease genes"
+
+  - name: "Alzheimer"
+    label: "Alzheimer's Disease"
+    file: "ALZ.top60.gw"
+    category: "Neurodegeneration"
+    description: "Top 60 Alzheimer's disease genes"
+
+  # Negative controls (non-brain traits)
+  - name: "hba1c"
+    label: "HbA1c (negative control)"
+    file: "hba1c.top61.gw"
+    category: "NegativeControl"
+    description: "HbA1c GWAS genes — non-brain negative control"
+
+  - name: "HDL_C"
+    label: "HDL Cholesterol (negative control)"
+    file: "HDL_C.top61.gw"
+    category: "NegativeControl"
+    description: "HDL cholesterol GWAS genes — non-brain negative control"
+
+  - name: "IBD"
+    label: "IBD (negative control)"
+    file: "IBD.top61.gw"
+    category: "NegativeControl"
+    description: "Inflammatory bowel disease GWAS genes — non-brain negative control"
+
+  - name: "T2D"
+    label: "Type 2 Diabetes (negative control)"
+    file: "T2D.top61.gw"
+    category: "NegativeControl"
+    description: "Type 2 diabetes GWAS genes — non-brain negative control"
+
+# ============================================================================
+# Analysis Type Configuration
+# ============================================================================
+analysis_types:
+  STR_ISH:
+    label: "Brain Structure (ISH)"
+    expr_matrix_key: "str_bias_matrix"
+    mode: "mouse_str_bias"
+    description: "Allen Brain Atlas in situ hybridization data across 213 brain structures"
+
+  CT_Z2:
+    label: "Cell Type (scRNA-seq)"
+    expr_matrix_key: "ct_bias_matrix"
+    mode: "mouse_ct_bias"
+    description: "Allen Brain Cell Atlas single-cell data across cell type clusters"
+
+# ============================================================================
+# UI Configuration
+# ============================================================================
+ui:
+  app_title: "GENCIC — Brain Circuit Explorer"
+  app_subtitle: "Genetics and Expression iNtegration with Connectome to Infer affected Circuits"
+  default_gene_set: "ASD_SPARK_159"
+  default_analysis_type: "STR_ISH"
+  max_upload_size_mb: 10
+  # Gene set categories shown in sidebar selector (in display order)
+  gene_set_categories:
+    - "ASD"
+    - "NDD"
+    - "Constraint"
+    - "Neurotransmitter"
+    - "Neurodegeneration"
+    - "NegativeControl"

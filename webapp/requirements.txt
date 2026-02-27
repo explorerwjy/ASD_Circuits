@@ -1,0 +1,24 @@
+# GENCIC Webapp Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core web framework
+streamlit>=1.32.0
+
+# Data manipulation
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Scientific computing
+scipy>=1.10.0
+
+# Visualization
+plotly>=5.18.0
+
+# Configuration
+pyyaml>=6.0
+
+# Parquet file support (required for reading expression matrices)
+pyarrow>=14.0.0
+
+# Optional: faster parquet reads
+# fastparquet>=2023.10.0
