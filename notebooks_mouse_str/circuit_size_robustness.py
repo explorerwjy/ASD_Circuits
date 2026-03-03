@@ -37,13 +37,16 @@ print(f"Working directory: {os.getcwd()}")
 # The CCS (Circuit Connectivity Score) peaks at size 46, but this peak is not
 # perfectly sharp. To demonstrate that the identified circuit is not an artifact
 # of the specific size choice, we run the full Pareto-front SA search at sizes
-# 40, 45, 46, and 50 and compare the resulting circuits.
+# 37, 40, 45, 46, and 50 and compare the resulting circuits.
+#
+# Size 37 corresponds to the number of structures with FDR < 0.10 under the
+# sibling mutability null model — a statistically motivated circuit size.
 
 # %% [markdown]
 # ## 1. Load Pareto Fronts
 
 # %%
-SIZES = [40, 45, 46, 50]
+SIZES = [37, 40, 45, 46, 50]  # 37 = FDR<0.10 count (sibling mutability null)
 RESULT_DIR = "../results/CircuitSearch/ASD_SPARK_61/pareto_fronts"
 
 pareto = {}
@@ -59,13 +62,14 @@ for s in SIZES:
 # as the selected circuit. We compare this same index across sizes.
 
 # %%
-SELECTED_IDX = 2  # Same as notebook 05
+SELECTED_IDX = 2  # Same as notebook 05 (3rd row after descending sort = high-bias knee)
 
 selected = {}
 baselines = {}
 
 for s in SIZES:
-    df = pareto[s]
+    df = pareto[s].sort_values("mean_bias", ascending=False).reset_index(drop=True)
+    pareto[s] = df  # store sorted version
     bl = df[df["circuit_type"] == "baseline"]
     baselines[s] = set(bl["structures"].values[0].split(","))
 
@@ -186,7 +190,7 @@ def plot_membership_heatmap(mem_df, title, anno):
             seen[r] = c
     legend_handles = [Patch(facecolor=c, edgecolor="k", label=r, linewidth=0.5)
                       for r, c in seen.items()]
-    ax.legend(handles=legend_handles, loc="lower right", fontsize=7,
+    ax.legend(handles=legend_handles, loc="lower left", fontsize=7,
               ncol=2, framealpha=0.8)
 
     fig.patch.set_alpha(0)
@@ -254,8 +258,9 @@ for s in SIZES:
 # %%
 fig, ax = plt.subplots(figsize=(8, 6))
 
-colors = {40: "#e41a1c", 45: "#377eb8", 46: "#4daf4a", 50: "#984ea3"}
-markers = {40: "o", 45: "s", 46: "D", 50: "^"}
+colors = {37: "#ff7f00", 40: "#e41a1c", 45: "#377eb8", 46: "#4daf4a", 50: "#984ea3"}
+markers = {37: "v", 40: "o", 45: "s", 46: "D", 50: "^"}
+size_labels = {37: "Size 37 (FDR<0.10)", 40: "Size 40", 45: "Size 45", 46: "Size 46", 50: "Size 50"}
 
 for s in SIZES:
     df = pareto[s]
@@ -265,7 +270,7 @@ for s in SIZES:
 
     ax.scatter(optimized["circuit_score"], optimized["mean_bias"],
                c=colors[s], marker=markers[s], s=50, alpha=0.8,
-               label=f"Size {s}", edgecolors="k", linewidths=0.3)
+               label=size_labels[s], edgecolors="k", linewidths=0.3)
     ax.scatter(bl["circuit_score"], bl["mean_bias"],
                c=colors[s], marker=markers[s], s=50, alpha=0.3,
                edgecolors="k", linewidths=0.3)
@@ -290,7 +295,9 @@ plt.show()
 # %% [markdown]
 # ## 8. Summary
 #
-# Circuit robustness across sizes 40, 45, 46, 50 using Pareto index 2
-# (`bias_limit=0.31`), the same operating point as the main analysis.
+# Circuit robustness across sizes 37, 40, 45, 46, 50 using Pareto index 2
+# (high-bias knee of each Pareto front), the same operating point as the
+# main analysis.
 #
+# Size 37 = number of structures at FDR < 0.10 (sibling mutability null).
 # Core structures present at all sizes: see Section 5.

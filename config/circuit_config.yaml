@@ -33,7 +33,9 @@ output_dir: "results/CircuitSearch"
 
 # Circuit sizes to search (list of integers)
 # Size 46 is the primary CCS peak; 40, 45, 50 demonstrate robustness
+# Size 37 = number of structures at FDR<0.10 (sibling mutability null)
 circuit_sizes:
+  - 37
   - 40
   - 45
   - 46
