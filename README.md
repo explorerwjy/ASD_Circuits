@@ -88,15 +88,16 @@ ASD_Circuits_CellType/
 
 ### Raw Data Sources
 
-| Source | Description | Access |
-|--------|-------------|--------|
-| Allen Mouse Brain ISH | In-situ hybridization expression energy for ~17K genes × 213 structures | [Allen Brain Atlas API](https://mouse.brain-map.org/) |
-| Allen Mouse Connectivity | Structural connectivity atlas (Oh et al. 2014 Nature) | [Allen Connectivity Atlas](https://connectivity.brain-map.org/) |
-| Allen Brain Cell Atlas | Single-cell RNA-seq (10x V2/V3), 5,312 cell-type clusters | [Allen Brain Cell Atlas](https://portal.brain-map.org/atlases-and-data/bkp/abc-atlas) |
-| Allen MERFISH | Whole-brain spatial transcriptomics (~3.7M cells) | [Allen Brain Cell Atlas](https://portal.brain-map.org/atlases-and-data/bkp/abc-atlas) |
-| SPARK/ASC | De novo mutations from ASD exome sequencing | [SFARI Base](https://base.sfari.org/) |
-| DDD/NDD | Developmental disorder de novo mutations (Kaplanis et al. 2020) | [Nature paper](https://doi.org/10.1038/s41586-020-2832-5) |
-| gnomAD v4.0 | Gene constraint metrics (LOEUF) | [gnomAD](https://gnomad.broadinstitute.org/) |
+| Source | Description | Reference | Access |
+|--------|-------------|-----------|--------|
+| Allen Mouse Brain ISH | In-situ hybridization expression energy for ~17K genes × 213 structures | [Lein et al. 2007 *Nature*](https://doi.org/10.1038/nature05453) | [Allen Brain Atlas API](https://mouse.brain-map.org/) |
+| Allen Mouse Connectivity | Structural connectivity atlas (213 structures, ipsilateral) | [Oh et al. 2014 *Nature*](https://doi.org/10.1038/nature13186) | [Allen Connectivity Atlas](https://connectivity.brain-map.org/) |
+| Allen Brain Cell Atlas | Single-cell RNA-seq (10x V2/V3), 5,312 cell-type clusters | [Yao et al. 2023 *Nature*](https://doi.org/10.1038/s41586-023-06812-z) | [Allen Brain Cell Atlas](https://portal.brain-map.org/atlases-and-data/bkp/abc-atlas) |
+| Allen MERFISH | Whole-brain spatial transcriptomics (~3.7M cells) | [Yao et al. 2023 *Nature*](https://doi.org/10.1038/s41586-023-06812-z) | [Allen Brain Cell Atlas](https://portal.brain-map.org/atlases-and-data/bkp/abc-atlas) |
+| SPARK | De novo mutations from 42,607 ASD cases (exome sequencing) | [Zhou et al. 2022 *Nat Genet*](https://doi.org/10.1038/s41588-022-01148-2) | [SFARI Base](https://base.sfari.org/) |
+| ASC | Rare coding variation in 63,237 individuals | [Fu et al. 2022 *Nat Genet*](https://doi.org/10.1038/s41588-022-01104-0) | [SFARI Base](https://base.sfari.org/) |
+| DDD/NDD | Developmental disorder de novo mutations (31,058 trios) | [Kaplanis et al. 2020 *Nature*](https://doi.org/10.1038/s41586-020-2832-5) | [Nature paper](https://doi.org/10.1038/s41586-020-2832-5) |
+| gnomAD v4.0 | Gene constraint metrics (LOEUF) | [Karczewski et al. 2020 *Nature*](https://doi.org/10.1038/s41586-020-2308-7) | [gnomAD](https://gnomad.broadinstitute.org/) |
 
 ### Intermediate Data (Provided)
 
