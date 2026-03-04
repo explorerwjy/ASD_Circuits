@@ -16,20 +16,17 @@
 # %% [markdown]
 # # 05. Bias Controls — Sibling-Null P-values for Cell-Type Bias
 #
-# Compute permutation-based p-values and FDR q-values for ASD cell-type bias
-# by comparing observed bias against a sibling-null distribution (10,000 permutations
+# Visualize and summarize permutation-based p-values and FDR q-values for ASD
+# cell-type bias, produced by the `Snakefile.bias` pipeline (10,000 permutations
 # with gene-level mutation probability weighting).
 #
-# **Input**:
-# - Cell-type bias (from 02): `dat/Bias/ASD.ClusterV3.top60.UMI.Z2.z1clip3.csv`
-# - Sibling null distributions (10K CSVs, legacy): `SubSampleSib_w_GeneProb/Cluster_V3_UMI_Z2_DN_V2_zclip3/`
+# **Input** (from Snakefile.bias pipeline):
+# - `results/CT_Z2/ASD_All_bias_addP_sibling.csv` — bias + sibling-null p-values
 #
-# **Output**: `dat/Bias/ASD.ClusterV3.top60.UMI.Z2.z1clip3.addP.csv`
-# - Adds columns: EFFECT2 (mean-adjusted), Pvalue, Z_Match, Z_Pvalue, qvalues, qvalues_ZP
-#
-# **Note**: The sibling null data (10K CSVs, ~30 GB) is not stored locally. This notebook
-# documents the methodology and validates the existing output. To regenerate, place
-# null distributions at the legacy path and re-run the commented generation code in Section 2.
+# **Pipeline command**:
+# ```bash
+# snakemake -s Snakefile.bias --configfile config/config.SC.DN.yaml --cores 10
+# ```
 
 # %%
 # %load_ext autoreload
@@ -42,6 +39,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats as scipy_stats
+from statsmodels.stats.multitest import multipletests
 
 ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType/"
 sys.path.insert(1, f"{ProjDIR}/src/")
@@ -63,26 +61,11 @@ with open("../config/config.yaml") as f:
 # unaffected siblings using mutation-probability weighting (`GeneProb_LGD_Dmis.csv`),
 # then cell-type bias is computed identically to the observed ASD bias.
 #
-# **P-value computation**:
+# **P-value computation** (performed by `Snakefile.bias` → `script_bias_cal.py`):
 # - **Permutation P**: Fraction of null values ≥ observed: `P = (count + 1) / (N + 1)`
 # - **Z-score**: `Z = (observed - mean(null)) / std(null)`
-# - **Z P-value**: `P_Z = 1 - Φ(|Z|)` (one-sided normal survival)
-# - **FDR correction**: Benjamini-Hochberg (α=0.1, "indep" method) applied to both
-#   permutation P and Z P-values → `qvalues` and `qvalues_ZP`
-#
-# ```python
-# # --- Generation code (requires sibling null data) ---
-# # SibBiasDFs = LoadCTRLBiasDFs(CTRL_DIR, n_samples=10000)
-# # for CT, row in bias_df.iterrows():
-# #     null_biases = np.array([df.loc[CT, "EFFECT"] for df in SibBiasDFs])
-# #     Z, P, _ = GetPermutationP(null_biases, row["EFFECT"])
-# #     bias_df.loc[CT, "EFFECT2"] = row["EFFECT"] - np.mean(null_biases)
-# #     bias_df.loc[CT, "Pvalue"] = P
-# #     bias_df.loc[CT, "Z_Match"] = Z
-# #     bias_df.loc[CT, "Z_Pvalue"] = scipy.stats.norm.sf(abs(Z))
-# # _, qvalues = fdrcorrection(bias_df["Pvalue"].values, alpha=0.1, method="i")
-# # bias_df["qvalues"] = qvalues
-# ```
+# - **FDR correction**: Benjamini-Hochberg on permutation P → `q-value`
+# - **Z P-value** (computed below): `P_Z = 1 - Φ(|Z|)`, FDR-corrected → `qvalues_ZP`
 
 # %% [markdown]
 # ## 2. Load Existing Results
@@ -90,6 +73,17 @@ with open("../config/config.yaml") as f:
 # %%
 addP_path = f"../{config['data_files']['ct_bias_addp']}"
 CT_Bias = pd.read_csv(addP_path, index_col=0)
+
+# Standardize column names (pipeline uses P-value/q-value, legacy used Pvalue/qvalues)
+col_map = {"P-value": "Pvalue", "Z-score": "Z_Match", "EFFECT_adj": "EFFECT2", "q-value": "qvalues"}
+CT_Bias.rename(columns={k: v for k, v in col_map.items() if k in CT_Bias.columns}, inplace=True)
+
+# Compute Z-based p-value and its FDR correction (not produced by pipeline)
+if "qvalues_ZP" not in CT_Bias.columns and "Z_Match" in CT_Bias.columns:
+    CT_Bias["Z_Pvalue"] = scipy_stats.norm.sf(np.abs(CT_Bias["Z_Match"]))
+    _, qvals_ZP = multipletests(CT_Bias["Z_Pvalue"].values, alpha=0.05, method="fdr_i")[0:2]
+    CT_Bias["qvalues_ZP"] = qvals_ZP
+
 print(f"Cell-type bias with p-values: {CT_Bias.shape[0]} clusters")
 print(f"Columns: {list(CT_Bias.columns)}")
 

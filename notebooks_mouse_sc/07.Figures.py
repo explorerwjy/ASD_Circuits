@@ -78,6 +78,9 @@ ASD_Circuits.append("Subiculum")
 
 # Cell-type bias with p-values
 CT_Bias = pd.read_csv(f"../{config['data_files']['ct_bias_addp']}", index_col=0)
+# Standardize column names (pipeline uses P-value/q-value, legacy used Pvalue/qvalues)
+col_map = {"P-value": "Pvalue", "Z-score": "Z_Match", "EFFECT_adj": "EFFECT2", "q-value": "qvalues"}
+CT_Bias.rename(columns={k: v for k, v in col_map.items() if k in CT_Bias.columns}, inplace=True)
 
 # Cell type hierarchy
 CellTypesDF = pd.read_csv(f"../{config['data_files']['cell_type_hierarchy']}")

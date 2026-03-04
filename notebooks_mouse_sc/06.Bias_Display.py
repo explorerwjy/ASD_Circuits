@@ -67,6 +67,9 @@ else:
     # Load cluster-level bias
     addP_path = f"../{config['data_files']['ct_bias_addp']}"
     CT_Bias = pd.read_csv(addP_path, index_col=0)
+    # Standardize column names (pipeline uses EFFECT_adj, legacy used EFFECT2)
+    col_map = {"P-value": "Pvalue", "EFFECT_adj": "EFFECT2", "q-value": "qvalues"}
+    CT_Bias.rename(columns={k: v for k, v in col_map.items() if k in CT_Bias.columns}, inplace=True)
 
     # Map cluster bias to each cell
     bias_map = CT_Bias["EFFECT"].to_dict()

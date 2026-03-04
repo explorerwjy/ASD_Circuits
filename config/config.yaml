@@ -148,8 +148,8 @@ data_files:
   merfish_z2_vol_mean: "dat/MERFISH/STR_Vol_Mean_Z2Mat_ISHMatch.csv"
   merfish_z2_neur_mean: "dat/MERFISH/STR_NEUR_Mean_Z2Mat_ISHMatch.csv"
   merfish_z2_neur_vol_mean: "dat/MERFISH/STR_NEUR_Vol_Mean_Z2Mat_ISHMatch.csv"
-  # Cell-type bias with sibling-null p-values (produced by 05.Bias_Controls)
-  ct_bias_addp: "notebooks_mouse_sc/dat/Bias/ASD.ClusterV3.top60.UMI.Z2.z1clip3.addP.csv"
+  # Cell-type bias with sibling-null p-values (produced by Snakefile.bias pipeline)
+  ct_bias_addp: "results/CT_Z2/ASD_All_bias_addP_sibling.csv"
   # ASD circuit (SA search result, Size 46 Pareto front index 3)
   asd_circuit_size46: "results/STR_ISH/ASD.SA.Circuits.Size46.csv"
   # Connectivity scoring matrices (InfoMat)
