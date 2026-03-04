@@ -1,0 +1,6 @@
+**Figure X: Bootstrap validation of circuit structure consistency.**
+
+**(a)** Distribution of the number of overlapping structures between the selected circuit (3rd point on the main pareto front) and each bootstrap circuit (3rd point on each bootstrap pareto front). The histogram shows the frequency of bootstrap circuits with different numbers of overlapping structures. The red dashed line indicates the mean overlap of 40.1 structures (out of 46 total structures in the selected circuit), demonstrating high structural consistency across bootstrap replicates.
+
+**(b)** Frequency of top 10 structures (ranked by mutation bias) from the selected circuit appearing in bootstrap circuits. Each bar represents the percentage of bootstrap circuits (out of 1,000 total) that contain the corresponding structure. All top 10 structures appear in ≥98% of bootstrap circuits, with 7 out of 10 structures present in 100% of bootstrap replicates, indicating robust preservation of high-bias structures across bootstrap samples.
+

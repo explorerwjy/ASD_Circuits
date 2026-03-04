@@ -108,11 +108,11 @@ tables:
     title: "Genes included in the neurotransmitter systems analysis"
     description: >
       List of genes included in the dopamine (14 genes), serotonin (11 genes), and
-      oxytocin (3 genes) gene sets used to validate the GENCIC method.
+      oxytocin (2 genes) gene sets used to validate the GENCIC method. Includes
+      UniProt function descriptions and Gene Ontology biological process annotations
+      for each gene.
     sources:
-      genes: "notebook_rebuttal/NeuralSystem.csv"
-    # Filter to dopamine, serotonin, oxytocin only (exclude acetylcholine)
-    systems: ["dopamine", "serotonin", "oxytocin"]
+      genes: "dat/NeuralSystem_S6.csv"
 
   S7:
     sheet_name: "Table S7 - Dopamine Bias"
@@ -178,7 +178,12 @@ tables:
     sheet_name: "Table S14 - Region Mapping"
     title: "Mapping of homologous human and mouse brain regions"
     description: >
-      Anatomical correspondence between mouse brain structures and human brain
-      regions (Power atlas), including homology confidence scores.
+      Anatomical correspondence between 135 mouse brain structures (Allen CCFv3)
+      and human brain regions (Power atlas). Four-tier confidence classification:
+      High (clear anatomical and functional homology), Medium-high (conserved
+      function at different granularity), Medium-low (functional proximity),
+      and Low (moderate similarity only). High and Medium-high confidence mappings
+      (107 and 111 structures, respectively) were used for cross-species fMRI
+      validation.
     sources:
-      mapping: "notebook_rebuttal/Buch_et_al/claude_mapping_v6_DCG.xlsx"
+      mapping: "dat/Buch_et_al/mouse_human_region_mapping_S14.csv"

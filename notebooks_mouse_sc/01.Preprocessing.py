@@ -79,7 +79,7 @@ print(f"Z1 matrix: {ClusterZ1_clip3.shape}, range: [{ClusterZ1_clip3.min().min()
 # Parallelized across gene chunks using joblib (10 workers).
 
 # %%
-ISH_MATCH_DIR = "/home/jw3514/Work/ASD_Circuits/dat/genes/ExpMatch_RootExp_uniform_kernal/"
+ISH_MATCH_DIR = os.path.join(ProjDIR, config["data_files"]["ish_match_dir"])
 
 
 def _load_match_genes(entrez_id, match_dir):

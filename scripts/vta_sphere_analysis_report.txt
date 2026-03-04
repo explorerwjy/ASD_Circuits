@@ -1,0 +1,35 @@
+
+======================================================================
+VTA 10mm-DIAMETER SPHERE ANALYSIS
+Power Atlas Definition
+======================================================================
+
+Center (MNI coordinates): [  0 -15 -15]
+Sphere diameter: 10mm (radius: 5mm)
+Resolution: 2mm MNI template
+
+======================================================================
+KEY FINDINGS
+======================================================================
+
+The 10mm-diameter sphere centered at VTA coordinates encompasses
+multiple midbrain structures due to:
+
+1. Small anatomical size of VTA (~3-4mm in diameter)
+2. Immediate proximity to substantia nigra
+3. Standard fMRI spatial resolution (typically 2-3mm voxels)
+4. Limited anatomical specificity in functional atlases
+
+IMPLICATIONS:
+- VTA fMRI signal likely includes contributions from adjacent
+  midbrain dopaminergic structures (substantia nigra)
+- This is a known limitation of fMRI studies targeting small
+  brainstem nuclei
+- The Power atlas's functional definition may prioritize
+  network connectivity over anatomical precision
+
+======================================================================
+REFERENCE
+======================================================================
+Power et al. (2011). Functional network organization of the
+human brain. Neuron, 72(4), 665-678.

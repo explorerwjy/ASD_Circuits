@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 import seaborn as sns
 from scipy.stats import pearsonr, spearmanr, mannwhitneyu
+import networkx as nx
+from adjustText import adjust_text
+from matplotlib.patches import Patch, FancyArrowPatch
 
 # Helper for pretty p-value formatting everywhere
 def format_pval(pval):
@@ -2181,3 +2184,210 @@ def plot_circuit_scores_with_bootstrap_ci(
 
     plt.tight_layout()
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Region color palette (shared across circuit network and heatmap figures)
+# ---------------------------------------------------------------------------
+REGION_COLORS = {
+    'Isocortex': '#268ad5', 'Olfactory_areas': '#5ab4ac',
+    'Cortical_subplate': '#7ac3fa', 'Hippocampus': '#2c9d39',
+    'Amygdala': '#742eb5', 'Striatum': '#ed8921',
+    'Thalamus': '#e82315', 'Hypothalamus': '#c27ba0',
+    'Midbrain': '#f6b26b', 'Pallidum': '#2ECC71',
+    'Cerebellum': '#8B4513', 'Medulla': '#708090',
+    'Pons': '#A0522D',
+}
+
+
+# Region overrides: structures that should be re-classified for display
+_REGION_OVERRIDES = {
+    'Bed_nuclei_of_the_stria_terminalis': 'Amygdala',  # extended amygdala
+}
+
+
+def _wrap_label(name, max_chars=20):
+    """Wrap a structure label onto multiple lines."""
+    words = name.replace('_', ' ').split()
+    lines, current = [], ''
+    for w in words:
+        if current and len(current) + 1 + len(w) > max_chars:
+            lines.append(current)
+            current = w
+        else:
+            current = f'{current} {w}'.strip() if current else w
+    if current:
+        lines.append(current)
+    return '\n'.join(lines)
+
+
+def plot_circuit_network(structures, bias_df, weight_mat, anno_dict,
+                         seed=42, figsize=(16, 12), node_scale=2000,
+                         edge_alpha=0.25, arrow_size=8, font_size=8,
+                         title=None, ax=None, region_colors=None,
+                         k=None, layout='spring', pos=None,
+                         region_overrides=None, label_max_chars=20):
+    """Draw a directed circuit network graph.
+
+    Parameters
+    ----------
+    structures : list of str
+        Circuit structure names.
+    bias_df : DataFrame
+        Must have 'EFFECT' column, indexed by structure name.
+    weight_mat : DataFrame
+        213x213 connectivity matrix; non-zero entries = directed edges.
+    anno_dict : dict
+        Structure name -> region name (from STR2Region()).
+    seed : int
+        Layout seed for reproducibility.
+    figsize : tuple
+        Figure size if creating new figure.
+    node_scale : float
+        Scaling factor for node sizes (largest node).
+    edge_alpha : float
+        Edge transparency.
+    arrow_size : float
+        Arrow head size for directed edges.
+    font_size : float
+        Label font size.
+    title : str or None
+        Figure title.
+    ax : matplotlib Axes or None
+        If None, creates new figure.
+    region_colors : dict or None
+        Region -> hex color. Defaults to REGION_COLORS.
+    k : float or None
+        Spring layout optimal distance. None = auto.
+    layout : str
+        Layout algorithm: 'spring' (Fruchterman-Reingold) or 'kamada_kawai'.
+        Ignored if pos is provided.
+    pos : dict or None
+        Custom node positions {structure_name: (x, y)}. Overrides layout.
+    region_overrides : dict or None
+        Structure name -> region name overrides.  Defaults to
+        _REGION_OVERRIDES (e.g. BNST -> Amygdala).
+    label_max_chars : int
+        Max characters per line for label wrapping.
+
+    Returns
+    -------
+    fig, ax
+    """
+    if region_colors is None:
+        region_colors = REGION_COLORS
+    if region_overrides is None:
+        region_overrides = _REGION_OVERRIDES
+
+    structures = list(structures)
+    n = len(structures)
+
+    # --- Build directed graph ---
+    sub = weight_mat.loc[structures, structures]
+    G = nx.DiGraph()
+    G.add_nodes_from(structures)
+    for src in structures:
+        for tgt in structures:
+            if src != tgt and sub.loc[src, tgt] > 0:
+                G.add_edge(src, tgt, weight=sub.loc[src, tgt])
+
+    # --- Layout ---
+    if pos is not None:
+        pos = {s: pos[s] for s in structures if s in pos}
+    elif layout == 'kamada_kawai':
+        pos = nx.kamada_kawai_layout(G, scale=2.0)
+    else:
+        if k is None:
+            k = 4.0 / np.sqrt(n)
+        pos_init = nx.kamada_kawai_layout(G, scale=2.0)
+        pos = nx.spring_layout(G, seed=seed, k=k, iterations=300,
+                               scale=2.0, pos=pos_init)
+
+    # --- Node attributes ---
+    biases = bias_df.loc[structures, 'EFFECT'].values
+    bias_norm = (biases - biases.min()) / (biases.max() - biases.min() + 1e-12)
+    sizes = 150 + bias_norm * node_scale
+
+    regions = [region_overrides.get(s, anno_dict.get(s, 'Other'))
+               for s in structures]
+    colors = [region_colors.get(r, '#cccccc') for r in regions]
+
+    # --- Create figure ---
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+
+    # --- Draw edges ---
+    nx.draw_networkx_edges(
+        G, pos, ax=ax,
+        edge_color='#888888', alpha=edge_alpha,
+        arrows=True, arrowsize=arrow_size,
+        arrowstyle='-|>', connectionstyle='arc3,rad=0.05',
+        width=0.6, min_source_margin=10, min_target_margin=10,
+    )
+
+    # --- Draw nodes ---
+    nx.draw_networkx_nodes(
+        G, pos, ax=ax,
+        nodelist=structures, node_size=sizes,
+        node_color=colors, edgecolors='black', linewidths=0.5,
+        alpha=0.92,
+    )
+
+    # --- Labels ---
+    # Striatum labels: centered on node (white bold text, no background)
+    # Other labels: offset with adjustText
+    striatum_strs = {s for s, r in zip(structures, regions) if r == 'Striatum'}
+    for s in striatum_strs:
+        label = _wrap_label(s, max_chars=label_max_chars)
+        x, y = pos[s]
+        ax.text(x, y, label, fontsize=font_size, ha='center', va='center',
+                fontweight='bold', color='white', zorder=12)
+
+    texts = []
+    x_nodes_adj, y_nodes_adj = [], []
+    for s in structures:
+        if s in striatum_strs:
+            continue
+        label = _wrap_label(s, max_chars=label_max_chars)
+        x, y = pos[s]
+        t = ax.text(x, y, label, fontsize=font_size, ha='center', va='center',
+                    fontweight='normal', zorder=10,
+                    bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none',
+                              alpha=0.6))
+        texts.append(t)
+        x_nodes_adj.append(x)
+        y_nodes_adj.append(y)
+
+    # Include ALL node positions as repulsion points for adjustText
+    x_all = [pos[s][0] for s in structures]
+    y_all = [pos[s][1] for s in structures]
+
+    adjust_text(texts, x=x_all, y=y_all,
+                force_text=(0.8, 0.8),
+                force_static=(0.4, 0.4),
+                expand=(1.3, 1.5),
+                arrowprops=dict(arrowstyle='-', color='gray', alpha=0.5, lw=0.5),
+                only_move='xy',
+                ensure_inside_axes=False)
+
+    # --- Legend ---
+    seen_regions = {}
+    for r, c in zip(regions, colors):
+        if r not in seen_regions:
+            seen_regions[r] = c
+    legend_handles = [Patch(facecolor=c, edgecolor='k', label=r.replace('_', ' '),
+                            linewidth=0.5)
+                      for r, c in seen_regions.items()]
+    ax.legend(handles=legend_handles, loc='upper right', fontsize=font_size + 1,
+              ncol=1, framealpha=0.85, edgecolor='gray')
+
+    if title:
+        ax.set_title(title, fontsize=12)
+
+    ax.set_axis_off()
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
+
+    return fig, ax

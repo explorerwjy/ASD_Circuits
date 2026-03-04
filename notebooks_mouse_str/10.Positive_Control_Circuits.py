@@ -45,36 +45,21 @@ ExpLevel.index = ExpLevel.index.astype(int)
 NeuralSystem['EXP'] = NeuralSystem['entrez_id'].map(ExpLevel['EXP'])
 
 # %%
-[NeuralSystem["neurotransmitter_system"].unique()]
-
-# %%
+# Remove PCSK1 from oxytocin (pleiotropic proprotein convertase, not oxytocin-specific)
 NeuralSystem = NeuralSystem[~((NeuralSystem["neurotransmitter_system"] == "oxytocin") & (NeuralSystem.index == "PCSK1"))]
 
 # %%
-NeuralSystem[NeuralSystem["neurotransmitter_system"]=="oxytocin"]
-
-# %%
-STR_BiasMat.loc[1128,:].sort_values(ascending=False).head(10)
-
-# %%
-# Import functions from clean ASD_Circuits.py module
-from ASD_Circuits import (
-    analyze_neurotransmitter_systems_source_target, 
-    plot_source_target_heatmap, 
-    plot_source_target_only,
-    save_neurotransmitter_results
-)
-
-# Define category groupings for this analysis
+# Define category groupings for source-target analysis
+# Metabolism genes (COMT, MAOA, MAOB) excluded — broadly expressed catecholamine
+# degradation enzymes that dilute spatial specificity of dopamine circuit signal
 SOURCE_CATEGORIES = ['synthesis', 'transporter', 'storage_release', 'processing']
 TARGET_CATEGORIES = ['receptor', 'degradation']
 
-# Weight mode: "EXP" = expression-level weights, "identical" = uniform weight 1.0
-WEIGHT_MODE = "EXP"  # <-- toggle here ("EXP" = expression-weighted, "identical" = uniform)
+# Weight mode: "EXP" = expression-level weights (accounts for variation in receptor
+# subtype abundance, e.g. DRD1/DRD2 >> DRD3-5, HTR1A/HTR2A >> other HTRs)
+WEIGHT_MODE = "EXP"
 
-# Run the source-target analysis using imported function
-print("="*70)
-print(f"Weight mode: {WEIGHT_MODE}")
+# Run the source-target analysis — generates .gw files and computes bias
 nt_results = analyze_neurotransmitter_systems_source_target(
     NeuralSystem,
     STR_BiasMat,
@@ -84,34 +69,20 @@ nt_results = analyze_neurotransmitter_systems_source_target(
     generate_bias=True
 )
 
-# %%
-nt_results.keys()
-
-# %%
-nt = "acetylcholine"
-nt_results[nt]["source"].head(10)
-
-# %%
-# drop  "acetylcholine" from nt_results
-
-# %%
-nt_results[nt]["target"].head(10)
-
 # %% [markdown]
 # ### Run Snakemake bias pipeline
-# Compute null distributions and p-values for each NT system (source/target/combined).
-# This takes ~10-15 minutes with 10 cores (10K permutations per gene set).
+# Compute null distributions and p-values for each NT system (combined gene set).
+# This takes ~5-10 minutes with 10 cores (10K permutations per gene set).
 # Skip this cell if results already exist in `results/STR_ISH/`.
 
 # %%
 import subprocess
 
-NT_Systems_lower = ["Dopamine", "Serotonin", "Oxytocin"]
+NT_Systems = ["Dopamine", "Serotonin", "Oxytocin"]
 targets = []
-for system in NT_Systems_lower:
-    for group in ["source", "target", "combined"]:
-        for null in ["sibling", "random"]:
-            targets.append(f"results/STR_ISH/NT_{system}_{group}_bias_addP_{null}.csv")
+for system in NT_Systems:
+    for null in ["sibling", "random"]:
+        targets.append(f"results/STR_ISH/NT_{system}_combined_bias_addP_{null}.csv")
 
 # Only run if any target is missing
 missing = [t for t in targets if not os.path.exists(os.path.join(ProjDIR, t))]
@@ -127,236 +98,77 @@ else:
     print(f"All {len(targets)} NT bias files already exist, skipping Snakemake.")
 
 # %%
-# Load NT STR Bias results into a dictionary
-NT_Systems = ["Dopamine", "Serotonin", "Oxytocin"]
+# Load NT combined bias results (with sibling null p-values)
 NT_BiasDict = {}
 for system in NT_Systems:
-    NT_BiasDict[system] = {
-        'source': pd.read_csv(f"{ProjDIR}/results/STR_ISH/NT_{system}_source_bias_addP_sibling.csv", index_col=0),
-        'target': pd.read_csv(f"{ProjDIR}/results/STR_ISH/NT_{system}_target_bias_addP_sibling.csv", index_col=0),
-        'combined': pd.read_csv(f"{ProjDIR}/results/STR_ISH/NT_{system}_combined_bias_addP_sibling.csv", index_col=0),
-    }
+    NT_BiasDict[system] = pd.read_csv(
+        f"{ProjDIR}/results/STR_ISH/NT_{system}_combined_bias_addP_sibling.csv", index_col=0
+    )
 
 # %%
-NT_BiasDict["Dopamine"]["source"].head(10)
-
-# %%
-# Create visualizations and save results using imported functions
-print("Creating source-target visualization plots...")
-
-# Plot source vs target vs combined comparison and save to results directory
-fig1 = plot_source_target_only(NT_BiasDict, top_n=10, save_plot=True, dpi=480, pvalue_label="P-value")
-
-display_summary = False
-if display_summary:
-    # Display summary statistics
-    print("\n" + "="*70)
-    print("SUMMARY OF RESULTS - SOURCE vs TARGET ANALYSIS")
-    print("="*70)
-    print(f"SOURCE categories: {SOURCE_CATEGORIES}")
-    print(f"TARGET categories: {TARGET_CATEGORIES}")
-
-    for system, system_data in NT_BiasDict.items():
-        print(f"\n{system.upper()} SYSTEM:")
-        
-        if 'source' in system_data:
-            top_structure = system_data['source'].index[0]
-            top_effect = system_data['source'].iloc[0]['EFFECT']
-            print(f"  Source: Top structure = {top_structure.replace('_', ' ')} (Effect: {top_effect:.3f})")
-        
-        if 'target' in system_data:
-            top_structure = system_data['target'].index[0]
-            top_effect = system_data['target'].iloc[0]['EFFECT']
-            print(f"  Target: Top structure = {top_structure.replace('_', ' ')} (Effect: {top_effect:.3f})")
-        
-        if 'combined' in system_data:
-            top_structure = system_data['combined'].index[0]
-            top_effect = system_data['combined'].iloc[0]['EFFECT']
-            print(f"  Combined: Top structure = {top_structure.replace('_', ' ')} (Effect: {top_effect:.3f})")
-
-    print("\nSource-Target analysis complete!")
-    print(f"All results saved to ./results/ directory")
-    print("  - CSV files: Individual bias results for each system and category")
-    print("  - PNG files: High-resolution plots for publication")
-    print("\nEach system now has 3 DataFrames:")
-    print("  - 'source': bias from synthesis + transporter + storage_release genes")
-    print("  - 'target': bias from receptor + degradation genes") 
-    print("  - 'combined': bias from source + target genes (excluding metabolism, processing)")
-
-# %%
-NT_BiasDict
-
-
-# %%
-# plot_combined_bias_only: moved to src/plot.py
-fig1 = plot_combined_bias_only(NT_BiasDict, top_n=15, save_plot=True, dpi=120, pvalue_label="P-value")
+# Plot combined bias across NT systems
+# plot_combined_bias_only expects {system: {'combined': df}} format
+NT_BiasDict_nested = {system: {'combined': df} for system, df in NT_BiasDict.items()}
+fig1 = plot_combined_bias_only(NT_BiasDict_nested, top_n=15, save_plot=True, dpi=120, pvalue_label="P-value")
 
 # %% [markdown]
-# ### Test Bias vs CCS 
+# ## Circuit Connectivity Score (CCS) analysis
 
 # %%
 ScoreMatDir = os.path.join(ProjDIR, "dat/allen-mouse-conn/ConnectomeScoringMat")
-WeightMat = pd.read_csv(os.path.join(ScoreMatDir, "WeightMat.Ipsi.csv"), index_col=0)
-IpsiInfoMat=pd.read_csv(os.path.join(ScoreMatDir, "InfoMat.Ipsi.csv"), index_col=0)
-IpsiInfoMatShort_v1=pd.read_csv(os.path.join(ScoreMatDir, "InfoMat.Ipsi.Short.3900.csv"), index_col=0)
-IpsiInfoMatLong_v1=pd.read_csv(os.path.join(ScoreMatDir, "InfoMat.Ipsi.Long.3900.csv"), index_col=0)
+IpsiInfoMat = pd.read_csv(os.path.join(ScoreMatDir, "InfoMat.Ipsi.csv"), index_col=0)
 
 topNs = np.arange(200, 5, -1)
 DIR = os.path.join(ProjDIR, "dat/allen-mouse-conn/RankScores")
 Cont_Distance = np.load(os.path.join(DIR, "RankScore.Ipsi.Cont.npy"))
-Cont_DistanceShort = np.load(os.path.join(DIR, "RankScore.Ipsi.Short.3900.Cont.npy"))
-Cont_DistanceLong = np.load(os.path.join(DIR, "RankScore.Ipsi.Long.3900.Cont.npy"))
-
 
 # %%
-def calculate_circuit_scores(pc_scores_df, IpsiInfoMat, sort_by="PC1"):
-    STR_Ranks = pc_scores_df.sort_values(sort_by, ascending=False).index.values
+def calculate_circuit_scores(bias_df, IpsiInfoMat, sort_by="EFFECT"):
+    """Compute CCS profile across circuit sizes from 200 down to 6."""
+    STR_Ranks = bias_df.sort_values(sort_by, ascending=False).index.values
     topNs = list(range(200, 5, -1))
-    SC_Agg_topN_score = []
-    
-    for topN in topNs:
-        top_strs = STR_Ranks[:topN]
-        score = ScoreCircuit_SI_Joint(top_strs, IpsiInfoMat)
-        SC_Agg_topN_score.append(score)
-        
-    return np.array(SC_Agg_topN_score)
-
+    return np.array([ScoreCircuit_SI_Joint(STR_Ranks[:n], IpsiInfoMat) for n in topNs])
 
 # %%
-print("Keys in nt_results_detailed:")
-for key in nt_results.keys():
-    print(f"  {key}: {list(nt_results[key].keys())}")
+# Compute CCS profiles for each NT system (combined gene set)
+nt_ccs_scores = {}
+for system, bias_df in NT_BiasDict.items():
+    nt_ccs_scores[system] = calculate_circuit_scores(bias_df, IpsiInfoMat)
 
 # %%
-#NT_BiasDict = nt_results
-
-# %%
-# For each neurotransmitter system, create a new DataFrame where each structure's EFFECT is the max of source/target, but in final df use column name "EFFECT"
-NT_BiasDict_max = {}
-for system in NT_BiasDict.keys():
-    source = NT_BiasDict[system].get("source")
-    target = NT_BiasDict[system].get("target")
-    if source is not None and target is not None:
-        # Align source and target indices, take max per structure
-        aligned = source["EFFECT"].to_frame("source").join(
-            target["EFFECT"].to_frame("target"), how="outer"
-        )
-        aligned["EFFECT"] = aligned[["source", "target"]].max(axis=1)
-        # You might want to add back region/other columns if needed
-        df_max = aligned[["EFFECT"]].copy()
-        # Optionally add Region info from source or target
-        if "Region" in source.columns:
-            df_max["Region"] = source["Region"]
-        elif "Region" in target.columns:
-            df_max["Region"] = target["Region"]
-        df_max = df_max.sort_values("EFFECT", ascending=False)
-        NT_BiasDict_max[system] = df_max
-
-# %%
-neuro_system_scores = {}
-for system in NT_BiasDict.keys():
-    for category, df in NT_BiasDict[system].items():
-        neuro_system_scores[f"{system}_{category}"] = calculate_circuit_scores(df, IpsiInfoMat, sort_by="EFFECT")
-
-neuro_system_scores2 = {}
-for system in NT_BiasDict_max.keys():
-    df = NT_BiasDict_max[system]
-    neuro_system_scores2[f"{system}"] = calculate_circuit_scores(df, IpsiInfoMat, sort_by="EFFECT")
-
-# %%
+# CCS profile plot: NT systems vs sibling null
+colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
 plt.style.use('seaborn-v0_8-whitegrid')
-fig, ax1 = plt.subplots(1,1, dpi=480, figsize=(12,6), facecolor='none')
-
+fig, ax1 = plt.subplots(1, 1, dpi=480, figsize=(12, 6), facecolor='none')
 fig.patch.set_alpha(0)
 ax1.patch.set_alpha(0)
 
 BarLen = 34.1
-#BarLen = 47.5
-
-# Define colors for each neurotransmitter system
-colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', 
-          '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78']
-
-topNs = list(range(200, 5, -1))  # Define topNs based on the range used in calculate_circuit_scores
-                        
-for i, (system_category, scores) in enumerate(neuro_system_scores.items()):
-    if "combined" in system_category:
-        label = system_category.replace("_combined", "")
-        color = colors[i % len(colors)]
-        ax1.plot(topNs, scores, color=color, marker="o", markersize=5, lw=1,
-                            ls="dashed", label=label, alpha = 0.5)
+for i, (system, scores) in enumerate(nt_ccs_scores.items()):
+    ax1.plot(topNs, scores, color=colors[i], marker="o", markersize=5, lw=1,
+             ls="dashed", label=system, alpha=0.5)
 
 cont = np.median(Cont_Distance, axis=0)
-lower = np.percentile(Cont_Distance, 50-BarLen, axis=0)
-upper = np.percentile(Cont_Distance, 50+BarLen, axis=0)
+lower = np.percentile(Cont_Distance, 50 - BarLen, axis=0)
+upper = np.percentile(Cont_Distance, 50 + BarLen, axis=0)
 ax1.errorbar(topNs, cont, color="grey", marker="o", markersize=1.5, lw=1,
-            yerr=(cont - lower, upper - cont ), ls="dashed", label="Siblings")
+             yerr=(cont - lower, upper - cont), ls="dashed", label="Siblings")
 ax1.set_xlabel("Structure Rank\n", fontsize=17)
 ax1.set_ylabel("Circuit Connectivity Score", fontsize=15)
 ax1.grid(True, linestyle='--', alpha=0.7)
 ax1.set_xlim(0, 121)
-
-# Place legend outside of plot
 ax1.legend(fontsize=13, bbox_to_anchor=(1.01, 1), loc='upper left')
-plt.tight_layout()  # Adjust layout to prevent legend cutoff
+plt.tight_layout()
 
 # %%
-plt.style.use('seaborn-v0_8-whitegrid')
-fig, ax1 = plt.subplots(1,1, dpi=480, figsize=(12,6), facecolor='none')
-
-fig.patch.set_alpha(0)
-ax1.patch.set_alpha(0)
-
-BarLen = 34.1
-#BarLen = 47.5
-
-# Define colors for each neurotransmitter system
-colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', 
-          '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78']
-
-topNs = np.arange(200, 5, -1)  # Define topNs based on the range used in calculate_circuit_scores
-                        
-for i, (system_category, scores) in enumerate(neuro_system_scores2.items()):
-
-    color = colors[i % len(colors)]
-    ax1.plot(topNs, scores, color=color, marker="o", markersize=5, lw=1,
-                        ls="dashed", label=system_category, alpha = 0.5)
-
-cont = np.median(Cont_Distance, axis=0)
-lower = np.percentile(Cont_Distance, 50-BarLen, axis=0)
-upper = np.percentile(Cont_Distance, 50+BarLen, axis=0)
-ax1.errorbar(topNs, cont, color="grey", marker="o", markersize=1.5, lw=1,
-            yerr=(cont - lower, upper - cont ), ls="dashed", label="Siblings")
-ax1.set_xlabel("Structure Rank\n", fontsize=17)
-ax1.set_ylabel("Circuit Connectivity Score", fontsize=15)
-ax1.grid(True, linestyle='--', alpha=0.7)
-ax1.set_xlim(0, 121)
-
-# Place legend outside of plot
-ax1.legend(fontsize=13, bbox_to_anchor=(1.01, 1), loc='upper left')
-plt.tight_layout()  # Adjust layout to prevent legend cutoff
-
+# CCS p-values at key circuit sizes
+plot_CCS_pvalues_at_N(50, nt_ccs_scores, topNs, Cont_Distance, colors)
+plot_CCS_pvalues_at_N(20, nt_ccs_scores, topNs, Cont_Distance, colors)
 
 # %%
-# plot_CCS_pvalues_at_N: moved to src/plot.py
-
-# %%
-#plot_CCS_pvalues_at_N(46, neuro_system_scores, topNs, Cont_Distance, colors)
-plot_CCS_pvalues_at_N(46, neuro_system_scores2, topNs, Cont_Distance, colors)
-plot_CCS_pvalues_at_N(40, neuro_system_scores2, topNs, Cont_Distance, colors)
-plot_CCS_pvalues_at_N(20, neuro_system_scores2, topNs, Cont_Distance, colors)
-
-# %%
-plot_CCS_pvalues_at_N(40, neuro_system_scores2, topNs, Cont_Distance, colors)
-plot_CCS_pvalues_at_N(20, neuro_system_scores2, topNs, Cont_Distance, colors)
-
-# %%
-plot_CCS_histogram_with_NT_bars(20, neuro_system_scores2, Cont_Distance, topNs)
-plot_CCS_histogram_with_NT_bars(40, neuro_system_scores2, Cont_Distance, topNs)
-
-
-# %%
-plot_CCS_histogram_with_NT_bars(50, neuro_system_scores2, Cont_Distance, topNs)
+# CCS histogram with NT bars
+plot_CCS_histogram_with_NT_bars(50, nt_ccs_scores, Cont_Distance, topNs)
+plot_CCS_histogram_with_NT_bars(20, nt_ccs_scores, Cont_Distance, topNs)
 
 # %% [markdown]
 # # Other disorders 
@@ -475,23 +287,10 @@ plt.tight_layout()  # Adjust layout to prevent legend cutoff
 
 
 # %%
-# Plot CCS p-values for negative controls (disorders)
-# Ensure topNs is a numpy array for the function (it's already defined in cell 17, but ensure it's numpy array)
-topNs = np.arange(200, 5, -1)
-
-# Define colors if not already defined (needed for plot_CCS_pvalues_at_N)
-if 'colors' not in globals():
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', 
-              '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78']
-
-# Plot p-values at different ranks
+# CCS p-values for negative controls
 plot_CCS_pvalues_at_N(46, disorder_scores, topNs, Cont_Distance, colors)
 plot_CCS_pvalues_at_N(20, disorder_scores, topNs, Cont_Distance, colors)
 
-
 # %%
-# plot_CCS_histogram_with_NT_bars: moved to src/plot.py (with overlap fix)
 fig2, ax2 = plot_CCS_histogram_with_NT_bars(46, disorder_scores, Cont_Distance, topNs)
 plt.show()
-
-# %%

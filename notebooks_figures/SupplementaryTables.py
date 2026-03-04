@@ -51,8 +51,13 @@ def resolve_path(path):
 
 
 def read_bias_csv(path, index_col="STR"):
-    """Read a bias CSV and return DataFrame."""
-    return pd.read_csv(resolve_path(path), index_col=index_col)
+    """Read a bias CSV and return DataFrame. Handles 'STR' or 'Structure' as index."""
+    full = resolve_path(path)
+    df = pd.read_csv(full)
+    # Normalize: some files use 'Structure' instead of 'STR'
+    if index_col not in df.columns and "Structure" in df.columns:
+        df = df.rename(columns={"Structure": index_col})
+    return df.set_index(index_col)
 
 
 def read_bias_csv_no_index(path):
@@ -184,16 +189,7 @@ S5.head(3)
 
 # %%
 cfg = tables_cfg["S6"]
-nt_genes = pd.read_csv(resolve_path(cfg["sources"]["genes"]), index_col=0)
-
-# Filter to specified systems
-systems = cfg.get("systems", None)
-if systems:
-    S6 = nt_genes[nt_genes["neurotransmitter_system"].str.lower().isin([s.lower() for s in systems])].copy()
-else:
-    S6 = nt_genes.copy()
-
-S6 = S6.reset_index()
+S6 = pd.read_csv(resolve_path(cfg["sources"]["genes"]), index_col=0).reset_index()
 print(f"Table S6: {S6.shape}")
 S6.head(3)
 
@@ -231,7 +227,9 @@ print(f"Table S13 (Constrained cell type): {S13.shape}")
 
 # %%
 cfg = tables_cfg["S14"]
-S14 = pd.read_excel(resolve_path(cfg["sources"]["mapping"]))
+S14 = pd.read_csv(resolve_path(cfg["sources"]["mapping"]))
+# Drop Score column (internal numeric values replaced by Confidence categories in table)
+S14 = S14.drop(columns=["Score"], errors="ignore")
 print(f"Table S14: {S14.shape}")
 S14.head(3)
 

@@ -19,10 +19,13 @@
 # Compute ASD mutation bias at the brain structure level using MERFISH spatial
 # transcriptomics data, and validate by comparing with ISH-derived bias.
 #
-# **Input**: MERFISH Z2 expression matrices (from 01.Preprocessing), ASD gene weights
+# Gene weights are denoised using V2-V3 single-cell reproducibility (V2_V3_CT_Corr²).
+# Best validation: Cell Mean (CM) Pearson r = 0.77 vs ISH.
+#
+# **Input**: MERFISH Z2 expression matrices (from 03.MERFISH_Preprocessing), DN gene weights
 #
 # **Output**: Structure-level bias files in `dat/Bias/STR/`
-# - `ASD.MERFISH_Allen.CM.ISHMatch.Z2.csv` — Cell Mean
+# - `ASD.MERFISH_Allen.CM.ISHMatch.Z2.csv` — Cell Mean (r=0.77 vs ISH)
 # - `ASD.MERFISH_Allen.VM.ISHMatch.Z2.csv` — Volume Mean
 # - `ASD.MERFISH_Allen.NM.ISHMatch.Z2.csv` — Neuron Mean
 # - `ASD.MERFISH_Allen.NVM.ISHMatch.Z2.csv` — Neuron Volume Mean
@@ -75,10 +78,14 @@ for label, path in z2_files.items():
 
 # %% [markdown]
 # ## 2. Load Gene Weights and Compute Bias
+#
+# Gene weights are denoised using V2-V3 single-cell cross-cell-type correlation
+# (weight_DN = weight_ISH × V2_V3_CT_Corr²). This downweights genes with poor
+# reproducibility across independent scRNA-seq experiments.
 
 # %%
-ASD_GW = Fil2Dict(f"../{config['data_files']['asd_gene_weights_v2']}")
-print(f"ASD gene weights: {len(ASD_GW)} genes")
+ASD_GW = Fil2Dict(f"../{config['data_files']['asd_gene_weights_dn']}")
+print(f"ASD gene weights (DN): {len(ASD_GW)} genes")
 
 # %%
 BIAS_DIR = "dat/Bias/STR"
@@ -153,23 +160,13 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## 5. MERFISH vs ISH Scatter (Neuron Mean)
+# ## 5. MERFISH vs ISH Scatter — All Methods
+#
+# Compare all four MERFISH aggregation methods against ISH bias.
 
 # %%
-label = "NM"
-bias_df = bias_results[label]
-shared = bias_df.index.intersection(ASD_ISH_Bias.index)
-
-fig, ax = plt.subplots(figsize=(5, 5), dpi=150)
-fig.patch.set_alpha(0)
-ax.patch.set_alpha(0)
-
-x = ASD_ISH_Bias.loc[shared, "EFFECT"]
-y = bias_df.loc[shared, "EFFECT"]
-r, p = pearsonr(x, y)
-
-# Color by brain region
-regions = ASD_ISH_Bias.loc[shared, "REGION"]
+method_labels = {"CM": "Cell Mean", "VM": "Volume Mean",
+                 "NM": "Neuron Mean", "NVM": "Neuron Vol Mean"}
 region_colors = {
     "Isocortex": "#1f77b4", "Hippocampus": "#2ca02c",
     "Thalamus": "#ff7f0e", "Hypothalamus": "#d62728",
@@ -177,16 +174,33 @@ region_colors = {
     "Cerebellum": "#e377c2", "Medulla": "#7f7f7f",
     "Pons": "#bcbd22", "Pallidum": "#17becf",
 }
-for reg in regions.unique():
-    mask = regions == reg
-    color = region_colors.get(reg, "grey")
-    ax.scatter(x[mask], y[mask], s=15, alpha=0.6, c=color, label=reg)
 
-ax.set_xlabel("ISH Z2 bias")
-ax.set_ylabel(f"MERFISH {label} Z2 bias")
-ax.set_title(f"Pearson r = {r:.3f}")
-ax.axhline(0, c="grey", ls="--", lw=0.5)
-ax.axvline(0, c="grey", ls="--", lw=0.5)
-ax.legend(fontsize=7, ncol=2, loc="lower right")
+fig, axes = plt.subplots(2, 2, figsize=(10, 10), dpi=150)
+fig.patch.set_alpha(0)
+
+for ax, (key, full_name) in zip(axes.flat, method_labels.items()):
+    ax.patch.set_alpha(0)
+    bias_df = bias_results[key]
+    shared = bias_df.index.intersection(ASD_ISH_Bias.index)
+    x = ASD_ISH_Bias.loc[shared, "EFFECT"]
+    y = bias_df.loc[shared, "EFFECT"]
+    r, p = pearsonr(x, y)
+    regions = ASD_ISH_Bias.loc[shared, "REGION"]
+
+    for reg in regions.unique():
+        mask = regions == reg
+        color = region_colors.get(reg, "grey")
+        ax.scatter(x[mask], y[mask], s=15, alpha=0.6, c=color, label=reg)
+
+    ax.set_xlabel("ISH Z2 bias")
+    ax.set_ylabel(f"MERFISH {key} Z2 bias")
+    ax.set_title(f"{full_name} — r = {r:.3f}")
+    ax.axhline(0, c="grey", ls="--", lw=0.5)
+    ax.axvline(0, c="grey", ls="--", lw=0.5)
+
+# Single legend from first axis
+handles, labels = axes[0, 0].get_legend_handles_labels()
+fig.legend(handles, labels, fontsize=7, ncol=5, loc="lower center",
+           bbox_to_anchor=(0.5, -0.02))
 plt.tight_layout()
 plt.show()

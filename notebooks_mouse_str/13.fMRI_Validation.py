@@ -156,22 +156,72 @@ print("\nPearson Correlation Matrix:")
 print(pearson_corr.round(3))
 
 # %%
-GENCIC = pd.read_excel(os.path.join(ProjDIR, "results/SupTabs.v57.xlsx"), sheet_name="Table-S1- Structure Bias", index_col=0)
-# Need Annotate Name
+# Load GENCIC bias from primary source files (not compiled Excel)
+import yaml
 
+bias_fdr = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"))
+if "Structure" in bias_fdr.columns and "STR" not in bias_fdr.columns:
+    bias_fdr = bias_fdr.rename(columns={"Structure": "STR"})
+bias_fdr = bias_fdr.set_index("STR")
+
+GENCIC = pd.DataFrame(index=bias_fdr.index)
+GENCIC.index.name = "STR"
+GENCIC["Bias"] = bias_fdr["EFFECT"]
+GENCIC["REGION"] = bias_fdr["REGION"] if "REGION" in bias_fdr.columns else STR2Region().reindex(bias_fdr.index)["Region"]
+GENCIC["Rank"] = bias_fdr["Rank"]
+GENCIC["Pvalue"] = bias_fdr["Pvalue"]
+if "qvalues" in bias_fdr.columns:
+    GENCIC["Pvalue_adj"] = bias_fdr["qvalues"]
+elif "Pvalue_adj" in bias_fdr.columns:
+    GENCIC["Pvalue_adj"] = bias_fdr["Pvalue_adj"]
+
+# Additional bias columns
+bias_male = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/ASD.Male.ALL.bias.csv"))
+if "Structure" in bias_male.columns:
+    bias_male = bias_male.rename(columns={"Structure": "STR"})
+bias_male = bias_male.set_index("STR")
+GENCIC["Bias.Male"] = bias_male.reindex(GENCIC.index)["EFFECT"]
+
+bias_female = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/ASD.Female.ALL.bias.csv"))
+if "Structure" in bias_female.columns:
+    bias_female = bias_female.rename(columns={"Structure": "STR"})
+bias_female = bias_female.set_index("STR")
+GENCIC["Bias.Female"] = bias_female.reindex(GENCIC.index)["EFFECT"]
+
+bias_spark159 = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/ASD.159.pLI.z2.csv"))
+if "Structure" in bias_spark159.columns:
+    bias_spark159 = bias_spark159.rename(columns={"Structure": "STR"})
+bias_spark159 = bias_spark159.set_index("STR")
+GENCIC["Bias.Spark159"] = bias_spark159.reindex(GENCIC.index)["EFFECT"]
+
+bias_neuron = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/ASD.neuron.density.norm.bias.csv"))
+if "Structure" in bias_neuron.columns:
+    bias_neuron = bias_neuron.rename(columns={"Structure": "STR"})
+bias_neuron = bias_neuron.set_index("STR")
+GENCIC["Bias.Neuron_density_normalized"] = bias_neuron.reindex(GENCIC.index)["EFFECT"]
+
+bias_glia = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/ASD.neuro2glia.norm.bias.csv"))
+if "Structure" in bias_glia.columns:
+    bias_glia = bias_glia.rename(columns={"Structure": "STR"})
+bias_glia = bias_glia.set_index("STR")
+GENCIC["Bias.Neuron_glia_ratio_normalized"] = bias_glia.reindex(GENCIC.index)["EFFECT"]
+
+# Circuit membership from config
+with open(os.path.join(ProjDIR, "config/supplementary_tables.yaml")) as f:
+    stcfg = yaml.safe_load(f)
+circuit_46_df = pd.read_csv(os.path.join(ProjDIR, stcfg["tables"]["S1"]["circuit_46_file"]), index_col="idx")
+circuit_46 = circuit_46_df.loc[stcfg["tables"]["S1"]["circuit_46_row"], "STRs"].split(";")
+circuit_32 = stcfg["tables"]["S1"]["circuit_32"]
+GENCIC["Circuits.46"] = GENCIC.index.isin(circuit_46).astype(int)
+GENCIC["Circuits.32"] = GENCIC.index.isin(circuit_32).astype(int)
+
+print(f"GENCIC: {GENCIC.shape[0]} structures, {GENCIC.shape[1]} columns")
 
 # %%
-GENCIC.head(2)
-
-# %%
-
-# %%
-# TODO: copy to dat/
+# Map structure names to acronyms using ABA ontology
 ABA_Ontology = pd.read_csv(os.path.join(ProjDIR, "dat/Other/ontology.csv"), index_col="KEY")
-ABA_Ontology.head(3)
 
-# %%
-for _str, row in GENCIC.iterrows():
+for _str in GENCIC.index:
     if _str in ABA_Ontology.index:
         GENCIC.loc[_str, "acronym"] = ABA_Ontology.loc[_str, "acronym"]
     else:
@@ -1556,6 +1606,19 @@ def compare_lr_correlations(results_df, plot=True, title=None):
     # Spearman correlations
     rho_cd, p_cd = spearmanr(left_df['cohens_d'], right_df['cohens_d'])
     rho_pval, p_pval = spearmanr(left_df['mwu_p'], right_df['mwu_p'])
+
+    # Pearson correlations (for comparison with text claim)
+    from scipy.stats import pearsonr
+    valid_cd = left_df['cohens_d'].notna() & right_df['cohens_d'].notna()
+    valid_pv = left_df['mwu_p'].notna() & right_df['mwu_p'].notna()
+    if valid_cd.sum() >= 3:
+        pear_cd, pear_cd_p = pearsonr(left_df.loc[valid_cd, 'cohens_d'], right_df.loc[valid_cd, 'cohens_d'])
+    else:
+        pear_cd, pear_cd_p = np.nan, np.nan
+    if valid_pv.sum() >= 3:
+        pear_pval, pear_pval_p = pearsonr(left_df.loc[valid_pv, 'mwu_p'], right_df.loc[valid_pv, 'mwu_p'])
+    else:
+        pear_pval, pear_pval_p = np.nan, np.nan
     
     if plot:
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
@@ -1585,17 +1648,31 @@ def compare_lr_correlations(results_df, plot=True, title=None):
     res = {
         "n_pairs": len(common),
         "cohens_d_spearman_rho": rho_cd,
-        "cohens_d_pval": p_cd,
+        "cohens_d_spearman_p": p_cd,
+        "cohens_d_pearson_r": pear_cd,
+        "cohens_d_pearson_p": pear_cd_p,
         "mwu_p_spearman_rho": rho_pval,
-        "mwu_p_pval": p_pval
+        "mwu_p_spearman_p": p_pval,
+        "mwu_p_pearson_r": pear_pval,
+        "mwu_p_pearson_p": pear_pval_p,
     }
     return pd.DataFrame([res])
 
 
 # %%
+lr_results = {}
 for res_df, name in zip([CSF_shank3b_res, GSR_shank3b_res, CSF_chd8_res, GSR_chd8_res, CSF_cntnap2_res, GSR_cntnap2_res, CSF_mecp2_res, GSR_mecp2_res], ["CSF Shank3b", "GSR Shank3b", "CSF Chd8", "GSR Chd8", "CSF Cntnap2", "GSR Cntnap2", "CSF Mepc2", "GSR Mepc2"]) :
     lr_corr = compare_lr_correlations(res_df, title=name)
-#print(lr_corr)
+    lr_results[name] = lr_corr
+    print(f"{name}: {lr_corr.to_string(index=False)}")
+
+# Summary: mean Pearson r (Cohen's d L-R) across 4 CSF models
+csf_pearson_rs = [lr_results[k]['cohens_d_pearson_r'].values[0]
+                  for k in ["CSF Shank3b", "CSF Chd8", "CSF Cntnap2", "CSF Mepc2"]]
+print(f"\nCSF models — L-R Pearson r (Cohen's d):")
+for name, r in zip(["Shank3b", "Chd8", "Cntnap2", "Mecp2"], csf_pearson_rs):
+    print(f"  {name}: {r:.3f}")
+print(f"  Mean: {np.mean(csf_pearson_rs):.2f}")
 
 # %%
 # Separate each parcel's L and R entries into separate DataFrames for all 4 models, assuming index ends with "_L" or "_R"

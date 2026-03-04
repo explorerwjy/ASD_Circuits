@@ -1,0 +1,23 @@
+# Config for UMI-based denoised gene weights
+ProjDIR: "/home/jw3514/Work/ASD_Circuits_CellType/"
+
+gene_sets:
+  ASD_All_UMI:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.UMI.gw"
+    null_model: "mutability"
+
+analysis_types:
+  CT_Z2:
+    expr_matrix: "dat/BiasMatrices/Cluster_Z2Mat_ISHMatch.z1clip3.parquet"
+    mode: "mouse_ct_bias"
+
+output_dir: "results"
+n_random_weights: 10000
+
+data_files:
+  sibling_weights: "dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv"
+  gene_prob: "dat/Genetics/GeneWeights/GeneProb_LGD_Dmis.csv"
+  mouse_ct_annotation: "dat/MouseCT_Cluster_Anno.csv"
+  protein_coding_genes: "dat/Genetics/protein-coding_gene.txt"
+  major_brain_divisions: "dat/structure2region.tsv"
+  Denovo_mut_rate: "/home/jw3514/Work/Resources/MutationRate_20170710_rate.CorrectSymbol.txt"

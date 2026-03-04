@@ -377,25 +377,16 @@ else:
     print(f"Pipeline file not found: {pipeline_file} (run Snakefile.bias first)")
 
 # %%
-# Compare against legacy results
-legacy_file = "/mnt/data0/home_backup/Work/CellType_Psy/AllenBrainCellAtlas/dat/Bias/ASD.ClusterV3.top60.UMI.Z2.z1clip3.addP.csv"
-if os.path.exists(legacy_file):
-    legacy_bias = pd.read_csv(legacy_file, index_col=0)
+# Compare against intermediate results file (used by downstream notebooks)
+ct_addp_path = f"../{config['data_files']['ct_bias_addp']}"
+if os.path.exists(ct_addp_path):
+    legacy_bias = pd.read_csv(ct_addp_path, index_col=0)
     shared_idx = ASD_SC_Bias.index.intersection(legacy_bias.index)
     r_legacy = np.corrcoef(ASD_SC_Bias.loc[shared_idx, 'EFFECT'],
                            legacy_bias.loc[shared_idx, 'EFFECT'])[0, 1]
-    print(f"Legacy comparison: {len(shared_idx)} shared clusters, Pearson r = {r_legacy:.6f}")
-
-    # Top-10 side by side
-    top10 = ASD_SC_Bias.head(10).index
-    comparison = pd.DataFrame({
-        'EFFECT_new': ASD_SC_Bias.loc[top10, 'EFFECT'],
-        'EFFECT_legacy': legacy_bias.loc[top10, 'EFFECT'] if all(t in legacy_bias.index for t in top10) else np.nan,
-    })
-    print("\nTop-10 clusters (new vs legacy):")
-    print(comparison.to_string())
+    print(f"Validation vs ct_bias_addp: {len(shared_idx)} shared clusters, Pearson r = {r_legacy:.6f}")
 else:
-    print(f"Legacy file not found: {legacy_file}")
+    print(f"Intermediate file not found: {ct_addp_path}")
 
 # %% [markdown]
 # ## 9. Sibling Pipeline Note

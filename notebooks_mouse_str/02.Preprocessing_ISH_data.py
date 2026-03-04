@@ -141,7 +141,7 @@ print(f"  Saved: {exp_features_path}")
 
 # %%
 z2_path = os.path.join(BIAS_DIR, "AllenMouseBrain_Z2bias.parquet")
-MATCH_DIR = os.path.join(ProjDIR, config["data_files"]["legacy_match_dir"])
+MATCH_DIR = os.path.join(ProjDIR, config["data_files"]["ish_match_dir"])
 
 if os.path.exists(z2_path) and os.path.getmtime(z2_path) > os.path.getmtime(z1_path):
     print(f"Loading cached Z2 from {z2_path}")
@@ -285,7 +285,7 @@ for label, z1_in, z1_out_path in [
 #
 # **Input**: Jon's log2+QN expression (`dat/allen-mouse-exp/Jon_ExpMat.log2.qn.csv`)
 #
-# **Match files**: Legacy expression match files (`dat/allen-mouse-exp/ExpMatch_Legacy/`)
+# **Match files**: ISH expression match files (`dat/allen-mouse-exp/ExpMatch/`)
 #
 # **Note**: Python QN was tested but shifts the CCS local peak away from size 46.
 # See `notebook_validation/Validate_ISH_Z2_Pipeline` for details.

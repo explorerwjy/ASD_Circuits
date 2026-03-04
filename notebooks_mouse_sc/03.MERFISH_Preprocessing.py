@@ -218,49 +218,57 @@ else:
     print("Zhuang MERFISH data not found — skipping")
 
 # %% [markdown]
-# ## 7. MERFISH Z2 Matrices (from pre-computed splits)
+# ## 7. MERFISH Z2 Matrices (ISH Expression-Matched)
 #
-# Z2 normalization is ISH expression-matched. The Z2 computation was run externally
-# and split across multiple CSV files. Here we reassemble them into single matrices.
+# Compute Z2 for each MERFISH Z1 matrix using ISH expression-matched normalization.
+# For each gene, Z2 normalizes relative to genes with similar ISH expression levels
+# using pre-computed match files (10K matched genes per gene from ±5% quantile window).
+#
+# Uses `compute_z2_parallel` from `scripts/script_compute_Z2.py`.
 
 # %%
-Z2_SPLIT_BASE = config["data_files"]["z2_split_base"]
+sys.path.insert(0, os.path.join(ProjDIR, "scripts"))
+from script_compute_Z2 import compute_z2_parallel
 
+ISH_MATCH_DIR = os.path.join(ProjDIR, config["data_files"]["ish_match_dir"])
+exp_features = pd.read_csv(os.path.join(ProjDIR, "dat/allen-mouse-exp/ExpMatchFeatures.csv"),
+                            index_col="Genes")
 
-def assemble_z2_splits(split_dir, outpath):
-    """Concatenate Z2 split CSVs into a single matrix."""
-    if not os.path.isdir(split_dir):
-        print(f"  SKIP (not found): {split_dir}")
-        return None
-    dfs = []
-    for f in sorted(os.listdir(split_dir)):
-        dfs.append(pd.read_csv(os.path.join(split_dir, f), index_col=0))
-    z2 = pd.concat(dfs)
+# Define all Z2 jobs: (Z1 clipped matrix, output path)
+z2_jobs = [
+    (MERFISH_CellMean_Z1.clip(upper=5, lower=-5),
+     f"../{config['data_files']['merfish_z2_cell_mean']}",
+     "Allen MERFISH Cell-mean Z2"),
+    (MERFISH_VolMean_Z1.clip(upper=5, lower=-5),
+     f"../{config['data_files']['merfish_z2_vol_mean']}",
+     "Allen MERFISH Vol-mean Z2"),
+    (MERFISH_NEU_Z1.clip(upper=5, lower=-5),
+     f"../{config['data_files']['merfish_z2_neur_mean']}",
+     "Allen MERFISH Neuron-mean Z2"),
+    (MERFISH_NEU_Vol_Z1.clip(upper=5, lower=-5),
+     f"../{config['data_files']['merfish_z2_neur_vol_mean']}",
+     "Allen MERFISH Neuron Vol-mean Z2"),
+]
+
+# Add Zhuang jobs if data was loaded
+if 'Zhuang_CellMean_Z1' in dir():
+    z2_jobs.extend([
+        (Zhuang_CellMean_Z1.clip(upper=5, lower=-5),
+         "../dat/MERFISH_Zhuang/STR_Cell_Mean_Z2Mat_ISHMatch.csv",
+         "Zhuang MERFISH Cell-mean Z2"),
+        (Zhuang_VolMean_Z1.clip(upper=5, lower=-5),
+         "../dat/MERFISH_Zhuang/STR_Vol_Mean_Z2Mat_ISHMatch.csv",
+         "Zhuang MERFISH Vol-mean Z2"),
+    ])
+
+for z1_mat, outpath, label in z2_jobs:
+    if os.path.exists(outpath):
+        print(f"  CACHED: {label} → {outpath}")
+        continue
+    print(f"\nComputing {label}...")
+    z2 = compute_z2_parallel(z1_mat, exp_features, match_dir=ISH_MATCH_DIR, n_jobs=10)
     z2.to_csv(outpath)
-    print(f"  {outpath}: {z2.shape}")
-    return z2
-
-
-# Allen MERFISH Z2
-print("Allen MERFISH Z2:")
-assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_CellMean_UMI_ISHMatch_Z2",
-                   "../dat/MERFISH/STR_Cell_Mean_Z2Mat_ISHMatch.csv")
-assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_VolMean_UMI_ISHMatch_Z2",
-                   "../dat/MERFISH/STR_Vol_Mean_Z2Mat_ISHMatch.csv")
-
-# Allen MERFISH — neuron-only Z2
-print("Allen MERFISH Neuron Z2:")
-assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_NEU_Mean_UMI_ISHMatch_Z2",
-                   "../dat/MERFISH/STR_NEUR_Mean_Z2Mat_ISHMatch.csv")
-assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_Allen_NEU_Vol_Mean_UMI_ISHMatch_Z2",
-                   "../dat/MERFISH/STR_NEUR_Vol_Mean_Z2Mat_ISHMatch.csv")
-
-# Zhuang MERFISH Z2
-print("Zhuang MERFISH Z2:")
-assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_MIT_CellMean_UMI_ISHMatch_Z2",
-                   "../dat/MERFISH_Zhuang/STR_Cell_Mean_Z2Mat_ISHMatch.csv")
-assemble_z2_splits(f"{Z2_SPLIT_BASE}/MERFISH_MIT_VolMean_UMI_ISHMatch_Z2",
-                   "../dat/MERFISH_Zhuang/STR_Vol_Mean_Z2Mat_ISHMatch.csv")
+    print(f"  Saved: {outpath} ({z2.shape})")
 
 # %% [markdown]
 # ## 8. MERFISH Expression Matching Quantiles

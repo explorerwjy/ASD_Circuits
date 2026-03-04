@@ -217,6 +217,7 @@ palette_main = ["orange", "green", "purple", "red", "blue", "gold",
 pairwise_tests_main = [
     ("D1/D2 MSN", "CNU_LGE_GABA (Other)"),
     ("PF_RE_TH_Glut", "TH_Glut (Other)"),
+    ("PF_RE_TH_Glut",  ["CTX_CGE_GABA", "CTX_MGE_GABA", "NP_CT_L6b_Glut", "IT_ET_Glut"]),
     ("D1/D2 MSN", ["CTX_CGE_GABA", "CTX_MGE_GABA", "NP_CT_L6b_Glut", "IT_ET_Glut"]),
     ("CNU_HYA_Glut", ["CTX_CGE_GABA", "CTX_MGE_GABA", "NP_CT_L6b_Glut", "IT_ET_Glut"]),
     ("CNU_HYA_GABA", ["CTX_CGE_GABA", "CTX_MGE_GABA", "NP_CT_L6b_Glut", "IT_ET_Glut"]),
