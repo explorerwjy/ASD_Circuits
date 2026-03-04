@@ -182,7 +182,8 @@ data_files:
   subclass_v3_exp: "dat/ExpressionMats/Subclass_V3_ExpMat_CPM.csv"
   # V2-V3 cross-platform gene correlation (ISH/MERFISH/V2/V3, cached)
   gene_cross_platform_corr: "dat/ISH_MERFISH_Gene_CorssSTR_Corr.v3.csv"
-  # ISH log-mean expression (legacy, for correlation computation only)
-  ish_log_mean_exp: "dat/allen-mouse-exp/JW_ExpMat.LogMean.0418.csv"
+  # ISH expression matrix (arithmetic mean of raw ISH expression energy across sections)
+  # Produced by notebooks_mouse_str/01.Download_ISH_data (Section 9)
+  ish_expression_matrix: "dat/allen-mouse-exp/ExpressionMatrix_raw.parquet"
   # Z2 split files (DEPRECATED — Z2 is now computed natively in notebook 03)
   # z2_split_base: "/mnt/data0/home_backup/Work/CellType_Psy/AllenBrainCellAtlas/dat/Z2.Split"

@@ -61,7 +61,7 @@ ProjDIR = config["ProjDIR"]
 
 # %%
 CORR_FILE = f"../{config['data_files']['gene_cross_platform_corr']}"
-EXPECTED_GENES = 16870
+EXPECTED_GENES = 16935
 
 if os.path.exists(CORR_FILE):
     CorrDF = pd.read_csv(CORR_FILE, index_col="Genes")
@@ -77,7 +77,7 @@ if CorrDF is None:
     # Load expression matrices
     V2_Exp = pd.read_csv(f"../{config['data_files']['subclass_v2_exp']}", index_col=0)
     V3_Exp = pd.read_csv(f"../{config['data_files']['subclass_v3_exp']}", index_col=0)
-    ISH_Exp = pd.read_csv(f"../{config['data_files']['ish_log_mean_exp']}", index_col=0)
+    ISH_Exp = pd.read_parquet(f"../{config['data_files']['ish_expression_matrix']}")
     MERFISH_Exp = pd.read_csv(f"../{config['data_files']['merfish_cell_mean_umi']}", index_col=0)
 
     print(f"V2: {V2_Exp.shape}, V3: {V3_Exp.shape}, ISH: {ISH_Exp.shape}, MERFISH: {MERFISH_Exp.shape}")
