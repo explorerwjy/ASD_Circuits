@@ -1,284 +1,204 @@
 # GENCIC: Genetics and Expression iNtegration with Connectome to Infer affected Circuits
 
 ## Overview
-This repository contains the computational framework GENCIC (Genetics and Expression iNtegration with Connectome to Infer affected Circuits), which identifies brain circuits preferentially targeted by autism spectrum disorder (ASD) mutations. GENCIC integrates genomic data from ASD patients with spatial transcriptomics and brain-wide connectome data to discover functionally cohesive neural circuits affected in autism.
+
+GENCIC is a computational framework that identifies brain circuits preferentially targeted by autism spectrum disorder (ASD) mutations. It integrates genomic data from ASD patients with spatial transcriptomics and brain-wide connectome data to discover functionally cohesive neural circuits affected in autism.
 
 ## Citation
-If you use this code or methodology in your research, please cite:
-Wang J, Chang J, Chiang AH, Vitkup D. Autism Mutations Preferentially Target Distributed Brain Circuits Associated with Sensory Integration and Decision Making. [Journal Name]. 2025.
 
-## Requirements
-- Python 3.7.0+
-- R 4.2.1+
-- Required Python packages:
-  - numpy
-  - pandas
-  - scipy
-  - matplotlib
-  - seaborn
-  - statsmodels
-  - networkx
-- Required R packages:
-  - dplyr
-  - ggplot2
-  - data.table
-  - tidyr
+Wang J, Chang J, Chiang AH, Vitkup D. Autism Mutations Preferentially Target Distributed Brain Circuits Associated with Sensory Integration and Decision Making. 2025.
 
-## Data Sources
-GENCIC integrates data from the following sources:
+## Quick Start
 
-1. **Genetic Data**:
-   - SPARK project genetic data (de novo mutations in ASD probands and siblings)
-   - Available through SFARI Base (https://base.sfari.org/)
+```bash
+# 1. Set up environment
+conda create -n gencic python=3.10
+conda activate gencic
+pip install numpy pandas scipy matplotlib seaborn statsmodels igraph anndata snakemake jupytext nbstripout joblib numba
 
-2. **Mouse Brain Atlas Data**:
-   - Allen Mouse Brain Atlas gene expression data (https://mouse.brain-map.org/)
-   - Allen Mouse Brain Connectivity Atlas (Oh et al., 2014)
-   - Allen Brain Cell Atlas 10X RNA-sequencing and MERFISH spatial transcriptomics data
+# 2. Download data
+#    Get the intermediate data bundle from:
+#    https://vitkuplab.c2b2.columbia.edu/Gencic/index.html
+#    Unpack into dat/
 
-Key intermediate data for running GENCIC is available at:
-https://vitkuplab.c2b2.columbia.edu/Gencic/index.html
+# 3. Run structure-level analysis
+cd notebooks_mouse_str
+jupyter nbconvert --to notebook --execute --inplace 01.Download_ISH_data.ipynb
+jupyter nbconvert --to notebook --execute --inplace 02.Preprocessing_ISH_data.ipynb
+# ... etc (see notebooks_mouse_str/README.md)
+
+# 4. Run bias significance pipeline
+snakemake -s Snakefile.bias --configfile config/config.yaml --cores 10
+
+# 5. Run circuit search
+snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml --cores 10
+```
 
 ## Repository Structure
 
 ```
 ASD_Circuits_CellType/
-├── config/                          # Configuration files for Snakemake workflows
-│   ├── config.yaml                  # Main bias calculation config
-│   ├── config.SC.DN.yaml           # Single-cell de novo analysis config
-│   ├── circuit_config.yaml          # Circuit search config
-│   └── circuit_config_bootstrap.yaml # Bootstrap analysis config
 │
-├── src/                             # Core Python modules
-│   ├── ASD_Circuits.py             # Main analysis functions (bias calculation, gene loading)
-│   ├── CellType_PSY.py             # Cell type-specific analysis functions
-│   ├── SA.py                       # Simulated annealing for circuit optimization
-│   └── SA_optimized.py             # Optimized SA implementation
+├── config/                              # Configuration files
+│   ├── config.yaml                      # Main config (gene sets, data paths, pipeline params)
+│   ├── config.SC.DN.yaml                # Cell-type bias pipeline config (DN weights)
+│   ├── circuit_config.yaml              # Circuit search parameters
+│   ├── circuit_config_bootstrap.yaml    # Bootstrap circuit search config
+│   └── circuit_config_sibling_*.yaml    # Sibling null circuit search configs
 │
-├── scripts/                         # Analysis scripts
-│   ├── script_bias_cal.py          # Calculate bias with p-values
-│   ├── script_generate_geneweights.py  # Generate random gene weights for null
-│   ├── script_run_ctrl_sim.py      # Run null distribution simulations
-│   ├── script_circuit_search.SI.py # Circuit search using simulated annealing
-│   └── workflow/                   # Workflow helper scripts
-│       ├── generate_bias_limits.py # Generate Pareto front bias limits
-│       ├── run_sa_search.py        # Run SA search for circuits
-│       ├── create_pareto_front.py  # Create Pareto front profiles
-│       └── aggregate_bootstrap_results.py  # Bootstrap aggregation
+├── src/                                 # Core Python modules
+│   ├── ASD_Circuits.py                  # Main library (bias, gene weights, circuit scoring)
+│   ├── CellType_PSY.py                  # Cell-type analysis functions (Z1, Z2)
+│   ├── SA.py                            # Simulated annealing for circuit optimization
+│   ├── SA_optimized.py                  # Numba-accelerated SA variant
+│   └── plot.py                          # Shared plotting functions (22 functions)
 │
-├── notebooks_mouse_str/             # Brain structure-level analysis notebooks
-│   ├── 01.Download_ISH_data.ipynb  # Download Allen ISH data
-│   ├── 02.Preprocessing_ISH_data.ipynb  # Preprocess expression data
-│   ├── 03.Preprocessing_Connectivity_data.ipynb  # Preprocess connectivity
-│   ├── 04.Weighted_ASD_bias.ipynb  # Calculate ASD mutation bias
-│   ├── 05.circuit_search.ipynb     # GENCIC circuit search
-│   ├── 06.Phenotype_Analysis_seperating_HIQ_LIQ.ipynb  # IQ stratification
-│   └── 07.Stratified_distance_analysis.ipynb  # Spatial analysis
+├── scripts/                             # Standalone scripts
+│   ├── script_bias_cal.py               # Calculate bias with p-values from null distributions
+│   ├── script_generate_geneweights.py   # Generate random gene weights for null
+│   ├── script_run_ctrl_sim.py           # Run sibling/random null simulations
+│   ├── script_compute_Z2.py             # Parallelized Z2 computation
+│   ├── script_circuit_search.SI.py      # Circuit search via simulated annealing
+│   ├── build_cluster_mean_log_umi.py    # Build cluster expression from Allen h5ad files
+│   ├── build_celltype_z2_matrix.py      # Build cell-type Z1/Z2 matrices
+│   ├── build_subclass_expmat_cpm.py     # Build V2/V3 subclass CPM expression matrices
+│   ├── build_merfish_umi_matrices.py    # Build MERFISH structure-level UMI matrices
+│   ├── build_merfish_annotation.py      # Annotate MERFISH cells with ISH structure names
+│   ├── generate_sibling_bias_files.py   # Generate sibling null bias parquets
+│   └── workflow/                        # Snakemake helper scripts
+│       ├── generate_bias_limits.py      # Pareto front bias limits
+│       ├── run_sa_search.py             # Run SA search
+│       ├── create_pareto_front.py       # Create Pareto fronts
+│       ├── extract_best_circuits.py     # Extract best circuits
+│       ├── sibling_utils.py             # Sibling null utilities
+│       └── aggregate_*.py              # Aggregation scripts
 │
-├── notebooks_mouse_sc/              # Cell type-level analysis notebooks
-│   ├── ABC_Bias_Cal.ipynb          # Allen Brain Cell Atlas bias calculation
-│   ├── ASD_SC_MERFISH_Bias.ipynb   # MERFISH spatial transcriptomics bias
-│   ├── BiasDisplay.ipynb           # Visualize cell type biases
-│   └── Figures.ipynb               # Generate cell type figures
+├── notebooks_mouse_str/                 # Structure-level analysis (Figures 1–4)
+├── notebooks_mouse_sc/                  # Cell-type analysis (Figure 5)
+├── notebooks_figures/                   # Manuscript figures & tables
+├── notebook_rebuttal/                   # Reviewer-requested analyses
 │
-├── notebooks_figures/               # Manuscript figure generation notebooks
-├── notebook_rebuttal/              # Additional reviewer-requested analyses
-│
-├── Snakefile.bias                  # Snakemake workflow for bias calculation
-├── Snakefile.circuit               # Snakemake workflow for circuit search
-└── Snakefile.circuit.bootstrap     # Snakemake workflow for bootstrap analysis
+├── Snakefile.bias                       # Bias significance pipeline
+├── Snakefile.circuit                    # Circuit search pipeline
+├── Snakefile.circuit.bootstrap          # Bootstrap analysis pipeline
+└── Snakefile.circuit.sibling            # Sibling null circuit search
 ```
 
-## Analysis Workflows
+## Data
 
-GENCIC uses Snakemake to orchestrate the analysis pipeline. There are three main workflows:
+### Raw Data Sources
 
-### 1. Bias Calculation Workflow (`Snakefile.bias`)
+| Source | Description | Access |
+|--------|-------------|--------|
+| Allen Mouse Brain ISH | In-situ hybridization expression energy for ~17K genes × 213 structures | [Allen Brain Atlas API](https://mouse.brain-map.org/) |
+| Allen Mouse Connectivity | Structural connectivity atlas (Oh et al. 2014 Nature) | [Allen Connectivity Atlas](https://connectivity.brain-map.org/) |
+| Allen Brain Cell Atlas | Single-cell RNA-seq (10x V2/V3), 5,312 cell-type clusters | [Allen Brain Cell Atlas](https://portal.brain-map.org/atlases-and-data/bkp/abc-atlas) |
+| Allen MERFISH | Whole-brain spatial transcriptomics (~3.7M cells) | [Allen Brain Cell Atlas](https://portal.brain-map.org/atlases-and-data/bkp/abc-atlas) |
+| SPARK/ASC | De novo mutations from ASD exome sequencing | [SFARI Base](https://base.sfari.org/) |
+| DDD/NDD | Developmental disorder de novo mutations (Kaplanis et al. 2020) | [Nature paper](https://doi.org/10.1038/s41586-020-2832-5) |
+| gnomAD v4.0 | Gene constraint metrics (LOEUF) | [gnomAD](https://gnomad.broadinstitute.org/) |
 
-Calculates ASD mutation biases for brain structures or cell types with statistical significance:
+### Intermediate Data (Provided)
 
-- **Step 1**: Generate random gene weights for null distributions
-- **Step 2**: Calculate null bias distributions (sibling & random genes)
-- **Step 3**: Calculate final bias scores with p-values
+Key intermediate files are available at [https://vitkuplab.c2b2.columbia.edu/Gencic/](https://vitkuplab.c2b2.columbia.edu/Gencic/index.html). Once these are in `dat/`, all notebooks can run without the raw data above.
 
-**Usage:**
+| Directory | Contents |
+|-----------|----------|
+| `dat/allen-mouse-exp/` | ISH expression matrices (raw, log2+QN, Z1, Z2), expression match files |
+| `dat/allen-mouse-conn/` | Connectivity scoring matrices (InfoMat, WeightMat), null rank scores |
+| `dat/BiasMatrices/` | Z2 expression specificity matrices (structure-level and cell-type) |
+| `dat/Genetics/` | Gene weights, mutation tables, constraint metrics, sibling weights |
+| `dat/MERFISH/` | MERFISH cell annotations, structure-level UMI matrices, Z1/Z2 matrices |
+| `dat/ExpressionMats/` | Subclass-level V2/V3 CPM expression matrices |
+| `dat/SC_UMI_Mats/` | Cluster-level mean log UMI expression |
+| `dat/Unionize_bias/` | Pre-computed structure-level bias with FDR |
+
+## Analysis Pipelines
+
+### 1. Structure-Level Bias (`Snakefile.bias`)
+
+Computes bias significance via permutation testing against sibling and random null distributions.
+
 ```bash
-# Run full bias analysis pipeline
-snakemake -s Snakefile.bias --configfile config/config.yaml --cores 10
+# Structure-level (ISH)
+snakemake -s Snakefile.bias --cores 10
 
-# Run specific gene set analysis
-snakemake -s Snakefile.bias --configfile config/config.yaml --cores 10 \
-    results/STR_ISH/ASD_All_bias_addP_sibling.csv
+# Cell-type level (requires DN weights from notebook_mouse_sc/02)
+snakemake -s Snakefile.bias --configfile config/config.SC.DN.yaml --cores 10
 ```
 
-### 2. Circuit Search Workflow (`Snakefile.circuit`)
+**Steps**: generate random gene weights → compute null distributions (10K permutations) → calculate bias with p-values and FDR.
 
-Identifies brain circuits using simulated annealing along Pareto fronts:
+### 2. Circuit Search (`Snakefile.circuit`)
 
-- **Step 1**: Generate bias limits for circuit sizes
-- **Step 2**: Run simulated annealing to find optimal circuits
-- **Step 3**: Extract best circuits and create Pareto fronts
+Finds brain circuits that maximize both ASD bias and connectivity using simulated annealing along Pareto fronts.
 
-**Usage:**
 ```bash
-# Run circuit search for all datasets
-snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml --cores 10
-
-# Run for specific dataset
-snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml \
-    --config dataset=ASD_All --cores 10
-```
-
-### 3. Bootstrap Analysis Workflow (`Snakefile.circuit.bootstrap`)
-
-Performs bootstrap resampling for circuit robustness analysis.
-
-**Usage:**
-```bash
-snakemake -s Snakefile.circuit.bootstrap \
-    --configfile config/circuit_config_bootstrap.yaml --cores 10
-```
-
-## Usage
-
-### Setting up the environment
-```bash
-# Clone the repository
-git clone https://github.com/explorerwjy/ASD_Circuits.git
-cd ASD_Circuits_CellType
-
-# Create and activate conda environment
-conda create -n gencic python=3.7
-conda activate gencic
-
-# Install dependencies
-pip install -r requirements.txt
-pip install snakemake
-```
-
-### Quick Start
-
-**1. Calculate ASD mutation biases:**
-```bash
-# Configure your gene sets and expression matrices in config/config.yaml
-# Then run the bias calculation pipeline
-snakemake -s Snakefile.bias --configfile config/config.yaml --cores 10
-```
-
-**2. Run GENCIC circuit search:**
-```bash
-# Configure bias files and circuit parameters in config/circuit_config.yaml
-# Then run the circuit search pipeline
 snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml --cores 10
 ```
 
-**3. Explore results in notebooks:**
-```bash
-jupyter notebook notebooks_mouse_str/05.circuit_search.ipynb
-```
+**Steps**: generate bias limits → run SA search → create Pareto fronts → extract best circuits.
 
-### Manual Script Execution
+### 3. Bootstrap Robustness (`Snakefile.circuit.bootstrap`)
 
-You can also run individual analysis steps:
+Bootstrap resampling of mutations to assess circuit robustness.
 
 ```bash
-# Generate random gene weights for null distribution
-python scripts/script_generate_geneweights.py \
-    --WeightDF data/gene_weights.csv \
-    --SpecMat data/expression_matrix.parquet \
-    --n_sims 10000 \
-    --outfile results/random_weights.csv
-
-# Calculate null bias distribution
-python scripts/script_run_ctrl_sim.py \
-    --SpecMat data/expression_matrix.parquet \
-    --outfile results/null_bias.parquet \
-    --mode STR \
-    --Ctrl_Genes_Fil results/random_weights.csv \
-    --n_processes 10
-
-# Calculate final bias with p-values
-python scripts/script_bias_cal.py \
-    --SpecMat data/expression_matrix.parquet \
-    --gw data/gene_weights.csv \
-    --mode STR \
-    --geneset ASD_All \
-    --Bias_Null results/null_bias.parquet \
-    --Bias_Out results/bias_final.csv
-
-# Run circuit search
-python scripts/script_circuit_search.SI.py \
-    --size 46 \
-    --min_bias 0.3 \
-    --bias_file results/bias_final.csv \
-    --weight_mat data/connectivity_matrix.csv \
-    --info_mat data/info_matrix.csv \
-    --output results/circuits.txt
+snakemake -s Snakefile.circuit.bootstrap --configfile config/circuit_config_bootstrap.yaml --cores 10
 ```
-
-## Configuration
-
-### Analysis Types
-
-GENCIC supports two main analysis modes configured in `config/config.yaml`:
-
-- **`mouse_str_bias`**: Brain structure-level analysis using Allen Mouse Brain ISH data
-  - Expression matrix: Allen Mouse Brain structural expression data
-  - Output: Bias scores for 213 brain structures
-
-- **`mouse_ct_bias`**: Cell type-level analysis using single-cell/spatial transcriptomics
-  - Expression matrix: Cell type specificity data from Allen Brain Cell Atlas
-  - Output: Bias scores for cell types/clusters
-
-### Gene Sets
-
-Configure gene sets in `config/config.yaml` under `gene_sets`:
-
-```yaml
-gene_sets:
-  ASD_All:
-    geneweights: "path/to/asd_gene_weights.csv"
-    description: "All ASD de novo mutations"
-  ASD_LGD:
-    geneweights: "path/to/asd_lgd_weights.csv"
-    description: "ASD likely gene-damaging mutations"
-```
-
-### Circuit Search Parameters
-
-Configure in `config/circuit_config.yaml`:
-
-- `circuit_sizes`: List of circuit sizes to search (e.g., [46, 50, 60])
-- `top_n`: Number of top-biased structures to consider (default: 213)
-- `sa_runtimes`: Number of simulated annealing runs per bias limit
-- `sa_steps`: Number of optimization steps per SA run
-- `measure`: Optimization measure ("SI" for self-information or "Connectivity")
 
 ## Notebook Organization
 
-### Structure-Level Analysis (`notebooks_mouse_str/`)
+### Structure-Level (`notebooks_mouse_str/`)
 
-Numbered notebooks follow the analysis workflow:
+Core pipeline (01–07) plus supplementary analyses (08–13). See `notebooks_mouse_str/README.md` for details.
 
-1. **01-04**: Data preprocessing (download, ISH data, connectivity data, bias calculation)
-2. **05**: GENCIC circuit search and Pareto front generation
-3. **06**: Phenotype analysis (IQ stratification)
-4. **07**: Spatial analysis (distance stratification)
+| Notebook | Description | Manuscript |
+|----------|-------------|------------|
+| 01–02 | ISH data download and preprocessing (→ Z2 matrix) | Methods |
+| 03 | Connectivity data preprocessing (→ InfoMat) | Methods |
+| 04 | ASD mutation bias computation (5 gene sets) | Fig 1 |
+| 05 | Circuit search and Pareto front analysis | Fig 2 |
+| 06 | IQ stratification (HIQ vs LIQ) | Fig 3 |
+| 07 | Distance-stratified connectivity analysis | Fig 3 |
+| 08 | DDD/NDD comparison + circuit network visualization | Fig 4 |
+| 09 | Mutation bootstrap analysis | Fig S |
+| 10 | Positive control circuits (neurotransmitter systems) | Fig S |
+| 11 | Gene clustering and mutation rate analysis | Fig S |
+| 12 | Cross-species validation vs Buch et al. human fMRI | Fig S |
+| 13 | Mouse model fMRI validation | Fig S |
 
-Additional analysis notebooks explore specific aspects (connectome properties, community structure, etc.)
+### Cell-Type Level (`notebooks_mouse_sc/`)
 
-### Cell Type Analysis (`notebooks_mouse_sc/`)
+Pipeline for Figure 5. See `notebooks_mouse_sc/README.md` for details.
 
-- **ABC_Bias_Cal.ipynb**: Calculate bias for Allen Brain Cell Atlas cell types
-- **ASD_SC_MERFISH_Bias.ipynb**: MERFISH spatial transcriptomics analysis
-- **BiasDisplay.ipynb**: Visualize and compare cell type biases
-- **Figures.ipynb**: Generate manuscript figures for cell type analysis
+| Notebook | Description | Manuscript |
+|----------|-------------|------------|
+| 01 | Cluster Z1 → Z2 expression specificity | Methods |
+| 02 | DN gene weights, ASD/DDD bias, residual analysis | Fig 5 |
+| 03 | MERFISH preprocessing (ISH mapping, Z1, Z2) | Methods |
+| 04 | MERFISH structure-level bias (4 methods) | Fig 5A |
+| 05 | Sibling null QQ plots | Fig 5B |
+| 06 | Spatial bias visualization on brain sections | Fig 5 |
+| 07 | Figure 5 panels (scatter, QQ, dotplot, connectivity) | Fig 5 |
 
-### Figure Generation (`notebooks_figures/`)
+### Figures & Tables (`notebooks_figures/`)
 
-Notebooks for generating publication-quality figures
+| Notebook | Description |
+|----------|-------------|
+| Figures_Tables | Main manuscript figures (Figs 1–5) |
+| SupplementaryTables | Supplementary tables for publication |
 
-### Rebuttal Analysis (`notebook_rebuttal/`)
+## Notebook Conventions
 
-Additional analyses requested during peer review (e.g., fMRI validation)
+- All notebooks are paired with `.py` files via [jupytext](https://jupytext.readthedocs.io/) — edit `.py` files, then `jupytext --sync`
+- Outputs are stripped from `.ipynb` on commit via [nbstripout](https://github.com/kynan/nbstripout)
+- Data paths are loaded from `config/config.yaml` (not hardcoded)
+- Transparent figure backgrounds for compositing
+- Conda environment: `gencic` (Python 3.10)
 
+## Configuration
+
+All data file paths, gene sets, and pipeline parameters are centralized in `config/config.yaml`. Gene sets are defined under `gene_sets:` with paths to their weight files and null model type (random or mutability-based sibling).
+
+See `DATA_MANIFEST.yaml` (project root) and `notebooks_mouse_sc/DATA_MANIFEST.yaml` for detailed documentation of every data file dependency.

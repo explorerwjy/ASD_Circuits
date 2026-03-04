@@ -1,69 +1,124 @@
-# Mouse Brain Structure-Level Analyses
+# Structure-Level Analysis Pipeline (`notebooks_mouse_str/`)
 
-Notebooks for analyzing ASD mutation bias at the level of mouse brain structures,
-using Allen Brain Atlas ISH expression and connectivity data.
+Brain structure-level analysis of ASD mutation bias using Allen Brain Atlas
+ISH expression and connectivity data. Corresponds to **Figures 1-4** and
+supplementary figures in the manuscript.
 
-## Main Pipeline (Numbered)
+## Raw Data Required
 
-These notebooks form the core analysis pipeline and should be run in order.
-Notebooks 01-07 have been reworked for reproducibility: paired with `.py` files
-via jupytext, dead code removed, paths made relative, and slow steps cached.
+| Source | Description | Used By |
+|--------|-------------|---------|
+| [Allen Mouse Brain ISH](https://mouse.brain-map.org/) | In-situ hybridization expression energy (~17K genes, 213 structures) | 01 |
+| [Allen Mouse Connectivity](https://connectivity.brain-map.org/) | Structural connectivity atlas (Oh et al. 2014 Nature) | 03 |
+| [SPARK/ASC exome data](https://base.sfari.org/) | De novo mutations from ASD whole-exome sequencing | 04 |
+| [DDD/NDD mutations](https://doi.org/10.1038/s41586-020-2832-5) | Developmental disorder de novo mutations (Kaplanis et al. 2020) | 08 |
+| [gnomAD v4.0](https://gnomad.broadinstitute.org/) | Gene constraint metrics (LOEUF) | 04 |
+
+## Intermediate Data (Provided)
+
+These files can be produced from raw data but are provided as a download bundle
+at [vitkuplab.c2b2.columbia.edu/Gencic/](https://vitkuplab.c2b2.columbia.edu/Gencic/index.html).
+Once placed in `dat/`, all notebooks can run without the raw data above.
+
+| Directory | Contents | Produced By |
+|-----------|----------|-------------|
+| `dat/allen-mouse-exp/ExpressionMatrix_raw.parquet` | Raw ISH expression matrix (17,210 genes x 213 structures) | Notebook 01 |
+| `dat/allen-mouse-exp/Jon_ExpMat.log2.qn.csv` | Log2 + quantile-normalized expression | External (R pipeline) |
+| `dat/allen-mouse-exp/ExpMatch/` | ISH expression-matched gene lists (17,189 files) | Legacy pipeline |
+| `dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet` | Z2 expression specificity matrix | Notebook 02 |
+| `dat/allen-mouse-conn/ConnectomeScoringMat/` | WeightMat and InfoMat (ipsilateral, 3 distance variants) | Notebook 03 |
+| `dat/allen-mouse-conn/RankScores/` | Null connectivity scores from rank permutations | Notebook 03 |
+| `dat/Genetics/GeneWeights/` | Gene weight files for all gene sets (.gw format) | Notebook 04 |
+| `dat/Genetics/TabS_DenovoWEST_Stage1.xlsx` | DenovoWEST Stage 1 mutation table | External |
+| `dat/Unionize_bias/` | Pre-computed bias with FDR, null distributions | Snakefile.bias |
+| `dat/structure2region.tsv` | Structure-to-brain-region mapping (213 structures) | External |
+
+## Running
+
+```bash
+conda activate gencic
+
+# Core pipeline (run in order)
+for nb in 01 02 03 04 05 06 07; do
+    jupyter nbconvert --to notebook --execute --inplace ${nb}.*.ipynb
+done
+
+# Bias significance (requires gene weights from notebook 04)
+cd .. && snakemake -s Snakefile.bias --cores 10
+
+# Circuit search (requires bias from Snakefile.bias)
+snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml --cores 10
+
+# Supplementary analyses (independent, run in any order after core pipeline)
+for nb in 08 09 10 11 12 13; do
+    jupyter nbconvert --to notebook --execute --inplace ${nb}.*.ipynb
+done
+```
+
+## Core Pipeline (Notebooks 01-07)
+
+| # | Notebook | Description | Key Outputs | Manuscript |
+|---|----------|-------------|-------------|------------|
+| 01 | Download_ISH_data | Download ISH expression data from Allen Brain Atlas API. Build raw expression matrix (arithmetic mean across sections). | `ExpressionMatrix_raw.parquet` | Methods |
+| 02 | Preprocessing_ISH_data | Log2 + quantile normalization, Z1 conversion (clip +/-3), Z2 expression specificity via ISH expression matching. | `AllenMouseBrain_Z2bias.parquet` | Methods |
+| 03 | Preprocessing_Connectivity_data | Process Oh et al. connectivity data into Shannon Information scoring matrices. Three distance variants (full, short <3988um, long >3988um). | `InfoMat.Ipsi.*.csv`, `WeightMat.*.csv`, `RankScore.*.npy` | Methods |
+| 04 | Weighted_ASD_bias | Compute mutation-weighted expression bias per brain structure for 5 ASD gene sets (SPARK 61, SPARK 159, ASC 102, Fu 72, Fu 185). Bias scatter comparisons and CCS profiles. | Gene weight `.gw` files | Fig 1 |
+| 05 | circuit_search | Run simulated annealing to find circuits maximizing ASD bias + connectivity. Pareto front analysis across circuit sizes. | Circuit structure lists | Fig 2 |
+| 06 | Phenotype_Analysis | Stratify ASD cases by IQ (HIQ vs LIQ) and sex. Bootstrap resampling and permutation tests for bias profile differences. | Bootstrap/permutation results in `results/` | Fig 3 |
+| 07 | Stratified_distance_analysis | Compare distance-stratified connectivity of ASD circuits vs sibling controls for top-bias structures and SA-derived circuits. | Distance analysis NPZ files | Fig 3 |
+
+## Supplementary Analyses (Notebooks 08-13)
+
+| # | Notebook | Description | Manuscript |
+|---|----------|-------------|------------|
+| 08a | DDD_Comparison | Compare DDD/NDD mutation bias with ASD. Overlap analysis between disease circuits. | Fig 4 |
+| 08b | Circuit_Network | Network visualization of ASD circuit connectivity (graph layout, community structure). | Fig 4 |
+| 09 | Mutation_Bootstrap | Bootstrap resampling of ASD mutations to assess circuit membership robustness. | Fig S |
+| 10 | Positive_Control_Circuits | Positive control analysis using neurotransmitter system circuits (dopamine, serotonin, oxytocin, acetylcholine). | Fig S |
+| 11 | Gene_Clustering | Gene clustering analysis and mutation rate examination across ASD gene sets. | Fig S |
+| 12 | Comparison_Buch_et_al | Cross-species validation comparing mouse ASD circuits with Buch et al. human fMRI connectivity. | Fig S |
+| 13 | fMRI_Validation | Validation of circuit predictions using mouse model fMRI data. | Fig S |
+
+## Additional Notebooks
 
 | Notebook | Description |
 |----------|-------------|
-| **01.Download_ISH_data** | Download in-situ hybridization (ISH) expression data from the Allen Brain Atlas API for ASD-associated genes. |
-| **02.Preprocessing_ISH_data** | Preprocess downloaded ISH data into structure-level expression matrices (Z-scored, filtered). |
-| **03.Preprocessing_Connectivity_data** | Process Allen Mouse Brain connectivity data into scoring matrices (WeightMat, InfoMat) with distance-based information content. |
-| **04.Weighted_ASD_bias** | Compute mutation-weighted expression bias per brain structure and assess significance against null distributions (random and sibling controls). |
-| **05.circuit_search** | Run simulated annealing to find circuits (structure sets) that maximize both ASD bias and connectivity. Pareto front analysis. |
-| **06.Phenotype_Analysis_seperating_HIQ_LIQ** | Stratify ASD cases by IQ and sex, compare structural bias profiles between groups using bootstrap resampling and permutation tests. |
-| **07.Stratified_distance_analysis** | Compare distance-stratified connectivity of ASD circuits vs sibling controls (top-bias structures and SA-derived circuits). |
+| circuit_size_robustness | Analysis of circuit robustness across different circuit sizes. |
 
-## Exploratory / Development Notebooks
+## Data Flow
 
-Older notebooks used during development and exploration. These have not been
-reworked and may contain hardcoded paths or depend on deprecated functions.
+```
+Allen ISH API ──→ 01.Download ──→ ExpressionMatrix_raw.parquet
+                                         │
+Jon's R pipeline ──→ Jon_ExpMat.log2.qn.csv
+                           │
+                     02.Preprocessing ──→ Z1 ──→ Z2 (AllenMouseBrain_Z2bias.parquet)
+                                                    │
+Oh et al. 2014 ──→ 03.Connectivity ──→ InfoMat     │
+                                          │         │
+SPARK/ASC mutations ──→ 04.Bias ──→ Gene weights + Bias per structure
+                                          │
+                    Snakefile.bias ──→ Null distributions + FDR
+                                          │
+                              05.Circuit_search ──→ Pareto circuits
+                                                        │
+                              06.Phenotype ──→ HIQ/LIQ stratification
+                              07.Distance ──→ Distance-stratified connectivity
+                              08-13 ──→ Supplementary analyses
+```
 
-| Notebook | Description |
-|----------|-------------|
-| CircuitsInformationScore | Circuit connectivity analysis using Shannon information scores. |
-| Connectome | Allen Mouse Brain connectome loading and connectivity matrix generation. |
-| debug_SA | Debugging simulated annealing cache desynchronization issues. |
-| GENCIC | End-to-end GENCIC algorithm demo: bias limits, circuit search, ranking. |
-| ipsi_vs_contra_weights | Comparison of ipsilateral vs contralateral connection weights. |
-| NoteBook_Allen_Mouse_Connectivity | Exploratory queries of Allen connectivity data for specific structures. |
-| NoteBook_CheckMutaionRate | Correlation between mutation rates and counts in sibling data. |
-| NoteBook_Community_of_Circuits | Graph clustering to detect circuit community structure. |
-| NoteBook_Compare_SA_SI_Conn | Comparison of circuit scoring methods across distance measures. |
-| NoteBook_DistanceRangeAnalysis | Earlier version of distance-stratified connectivity analysis (superseded by 07). |
-| NoteBook_N_ASD_Genes | ASD bias and network properties across varying gene set sizes. |
-| NoteBook_Rank_vs_InfoContentScore | Relationship between structure ranking and information content scores. |
-| NoteBook_SI_Score_Drop_Contra_wo_mirror | SI circuit scores excluding contralateral non-mirrored connections. |
-| NoteBooks_topNvsCohesiveness | Circuit cohesiveness vs number of top-ranked structures. |
-| Optimized_Circuits_Connectivity | Network connectivity metrics for optimized 46-structure ASD circuits. |
-| Optimized_Circuits_Information_Score | Shannon Information scores for optimized circuits at different distance ranges. |
-| Phenotype_Graph_New | High/low IQ ASD mapping onto optimized circuits (superseded by 06). |
-| Preprocessing | Raw connectome processing and distance-based splitting (superseded by 03). |
-| SA | Simulated annealing implementation and testing (superseded by 05). |
-| Sibling_SI_score_significance | SI score significance testing against sibling control null distributions. |
-| Test_Vlidation_fMRI | Validation of ASD circuit predictions using mouse fMRI data. |
-| WeighedBias | Weighted expression bias with alternative weighting schemes (superseded by 04). |
+## Notebook Conventions
 
-## Data Dependencies
+- All notebooks paired with `.py` files via [jupytext](https://jupytext.readthedocs.io/)
+- Edit `.py` files, then sync: `jupytext --sync <notebook>.py`
+- First cell: `%load_ext autoreload` / `%autoreload 2`
+- Data paths loaded from `config/config.yaml` (not hardcoded)
+- Transparent figure backgrounds for compositing
+- Conda environment: `gencic` (Python 3.10)
 
-Key input data used by the main pipeline:
+## See Also
 
-- `dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet` -- Structure-level Z2 expression matrix (genes x 213 structures)
-- `dat/allen-mouse-conn/ConnectomeScoringMat/` -- WeightMat and InfoMat for ipsilateral connectivity
-- `dat/allen-mouse-conn/Dist_CartesianDistance.csv` -- Pairwise structure distance matrix
-- `dat/Genetics/GeneWeights/` -- Gene weight files (.gw format)
-- `dat/Unionize_bias/` -- Bias results, null distributions, sibling controls, bootstrap data
-
-## Cached Results
-
-Slow computation steps cache results for fast re-execution:
-
-- `results/Distance_analysis/subsib_distance_counts.npz` -- 10K subsampled sibling distance-binned counts (notebook 07)
-- `results/Distance_analysis/sa_sib_distance_counts_bias0.37.npz` -- SA sibling circuit distance-binned counts (notebook 07)
-- `results/Phenotype_bootstrap/` -- Bootstrap resampling results as parquet files (notebook 06)
-- `results/Phenotype_permutation/` -- Permutation test results (notebook 06)
+- `DATA_MANIFEST.yaml` (project root) for detailed file documentation
+- `config/config.yaml` for all data paths and gene set definitions
+- `src/ASD_Circuits.py` for core analysis functions
+- `src/plot.py` for shared plotting functions
