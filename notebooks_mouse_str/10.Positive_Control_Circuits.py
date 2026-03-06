@@ -18,7 +18,7 @@
 # %autoreload 2
 import sys
 import os
-ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType/" # Change to your project directory
+ProjDIR = os.path.abspath(os.path.join(os.path.dirname("__file__"), ".."))
 sys.path.insert(1, f'{ProjDIR}/src/')
 from ASD_Circuits import *
 from plot import *
@@ -253,7 +253,7 @@ asd_color = '#1f77b4'
 other_colors = ['#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', 
                 '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78']
 
-topNs = list(range(200, 5, -1))  # Define topNs based on the range used in calculate_circuit_scores
+topNs = np.arange(200, 5, -1)  # Must be numpy array for np.where in CCS functions
 color_idx = 0
 for disorder_name, scores in disorder_scores.items():
     if disorder_name.upper() == "ASD":
@@ -288,8 +288,9 @@ plt.tight_layout()  # Adjust layout to prevent legend cutoff
 
 # %%
 # CCS p-values for negative controls
-plot_CCS_pvalues_at_N(46, disorder_scores, topNs, Cont_Distance, colors)
-plot_CCS_pvalues_at_N(20, disorder_scores, topNs, Cont_Distance, colors)
+disorder_color_list = [disorder_colors[k] for k in disorder_scores]
+plot_CCS_pvalues_at_N(46, disorder_scores, topNs, Cont_Distance, disorder_color_list)
+plot_CCS_pvalues_at_N(20, disorder_scores, topNs, Cont_Distance, disorder_color_list)
 
 # %%
 fig2, ax2 = plot_CCS_histogram_with_NT_bars(46, disorder_scores, Cont_Distance, topNs)

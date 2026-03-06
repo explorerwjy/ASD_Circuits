@@ -1705,22 +1705,18 @@ def plot_combined_bias_only(
         bar_absmax = np.nanmax(np.abs(eff_vals))
         ax.set_xlim(0, bar_absmax * 1.18)
 
-    # Place region legend on last panel
-    for i, ax in enumerate(axes):
-        if i == len(axes) - 1:
-            ax.legend(
-                handles=legend_handles,
-                loc='upper left',
-                bbox_to_anchor=(0.7, 0.6),
-                borderaxespad=0.6,
-                fontsize=16,
-                ncol=1,
-                title="Region",
-                title_fontsize=16,
-                frameon=True
-            )
-
-    fig.subplots_adjust(wspace=0.23, left=0.13, right=0.98, bottom=0.07, top=0.93)
+    # Place region legend outside the last panel (lower right)
+    axes[-1].legend(
+        handles=legend_handles,
+        loc='lower left',
+        bbox_to_anchor=(1.02, 0.0),
+        borderaxespad=0,
+        fontsize=14,
+        ncol=1,
+        title="Region",
+        title_fontsize=15,
+        frameon=True
+    )
 
     if save_plot:
         os.makedirs(results_dir, exist_ok=True)
