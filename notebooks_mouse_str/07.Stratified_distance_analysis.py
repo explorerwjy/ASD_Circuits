@@ -199,6 +199,29 @@ for i, (asd, sibs) in enumerate(zip(ASD_Connections, subsib_connections.T)):
     print(f"{label:>10s} {asd:>8d} {np.mean(sibs):>10.1f} {asd/np.mean(sibs):>8.2f} {p:>10.4f}")
 
 # %%
+# Grouped CLR test: < 3mm vs > 3mm (subsampled sibling structures)
+norm = N_Connections_total / N_Pairs_total
+split_idx_sub = 3  # bins 0-2 are < 3mm, bins 3-4 are > 3mm
+print("Grouped Connection Likelihood Ratio (< 3mm vs > 3mm):")
+for label, idx_range in [("< 3 mm", range(split_idx_sub)),
+                          ("> 3 mm", range(split_idx_sub, N_bins))]:
+    asd_c = sum(ASD_Connections[i] for i in idx_range)
+    asd_p = sum(ASD_Pairs[i] for i in idx_range)
+    tot_c = sum(N_Connections_total[i] for i in idx_range)
+    tot_p = sum(N_Pairs_total[i] for i in idx_range)
+    grp_norm = tot_c / tot_p
+    asd_clr = asd_c / asd_p / grp_norm if asd_p > 0 else 0
+    sib_clrs = np.array([
+        sum(subsib_connections[s, i] for i in idx_range)
+        / max(sum(subsib_pairs[s, i] for i in idx_range), 1)
+        / grp_norm
+        for s in range(len(subsib_connections))
+    ])
+    valid = np.isfinite(sib_clrs)
+    z, p, _ = GetPermutationP(sib_clrs[valid], asd_clr)
+    print(f"  {label}: ASD CLR={asd_clr:.4f}, ctrl CLR={np.nanmean(sib_clrs):.4f}, p={p:.4f}")
+
+# %%
 # Plot: Connection Density by distance
 matplotlib.rcParams.update({'font.size': 20})
 
@@ -356,6 +379,25 @@ z_s, p_s, _ = GetPermutationP(CtrlShort, CaseShort)
 z_l, p_l, _ = GetPermutationP(CtrlLong, CaseLong)
 print(f"  Short-range: ASD={CaseShort:.4f}, ctrl={CtrlShort.mean():.4f}, p={p_s:.4f}")
 print(f"  Long-range:  ASD={CaseLong:.4f}, ctrl={CtrlLong.mean():.4f}, p={p_l:.4f}")
+
+# Grouped connection likelihood ratio test (< 3mm vs > 3mm)
+print(f"\nGrouped Connection Likelihood Ratio (< 3mm vs > 3mm):")
+for label, idx_range in [("< 3 mm", range(split_idx)), ("> 3 mm", range(split_idx, N_bins))]:
+    asd_c = sum(ASD_Connections[i] for i in idx_range)
+    asd_p = sum(ASD_Pairs[i] for i in idx_range)
+    tot_c = sum(N_Connections_total[i] for i in idx_range)
+    tot_p = sum(N_Pairs_total[i] for i in idx_range)
+    grp_norm = tot_c / tot_p
+    asd_clr = asd_c / asd_p / grp_norm if asd_p > 0 else 0
+    sib_clrs = np.array([
+        sum(sa_sib_connections[s, i] for i in idx_range)
+        / max(sum(sa_sib_pairs[s, i] for i in idx_range), 1)
+        / grp_norm
+        for s in range(len(sa_sib_connections))
+    ])
+    valid = np.isfinite(sib_clrs)
+    z, p, _ = GetPermutationP(sib_clrs[valid], asd_clr)
+    print(f"  {label}: ASD CLR={asd_clr:.4f}, ctrl CLR={np.nanmean(sib_clrs):.4f}, p={p:.4f}")
 
 # %% [markdown]
 # ## 4. Summary Plots (SA Sibling Circuits)

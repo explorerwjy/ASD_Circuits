@@ -118,11 +118,11 @@ def process_one_sibling(sim_id, adj_mat, InfoMat):
     if os.path.exists(pf_path):
         return sim_id, "skip"
 
-    # 1. Load bias with transfer
+    # 1. Load bias with transfer (use pre-loaded reference to avoid mid-run file changes)
     config_data = {
         'bias_parquet': PARQUET,
         'sim_id': sim_id,
-        'reference_bias_df': REFERENCE,
+        'reference_bias_df': _ref_bias_df,
     }
     BiasDF = load_bias_df(config_data)
 
@@ -241,18 +241,32 @@ def aggregate_batch(start, end, batch_idx):
 
     df_all = pd.concat(sibling_data, ignore_index=True)
     optimized = df_all[df_all['circuit_type'] == 'optimized']
-    bias_limits = sorted(optimized['bias_limit'].unique())
-    n_bias_limits = len(bias_limits)
+    all_bias_limits = sorted(optimized['bias_limit'].unique())
     n_loaded = len(sibling_data)
 
-    all_profiles = np.full((n_loaded, 2, n_bias_limits), np.nan)
+    # Filter to bias limits present in >= 90% of siblings (avoids sparse outlier limits)
     sim_ids_loaded = sorted(set(df_all['sim_id']))
+    limit_counts = {}
+    for bl in all_bias_limits:
+        n_with = optimized[optimized['bias_limit'] == bl]['sim_id'].nunique()
+        limit_counts[bl] = n_with
+    min_count = int(0.9 * n_loaded)
+    bias_limits = [bl for bl in all_bias_limits if limit_counts[bl] >= min_count]
+    n_bias_limits = len(bias_limits)
+    n_dropped = len(all_bias_limits) - n_bias_limits
+    if n_dropped > 0:
+        print(f"  Filtered bias limits: kept {n_bias_limits}/{len(all_bias_limits)} "
+              f"(>= {min_count}/{n_loaded} siblings), dropped {n_dropped} sparse limits")
+
+    # Build profiles using real sibling bias (for plotting against ASD pareto)
+    # and transferred bias (what SA optimized against)
+    all_profiles = np.full((n_loaded, 2, n_bias_limits), np.nan)
     for idx, sim_id in enumerate(sim_ids_loaded):
         sib_opt = optimized[optimized['sim_id'] == sim_id]
         for j, bl in enumerate(bias_limits):
             row = sib_opt[sib_opt['bias_limit'] == bl]
             if len(row) > 0:
-                all_profiles[idx, 0, j] = row['mean_bias'].iloc[0]  # real bias
+                all_profiles[idx, 0, j] = row['mean_bias'].iloc[0]  # real sibling bias
                 all_profiles[idx, 1, j] = row['circuit_score'].iloc[0]
 
     meanbias = np.nanmean(all_profiles[:, 0, :], axis=0)
@@ -288,10 +302,11 @@ def worker_fn(sim_id):
 # Module-level globals for shared data (set by main before forking)
 _adj_mat = None
 _InfoMat = None
+_ref_bias_df = None  # Pre-loaded reference DataFrame (prevents mid-run file changes)
 
 
 def main():
-    global _adj_mat, _InfoMat
+    global _adj_mat, _InfoMat, _ref_bias_df
 
     parser = argparse.ArgumentParser(description="Standalone sibling circuit search")
     parser.add_argument('--start', type=int, default=0, help="First sibling ID")
@@ -310,11 +325,14 @@ def main():
     print(f"Start: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     print()
 
-    # Load shared data (before forking workers)
-    print("Loading connectivity matrices...")
+    # Load shared data ONCE before forking workers
+    # (prevents mid-run file changes from corrupting results)
+    print("Loading connectivity matrices and reference bias...")
     _adj_mat = pd.read_csv(WEIGHT_MAT, index_col=0)
     _InfoMat = pd.read_csv(INFO_MAT, index_col=0)
+    _ref_bias_df = pd.read_csv(REFERENCE, index_col=0)
     print(f"  WeightMat: {_adj_mat.shape}, InfoMat: {_InfoMat.shape}")
+    print(f"  Reference: {_ref_bias_df.shape} (top EFFECT={_ref_bias_df['EFFECT'].max():.4f})")
 
     # Process in batches
     total_ok = 0
