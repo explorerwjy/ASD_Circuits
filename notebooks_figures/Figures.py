@@ -18,13 +18,13 @@
 # %autoreload 2
 import sys
 import os
-ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType/" # Change to your project directory
-sys.path.insert(1, f'{ProjDIR}/src/')
+ProjDIR = os.path.abspath(os.path.join(os.path.dirname("__file__"), ".."))
+sys.path.insert(1, os.path.join(ProjDIR, 'src'))
 from ASD_Circuits import *
 from plot import *
 
 try:
-    os.chdir(f"{ProjDIR}/notebooks_mouse_str/")
+    os.chdir(os.path.join(ProjDIR, "notebooks_mouse_str"))
     print(f"Current working directory: {os.getcwd()}")
 except FileNotFoundError as e:
     print(f"Error: Could not change directory - {e}")
@@ -46,6 +46,17 @@ Anno = STR2Region()
 Cartesian_distancesDF = pd.read_csv("../dat/allen-mouse-conn/Dist_CartesianDistance.csv",
                                    index_col=0)
 STR_ExpL = pd.read_csv("../dat/allen-mouse-exp/ExpLevel.csv.gz", index_col=0)
+
+# Connectivity adjacency matrix and igraph graph
+adj_mat = pd.read_csv("../dat/allen-mouse-conn/ConnectomeScoringMat/WeightMat.Ipsi.csv", index_col=0)
+import igraph as ig
+graph = ig.Graph.Adjacency((adj_mat.values > 0).tolist())
+graph.es['weight'] = adj_mat.values[adj_mat.values.nonzero()]
+graph.vs['label'] = adj_mat.index.values
+
+# Aliases used by supplementary figure cells
+ExpZ2 = STR_BiasMat
+ExpL = STR_ExpL
 
 
 # %% [markdown] heading_collapsed=true
@@ -95,10 +106,8 @@ class STRBias:
 
 # %% hidden=true
 # ASD Z2 and 61 Rand Genes
-ROOT = "/home/jw3514/Work/ASD_Circuits_CellType/"
-ASD_Bias = pd.read_csv(f"{ROOT}/dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv", index_col="STR")
-#ASD_Sim_dir = "../dat/Unionize_bias/ASD_Sim/"
-ASD_Sim_dir = f"{ROOT}/dat/Unionize_bias/SubSampleSib//"
+ASD_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv", index_col="STR")
+ASD_Sim_dir = "../dat/Unionize_bias/SubSampleSib/"
 ASD_Z2_Bias, ASD_Z2_Match_Bias_Rank, ASD_Z2_Sim_Bias_STR = LoadBiasData2(
     ASD_Bias, ASD_Sim_dir)
 
@@ -466,113 +475,6 @@ fig.savefig(
     dpi=300, bbox_inches="tight"
 )
 
-# %% hidden=true
-mpl.style.use('default')
-fig, ax = plt.subplots(figsize=(5.5, 8), dpi=480)
-
-for i, (STR, STR_bias) in enumerate(sorted(ASD_Z2_Bias.items(), key=lambda x:x[1].Rank)):
-    x2 = ax.scatter(STR_bias.Bias, i+1, marker=".", s=15, color="darkblue")
-    data = ASD_Z2_Sim_Bias_STR[STR]
-    upper, lower = CI(data, 0.68) # 1sd
-    ax.hlines(i+1 , lower, upper, color = "grey", lw=1, alpha=0.8)
-    x4 = ax.scatter(np.mean(data), i+1, marker=".", s=15, color="grey")
-
-plt.gca().invert_yaxis()
-box = ax.get_position()
-ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-lgnd = ax.legend([x2, x4], 
-                 ["ASD\nProbands", "Siblings"], 
-                 prop={'size': 9}, loc="lower right", bbox_to_anchor=(1.01, 0))
-lgnd.get_frame().set_edgecolor('grey')
-lgnd.get_frame().set_linewidth(0.5)
-
-# Fix for AttributeError: replace .legendHandles with .legend_handles
-for handle in lgnd.legend_handles:
-    try:
-        handle.set_sizes([30])
-    except AttributeError:
-        pass
-
-plt.xlim(-0.7, 0.75)
-plt.ylim(213, 0) 
-plt.xlabel("Mutation Bias", fontsize=20)
-plt.ylabel("Structure Rank", fontsize=20)
-
-plt.grid(True)
-#plt.savefig("../figs_v2/Figure2A.pdf")
-
-# %% hidden=true
-# SIB_Bias = pd.read_csv("../dat/Unionize_bias/sib.top61.Z2.csv", 
-#                           index_col="STR")
-# SIB_Z2_Bias, SIB_Z2_Match_Bias_Rank, SIB_Z2_Sim_Bias_STR = LoadBiasData2(
-#     SIB_Bias, ASD_Sim_dir)
-
-# %% hidden=true
-# fig, (ax1, ax2) = plt.subplots(1,2, figsize=(10, 8), dpi=480)
-
-# # ASD
-# for i, (STR, STR_bias) in enumerate(sorted(ASD_Z2_Bias.items(), key=lambda x:x[1].Rank)):
-#     x2 = ax1.scatter(STR_bias.Bias, i+1, marker="^", s=15, color="darkblue")
-#     data = ASD_Z2_Sim_Bias_STR[STR]
-#     upper, lower = CI(data, 0.68) # 1sd
-#     ax1.hlines(i+1 , lower, upper, color = "grey", lw=1, alpha=0.8)
-#     x4 = ax1.scatter(np.mean(data), i+1, marker=".", s=15, color="grey")
-
-
-# plt.gca().invert_yaxis()
-# box = ax1.get_position()
-# ax1.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-# lgnd = ax1.legend([x2, x4], 
-#                  ["ASD Probands", "Siblings", ], 
-#                  prop={'size': 11}, loc="lower right", bbox_to_anchor=(1.0, 0))
-# lgnd.get_frame().set_edgecolor('b')
-# lgnd.get_frame().set_linewidth(1.0)
-
-# lgnd.legendHandles[0]._sizes = [30]
-# lgnd.legendHandles[1]._sizes = [30]
-
-# ax1.set_ylim(213, 0)
-# ax1.set_xlim(-0.7, 0.7)
-# plt.grid(True)
-
-# for i, (STR, STR_bias) in enumerate(sorted(SIB_Z2_Bias.items(), key=lambda x:x[1].Rank)):
-#     x2 = ax2.scatter(STR_bias.Bias, i+1, marker="^", s=15, color="orange")
-#     data = SIB_Z2_Sim_Bias_STR[STR]
-#     upper, lower = CI(data, 0.68) # 1sd
-#     ax2.hlines(i+1 , lower, upper, color = "grey", lw=1, alpha=0.8)
-#     x1 = ax2.scatter(np.mean(data), i+1, marker=".", s=15, color="grey")
-
-
-# plt.gca().invert_yaxis()
-# box = ax2.get_position()
-# ax2.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-# lgnd = ax2.legend([x1, x2], 
-#                  ["Sibling Bias", "Subsampled \nSibling Bias", ], 
-#                  prop={'size': 11}, loc="lower right", bbox_to_anchor=(1.0, 0))
-# lgnd.get_frame().set_edgecolor('b')
-# lgnd.get_frame().set_linewidth(1.0)
-
-# lgnd.legendHandles[0]._sizes = [30]
-# lgnd.legendHandles[1]._sizes = [30]
-# ax2.set_ylim(213, 0)
-# ax2.set_xlim(-0.7, 0.7)
-
-
-# #ax.text(-0.1, 1.15, label, transform=ax.transAxes,
-# #  fontsize=16, fontweight='bold', va='top', ha='right')
-# #ax.text(-0.1, 1.15, label, transform=ax.transAxes,
-# #  fontsize=16, fontweight='bold', va='top', ha='right')
-
-# fig.text(0.6, -0.05, 'Structure Rank', ha='center', fontsize=30)
-# fig.text(0, 0.5, 'Mutation Bias', va='center', rotation='vertical', fontsize=30)
-
-
-# fig.subplots_adjust(wspace=14)
-# ax1.grid(True)
-# ax2.grid(True)
-# plt.tight_layout()
-# #plt.savefig("../figs/Figure2A.pdf")
-
 # %% [markdown] hidden=true
 # ###### Test Average abs Z
 
@@ -643,7 +545,7 @@ for file in os.listdir(ASD_Sim_dir):
     subsib_mean_abs_biases.append(mean_abs_bias)
 
 # %%
-DIR = "~/Work/ASD_Circuits_CellType/results/STR_ISH/"
+DIR = "../results/STR_ISH/"
 control_files = {
     "T2D": "T2D_bias_addP_sibling.csv",
     #"Parkinson": "Parkinson_bias_addP_sibling.csv",
@@ -677,15 +579,15 @@ plt.show()
 
 # %% hidden=true
 topNs = np.arange(200, 5, -1)
-DIR = "/home/jw3514/Work/ASD_Circuits/scripts/RankScores"
-ASD_Distance = np.load("{}/RankScore.Ipsi.ASD.npy".format(DIR))
-Cont_Distance = np.load("{}/RankScore.Ipsi.Cont.npy".format(DIR))
+RANKSCORE_DIR = "../dat/allen-mouse-conn/RankScores"
+ASD_Distance = np.load(f"{RANKSCORE_DIR}/RankScore.Ipsi.ASD.npy")
+Cont_Distance = np.load(f"{RANKSCORE_DIR}/RankScore.Ipsi.Cont.npy")
 
-ASD_DistanceShort = np.load("{}/RankScore.Ipsi.Short.3900.ASD.npy".format(DIR))
-Cont_DistanceShort = np.load("{}/RankScore.Ipsi.Short.3900.Cont.npy".format(DIR))
+ASD_DistanceShort = np.load(f"{RANKSCORE_DIR}/RankScore.Ipsi.Short.3900.ASD.npy")
+Cont_DistanceShort = np.load(f"{RANKSCORE_DIR}/RankScore.Ipsi.Short.3900.Cont.npy")
 
-ASD_DistanceLong = np.load("{}/RankScore.Ipsi.Long.3900.ASD.npy".format(DIR))
-Cont_DistanceLong = np.load("{}/RankScore.Ipsi.Long.3900.Cont.npy".format(DIR))
+ASD_DistanceLong = np.load(f"{RANKSCORE_DIR}/RankScore.Ipsi.Long.3900.ASD.npy")
+Cont_DistanceLong = np.load(f"{RANKSCORE_DIR}/RankScore.Ipsi.Long.3900.Cont.npy")
 
 # %% hidden=true
 import matplotlib.backends.backend_pdf
@@ -905,227 +807,6 @@ ax3.grid(True)
 #plt.savefig("../figs/main/Fig2.BCD.pdf")
 #plt.savefig("../figs/main/Fig2.BCD.png")
 
-# %% hidden=true
-size = 33
-idx = np.where(topNs==size)[0][0]
-fig, (ax1, ax2, ax3) = plt.subplots(1,3,dpi=120, figsize=(16,4))
-PlotPermutationP(Cont_Distance[:, idx], (ASD_Distance)[idx], ax1,
-                     title="Info Per Edge Inside Circuit".format(), xlabel="Normed Score", 
-                     dist_label="Simulated", bar_label="ASD")
-PlotPermutationP(Cont_DistanceShort[:, idx], (ASD_DistanceShort)[idx], ax2,
-                     title="Info Per Edge Inside Circuit".format(), xlabel="Normed Score", 
-                     dist_label="Simulated", bar_label="ASD")
-PlotPermutationP(Cont_DistanceLong[:, idx], (ASD_DistanceLong)[idx], ax3,
-                     title="Info Per Edge Inside Circuit".format(), xlabel="Normed Score", 
-                     dist_label="Simulated", bar_label="ASD")
-
-
-# %% [markdown] hidden=true
-# #### Figure 5 
-
-# %% [markdown] heading_collapsed=true hidden=true
-# ##### Fig5 A 
-
-# %% code_folding=[0, 16] hidden=true
-def MaskDistMat(Mat1, Mat2, cutoff, m='lt'):
-    New_Mat2 = Mat2.copy(deep=True)
-    for STR_i in Mat1.index.values:
-        for STR_j in Mat1.columns.values:
-            if m == 'gt':
-                if Mat1.loc[STR_i, STR_j] >= cutoff:
-                    New_Mat2.loc[STR_i, STR_j] = 0
-                else:
-                    New_Mat2.loc[STR_i, STR_j] = Mat2.loc[STR_i, STR_j]
-            elif m == "lt":
-                if Mat1.loc[STR_i, STR_j] <= cutoff:
-                    New_Mat2.loc[STR_i, STR_j] = 0
-                else:
-                    New_Mat2.loc[STR_i, STR_j] = Mat2.loc[STR_i, STR_j]
-    return New_Mat2
-
-def MaskDistMat_xx(distance_mat, Conn_mat, cutoff, cutoff2, keep='gt'):
-    Conn_mat_new = Conn_mat.copy(deep=True)
-    distance_mat_new = distance_mat.copy(deep=True)
-    for STR_i in distance_mat.index.values:
-        for STR_j in distance_mat.columns.values:
-            if keep == 'gt':
-                if distance_mat.loc[STR_i, STR_j] >= cutoff:
-                    Conn_mat_new.loc[STR_i, STR_j] = Conn_mat.loc[STR_i, STR_j]
-                    distance_mat_new.loc[STR_i, STR_j] = distance_mat.loc[STR_i, STR_j]
-                else:
-                    Conn_mat_new.loc[STR_i, STR_j] = 0
-                    distance_mat_new.loc[STR_i, STR_j] = 0
-            elif keep == "lt":
-                if distance_mat.loc[STR_i, STR_j] <= cutoff:
-                    Conn_mat_new.loc[STR_i, STR_j] = Conn_mat.loc[STR_i, STR_j]
-                    distance_mat_new.loc[STR_i, STR_j] = distance_mat.loc[STR_i, STR_j]
-                else:
-                    Conn_mat_new.loc[STR_i, STR_j] = 0
-                    distance_mat_new.loc[STR_i, STR_j] = 0   
-            elif keep=="bw":
-                if distance_mat.loc[STR_i, STR_j] >= cutoff and distance_mat.loc[STR_i, STR_j] <= cutoff2:
-                    Conn_mat_new.loc[STR_i, STR_j] = Conn_mat.loc[STR_i, STR_j]
-                    distance_mat_new.loc[STR_i, STR_j] = distance_mat.loc[STR_i, STR_j]
-                else:
-                    Conn_mat_new.loc[STR_i, STR_j] = 0
-                    distance_mat_new.loc[STR_i, STR_j] = 0   
-    return Conn_mat_new, distance_mat_new
-
-
-# %% hidden=true
-# Circuit STR data
-ASD_CircuitsSet = pd.read_csv(
-    "/home/jw3514/Work/ASD_Circuits/notebooks/ASD.SA.Circuits.Size46.csv",
-    index_col="idx")
-ASD_Circuits = ASD_CircuitsSet.loc[3, "STRs"].split(";")
-RealSibSTRs = pd.read_csv("../dat/Unionize_bias/sib.top61.Z2.csv", 
-                          index_col="STR").head(46).index.values
-
-# %% hidden=true
-print(RegionDistributionsList(ASD_Circuits))
-
-# %% hidden=true
-Cartesian_distances_w_edge = MaskDistMat(adj_mat, Cartesian_distancesDF, cutoff=0)
-Distance_Cuts = [0, 1000, 2000, 3000, 4000, 5000, 100000]
-Dist_cut_graphs = []
-
-N_Connections_total = []
-for i, cut in enumerate(Distance_Cuts[:-1]):
-    Conn_mat_new, distance_mat_new = MaskDistMat_xx(Cartesian_distances_w_edge, adj_mat, keep="bw",
-                                                cutoff=Distance_Cuts[i], cutoff2=Distance_Cuts[i+1])
-    N_Connections_total.append(np.count_nonzero(Conn_mat_new))
-    g_ = LoadConnectome2(Conn_mat_new)
-    Dist_cut_graphs.append(g_)
-
-# %% hidden=true
-ASD_top_conn, Sib_top_conn = [], []
-N_Connections_total = []
-for i,v in enumerate(Dist_cut_graphs):
-    g_ = Dist_cut_graphs[i]
-    N_Connections_total.append(len(g_.es))
-    cohe, Nconn = ScoreSTRSet(g_, ASD_Circuits)
-    ASD_top_conn.append(Nconn)
-    cohe, Nconn = ScoreSTRSet(g_, RealSibSTRs)
-    Sib_top_conn.append(Nconn)
-ASD_top_conn = np.array(ASD_top_conn)
-Sib_top_conn = np.array(Sib_top_conn)
-N_Connections_total = np.array(N_Connections_total)
-
-asd_conn_density = ASD_top_conn/N_Connections_total
-sib_conn_density = Sib_top_conn/N_Connections_total
-
-
-# %% code_folding=[0] hidden=true
-def getratio_asd_sib(Dist_cut_graphs, ASD_STRs, Sib_STRs):
-    ASD_top49_conn, Sib_top49_conn = [], []
-    N_Connections_total = []
-    for i,v in enumerate(Dist_cut_graphs):
-        g_ = Dist_cut_graphs[i]
-        N_Connections_total.append(len(g_.es))
-        ASD_top49_conn.append(len(subgraph(g_, ASD_STRs).es))
-        Sib_top49_conn.append(len(subgraph(g_, Sib_STRs).es))
-    ASD_top49_conn = np.array(ASD_top49_conn)
-    Sib_top49_conn = np.array(Sib_top49_conn)
-    N_Connections_total = np.array(N_Connections_total)
-    return ASD_top49_conn, Sib_top49_conn, N_Connections_total
-
-
-ASD_STRs = ASD_Circuits
-Sib_STRs = RealSibSTRs
-Nboot = 1000
-Dat_ASD_boots, Dat_Sib_boots = [], []
-for i in range(Nboot):
-    ASD_STR_boot = np.random.choice(ASD_STRs, replace=True, size=len(ASD_STRs))
-    Sib_STR_boot = np.random.choice(Sib_STRs, replace=True, size=len(Sib_STRs))
-    g2_asd = subgraph(graph, ASD_STR_boot)
-    g2_sib = subgraph(graph, Sib_STR_boot)
-    bl_asd = len(g2_asd.es)/np.count_nonzero(adj_mat)
-    bl_sib = len(g2_sib.es)/np.count_nonzero(adj_mat)
-    ASD_top_conn, Sib_top_conn, N_Connections_total = getratio_asd_sib(
-        Dist_cut_graphs, ASD_STR_boot, Sib_STR_boot)
-    dat_asd = ASD_top_conn/N_Connections_total
-    dat_sib = Sib_top_conn/N_Connections_total
-    Dat_ASD_boots.append(dat_asd)
-    Dat_Sib_boots.append(dat_sib)
-
-Dat_ASD_boots = np.array(Dat_ASD_boots)
-Dat_Sib_boots = np.array(Dat_Sib_boots)
-
-ASD_Dy, Sib_Dy = [], []
-for i in range(6):
-    boots = Dat_ASD_boots[:, i]
-    ASD_Dy.append(np.std(boots))
-    
-    boots = Dat_Sib_boots[:, i]
-    Sib_Dy.append(np.std(boots))
-
-ASD_Dy = np.array(ASD_Dy)
-ASD_Dy = ASD_Dy.transpose()
-
-Sib_Dy = np.array(Sib_Dy)
-Sib_Dy = Sib_Dy.transpose()
-
-# %% hidden=true
-## Random STRs
-All_STRs = Cartesian_distancesDF.index.values
-Rand_STRs = np.random.choice(All_STRs, size=(30, 1000))
-Rand_Data = []
-for i in range(1000):
-    STRs = Rand_STRs[:, i]
-    #print(STRs.shape)
-    rand_top50_conn = []
-    N_Connections_total = []
-    for i,v in enumerate(Dist_cut_graphs):
-        g_ = Dist_cut_graphs[i]
-        N_Connections_total.append(len(g_.es))
-        rand_top50_conn.append(len(subgraph(g_, STRs).es))
-    rand_top50_conn = np.array(rand_top50_conn)
-    N_Connections_total = np.array(N_Connections_total)
-    
-    dat_one_rand = rand_top50_conn/N_Connections_total
-    Rand_Data.append(dat_one_rand)
-Rand_Data = np.array(Rand_Data)
-
-rand_mean = Rand_Data.mean(axis=0)
-Rand_Dy = Rand_Data.std(axis=0)
-
-# %% hidden=true
-cont_dfs = []
-for file in os.listdir(ASD_Sim_dir):
-    if file.startswith("cont.genes"):
-        continue
-    df = pd.read_csv(ASD_Sim_dir+file, index_col="STR")
-    cont_dfs.append(df)
-
-# %% hidden=true
-plt.style.use('seaborn-whitegrid')
-# %matplotlib inline
-import matplotlib.ticker as mticker  
-plt.style.use('seaborn-talk')
-matplotlib.rcParams.update({'font.size': 25})
-fig, ax1 = plt.subplots(dpi=480, figsize=(12,6))
-
-ax1.errorbar(np.arange(6), asd_conn_density, yerr=ASD_Dy, fmt=".", 
-             label="Proband Connections", color="blue")
-ax1.errorbar(np.arange(6) + 0.05, sib_conn_density, yerr=Sib_Dy, fmt=".k", 
-             label="Sibings Connections", color="orange")
-ax1.errorbar(np.arange(6) , rand_mean, yerr=Rand_Dy, fmt=".k", 
-             label="Random Connections", color="gray")
-ax1.plot(np.arange(6), asd_conn_density, marker="." , color="blue")
-ax1.plot(np.arange(6) + 0.05, sib_conn_density, marker=".", color="orange")
-ax1.plot(np.arange(6)  , rand_mean, marker=".", color="gray", ls="dashed")
-
-
-ax1.grid(True)
-ax1.legend(loc="upper right", fontsize=20)
-ax1.set_ylabel("Connections Density", fontsize=25)
-ax1.set_xlabel(r"Distance range ($\times 10^3$ $\mu$m)", fontsize=20)
-ax1.set_xticklabels(["", "0-1", "1-2", "2-3", "3-4", "4-5", r">5"], fontsize=20)
-ax1.tick_params(axis='y', labelsize=20)
-#plt.gca().xaxis.set_major_formatter(mticker.FormatStrFormatter('%s x1000'))
-plt.tight_layout()
-#fig.savefig("figs/n_Fig_4.A.pdf")
-
 # %% [markdown]
 # # Supplementary Figures
 
@@ -1156,7 +837,8 @@ def topNSpecVsExpLevel(MatSpec, MatLevel, GeneSet, topN=5):
     expLevelSelect = []
     idx_all = []
     idx_select = []
-    for i, g in enumerate(MatSpec.index.values):
+    common_genes = MatSpec.index.intersection(MatLevel.index)
+    for i, g in enumerate(common_genes):
         spec = [x for x in MatSpec.loc[g, :].values if x == x]
         spec.sort()
         top5_spec = np.mean(spec[-topN:])
@@ -1172,13 +854,13 @@ def topNSpecVsExpLevel(MatSpec, MatLevel, GeneSet, topN=5):
 
 
 # %% hidden=true
-Spark_Meta_2stage = pd.read_excel("../dat/genes/asd/TabS_DenovoWEST_Stage1+2.xlsx",
+Spark_Meta_2stage = pd.read_excel("../dat/Genetics/TabS_DenovoWEST_Stage1+2.xlsx",
                            skiprows=2, sheet_name="TopDnEnrich")
 Spark_Meta_ExomeWide = Spark_Meta_2stage[Spark_Meta_2stage["pDenovoWEST_Meta"]<=1.3e-6]
 GeneSet = set(Spark_Meta_ExomeWide["EntrezID"].values)
 idx_all, topSpecs, expLevel, idx_select, topSelectSpec, expLevelSelect = topNSpecVsExpLevel(
     ExpZ2, ExpL, GeneSet, topN=5)
-sibling_genes = pd.read_csv("../dat/Unionize_bias/sibling_weights_LGD_Dmis.csv", index_col=0).index.values
+sibling_genes = pd.read_csv("../dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv", index_col=0).index.values
 idx_all, topSpecs, expLevel, idx_select2, topSelectSpec2, expLevelSelect2 = topNSpecVsExpLevel(
     ExpZ2, ExpL, sibling_genes, topN=5)
 
@@ -1355,10 +1037,10 @@ plt.show()
 # #### Male vs Female
 
 # %% hidden=true
-ASD_Male = pd.read_csv("../dat/Unionize_bias/ASD.Male.ALL.bias.csv", 
-                                      index_col="STR")
-ASD_Female = pd.read_csv("../dat/Unionize_bias/ASD.Female.ALL.bias.csv", 
-                                      index_col="STR")
+ASD_Male = pd.read_csv("../dat/Unionize_bias/ASD.Male.ALL.bias.csv",
+                                      index_col="Structure")
+ASD_Female = pd.read_csv("../dat/Unionize_bias/ASD.Female.ALL.bias.csv",
+                                      index_col="Structure")
 
 # %% hidden=true
 dat1, dat2 = [], []
@@ -1396,12 +1078,12 @@ plt.show()
 
 # %% hidden=true
 W_Ipsi = pd.read_csv(
-    "/home/jw3514/Work/ASD_Circuits/dat/allen-mouse-conn/ScoreingMat_jw_v3/WeightMat.Ipsi.csv", index_col=0)
+    "../dat/allen-mouse-conn/ConnectomeScoringMat/WeightMat.Ipsi.csv", index_col=0)
 D_ipsi = pd.read_csv(
-    "/home/jw3514/Work/ASD_Circuits/dat/allen-mouse-conn/Dist_CartesianDistance.ipsi.csv", index_col=0)
+    "../dat/allen-mouse-conn/Dist_CartesianDistance.csv", index_col=0)
 D_ipsi.columns = D_ipsi.index.values
 ASD_CircuitsSet = pd.read_csv(
-    "/home/jw3514/Work/ASD_Circuits/notebooks/ASD.SA.Circuits.Size46.csv",
+    "../dat/Circuits/ASD.SA.Circuits.Size46.csv",
     index_col="idx")
 ASD_Circuits = ASD_CircuitsSet.loc[3, "STRs"].split(";")
 SIB_Bias = pd.read_csv("../dat/Unionize_bias/sib.top61.Z2.csv", index_col="STR")
