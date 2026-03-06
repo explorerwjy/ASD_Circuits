@@ -66,8 +66,9 @@ InfoMat = pd.read_csv("../dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi
 # Parse structures from pareto front
 pareto_structures = [row['structures'].split(',') for _, row in pareto_df.iterrows()]
 
-# Select circuit: 3rd row (index 2) — high-bias knee of the Pareto front
-SELECTED_IDX = 2
+# Select circuit: 4th row (index 3) — high-bias knee of the Pareto front
+# Index 0 = baseline (no SA search), indices 1+ = optimized Pareto points
+SELECTED_IDX = 3
 selected_structures = pareto_structures[SELECTED_IDX]
 print(f"Selected circuit (index {SELECTED_IDX}):")
 print(f"  Mean bias: {pareto_df.loc[SELECTED_IDX, 'mean_bias']:.4f}")
@@ -309,16 +310,16 @@ plt.show()
 #
 # This section compares structure overlap between:
 # 1. The selected circuit (from the main Pareto front)
-# 2. Each bootstrap circuit (3rd point on each bootstrap Pareto front)
+# 2. Each bootstrap circuit (selected point on each bootstrap Pareto front)
 
 # %%
 selected_circuit_structures = set(selected_structures)
 print(f"Selected circuit has {len(selected_circuit_structures)} structures")
 
 # %%
-# Extract 3rd point (index 2) from each bootstrap pareto front
-bootstrap_3rd_point_structures = []
-bootstrap_3rd_point_data = []
+# Extract selected point (index 3) from each bootstrap pareto front
+bootstrap_selected_structures = []
+bootstrap_selected_data = []
 
 boot_ids = [bid for bid in combined_pareto_df['boot_id'].unique() if bid.startswith('ASD_Boot')]
 boot_ids.sort()
@@ -326,28 +327,28 @@ boot_ids.sort()
 for boot_id in boot_ids:
     boot_data = combined_pareto_df[combined_pareto_df['boot_id'] == boot_id].copy()
     boot_data = boot_data.sort_values('mean_bias', ascending=False).reset_index(drop=True)
-    if len(boot_data) >= 3:
-        third_point = boot_data.iloc[2]
-        structures_set = set(third_point['structures'].split(','))
-        bootstrap_3rd_point_structures.append(structures_set)
-        bootstrap_3rd_point_data.append({
+    if len(boot_data) > SELECTED_IDX:
+        sel_point = boot_data.iloc[SELECTED_IDX]
+        structures_set = set(sel_point['structures'].split(','))
+        bootstrap_selected_structures.append(structures_set)
+        bootstrap_selected_data.append({
             'boot_id': boot_id, 'structures': structures_set,
-            'mean_bias': third_point['mean_bias'],
-            'circuit_score': third_point['circuit_score']
+            'mean_bias': sel_point['mean_bias'],
+            'circuit_score': sel_point['circuit_score']
         })
 
-print(f"Extracted 3rd point from {len(bootstrap_3rd_point_structures)} bootstrap samples")
+print(f"Extracted index {SELECTED_IDX} from {len(bootstrap_selected_structures)} bootstrap samples")
 
 # %%
 # Calculate structure overlap
 overlap_scores = []
-for i, boot_structures in enumerate(bootstrap_3rd_point_structures):
+for i, boot_structures in enumerate(bootstrap_selected_structures):
     intersection = selected_circuit_structures.intersection(boot_structures)
     union = selected_circuit_structures.union(boot_structures)
     jaccard = len(intersection) / len(union) if len(union) > 0 else 0
     overlap_pct = len(intersection) / len(selected_circuit_structures)
     overlap_scores.append({
-        'boot_id': bootstrap_3rd_point_data[i]['boot_id'],
+        'boot_id': bootstrap_selected_data[i]['boot_id'],
         'jaccard_similarity': jaccard, 'overlap_percentage': overlap_pct,
         'n_intersection': len(intersection),
         'n_selected': len(selected_circuit_structures),
@@ -418,10 +419,10 @@ for i, (struct, bias) in enumerate(selected_circuit_bias[:20], 1):
 # Calculate bootstrap frequency for top 20
 top20_frequency = {}
 for struct in top20_structures_by_bias_set:
-    freq = np.mean([1 if struct in bs else 0 for bs in bootstrap_3rd_point_structures])
+    freq = np.mean([1 if struct in bs else 0 for bs in bootstrap_selected_structures])
     top20_frequency[struct] = freq
-    print(f"{struct}: {freq*100:.1f}% ({int(freq*len(bootstrap_3rd_point_structures))}"
-          f"/{len(bootstrap_3rd_point_structures)})")
+    print(f"{struct}: {freq*100:.1f}% ({int(freq*len(bootstrap_selected_structures))}"
+          f"/{len(bootstrap_selected_structures)})")
 
 # %%
 # Top 10 together check
@@ -429,9 +430,9 @@ top10_structures_by_bias = top20_structures_by_bias[:10]
 top10_structures_by_bias_set = set(top10_structures_by_bias)
 top10_frequency = {s: top20_frequency[s] for s in top10_structures_by_bias_set}
 
-n_with_all_top10 = sum(1 for bs in bootstrap_3rd_point_structures
+n_with_all_top10 = sum(1 for bs in bootstrap_selected_structures
                        if top10_structures_by_bias_set.issubset(bs))
-total_bootstraps = len(bootstrap_3rd_point_structures)
+total_bootstraps = len(bootstrap_selected_structures)
 
 print(f"\nTop 10 structures present together:")
 print(f"  {n_with_all_top10}/{total_bootstraps} ({n_with_all_top10/total_bootstraps*100:.1f}%)")
@@ -480,7 +481,7 @@ plt.show()
 all_structures_frequency = {}
 all_structures_bias = {}
 for struct in selected_circuit_structures:
-    freq = np.mean([1 if struct in bs else 0 for bs in bootstrap_3rd_point_structures])
+    freq = np.mean([1 if struct in bs else 0 for bs in bootstrap_selected_structures])
     all_structures_frequency[struct] = freq
     all_structures_bias[struct] = Spark_ASD_STR_Bias.loc[struct, 'EFFECT']
 
