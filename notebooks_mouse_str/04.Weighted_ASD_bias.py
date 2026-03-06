@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ProjDIR = "/home/jw3514/Work/ASD_Circuits_CellType"
+ProjDIR = os.path.abspath(os.path.join(os.path.dirname("__file__"), ".."))
 sys.path.insert(1, os.path.join(ProjDIR, "src"))
 from ASD_Circuits import (
     LoadGeneINFO, STR2Region, SPARK_Gene_Weights,
@@ -383,6 +383,118 @@ fig = plot_circuit_connectivity_scores_multi(
 plt.show()
 
 # %% [markdown]
+# ## 7b. Reproduce Sibling Null CCS Profiles (RankScore Files)
+#
+# The `RankScore.Ipsi.*.Cont.npy` files contain the sibling null CCS distribution
+# used for computing p-values in the manuscript. Each has shape `(10000, 195)` —
+# 10K sibling simulations × 195 circuit sizes (200→6, mapped by `np.arange(200, 5, -1)`).
+#
+# **Provenance**: The existing files were generated from the legacy `SubSampleSib/`
+# directory (10K individual bias CSVs) using `script_cohesiveness_profile.py`.
+# Each CSV contains one sibling null bias profile (213 structures, sorted by EFFECT).
+#
+# **Two reproduction modes:**
+# 1. **Exact reproduction**: from `SubSampleSib/` CSVs (if available at legacy path)
+# 2. **New null generation**: from frozen sibling parquets in `results/Sibling_bias/`
+#    (gives similar distributions but not bit-identical, since these come from a
+#    different random seed in `scripts/generate_sibling_bias_files.py`)
+#
+# **This cell is slow (~5-10 min per InfoMat). Set `REGENERATE` to the desired mode.**
+
+# %%
+from joblib import Parallel, delayed
+
+REGENERATE = None  # Set to "legacy" or "new" to regenerate; None to skip
+
+LEGACY_SIB_DIR = os.path.join(ProjDIR, "dat/SubSampleSib")
+NEW_SIB_PARQUET = os.path.join(ProjDIR, "results/Sibling_bias/Random_61gene/sibling_random_bias.parquet")
+
+topNs_arr = np.arange(200, 5, -1)
+
+
+def compute_ccs_profile_from_sorted(sorted_strs, info_mat, topNs):
+    """Compute CCS profile for one simulation given pre-sorted structure names."""
+    return np.array([ScoreCircuit_SI_Joint(sorted_strs[:n], info_mat) for n in topNs])
+
+
+if REGENERATE == "legacy":
+    # Exact reproduction from SubSampleSib CSVs
+    import os as _os
+    sib_files = [f for f in _os.listdir(LEGACY_SIB_DIR)
+                 if f.endswith('.csv') and not f.startswith('cont.genes')]
+    print(f"Legacy SubSampleSib: {len(sib_files)} files")
+
+    # Read all bias profiles (pre-sorted by EFFECT descending in the CSVs)
+    sib_profiles = []
+    for f in sib_files[:10000]:
+        df = pd.read_csv(_os.path.join(LEGACY_SIB_DIR, f), index_col='STR')
+        sib_profiles.append(df.index.values)  # Already sorted by EFFECT desc
+    print(f"  Loaded {len(sib_profiles)} profiles")
+
+    infomat_configs = {
+        "Ipsi": (IpsiInfoMat, "RankScore.Ipsi.Cont.npy"),
+        "Short.3900": (IpsiInfoMatShort, "RankScore.Ipsi.Short.3900.Cont.npy"),
+        "Long.3900": (IpsiInfoMatLong, "RankScore.Ipsi.Long.3900.Cont.npy"),
+    }
+
+    for label, (info_mat, out_name) in infomat_configs.items():
+        print(f"\nComputing RankScore for {label}...")
+        results = Parallel(n_jobs=10, verbose=5)(
+            delayed(compute_ccs_profile_from_sorted)(strs, info_mat, topNs_arr)
+            for strs in sib_profiles
+        )
+        rank_scores = np.array(results)
+        out_path = os.path.join(RANK_DIR, out_name)
+
+        # Validate against existing (row ordering will differ due to os.listdir)
+        existing = np.load(out_path)
+        # Compare distributions rather than exact rows
+        idx_46 = np.where(topNs_arr == 46)[0][0]
+        print(f"  Existing  N=46: mean={existing[:, idx_46].mean():.4f}, std={existing[:, idx_46].std():.4f}")
+        print(f"  Reproduced N=46: mean={rank_scores[:, idx_46].mean():.4f}, std={rank_scores[:, idx_46].std():.4f}")
+
+        # Overwrite only if user confirms
+        # np.save(out_path, rank_scores)
+        print(f"  (Not overwriting — uncomment np.save to replace)")
+
+elif REGENERATE == "new":
+    # Generate NEW null from frozen parquets (different random draws)
+    sibling_bias = pd.read_parquet(NEW_SIB_PARQUET)
+    n_sims = sibling_bias.shape[1]
+    print(f"Frozen sibling parquet: {sibling_bias.shape} ({n_sims} simulations)")
+
+    def compute_ccs_profile_from_parquet(sim_idx, bias_df, info_mat, topNs):
+        col = str(sim_idx)
+        sorted_strs = bias_df[col].sort_values(ascending=False).index.values
+        return np.array([ScoreCircuit_SI_Joint(sorted_strs[:n], info_mat) for n in topNs])
+
+    infomat_configs = {
+        "Ipsi": (IpsiInfoMat, "RankScore.Ipsi.Cont.npy"),
+        "Short.3900": (IpsiInfoMatShort, "RankScore.Ipsi.Short.3900.Cont.npy"),
+        "Long.3900": (IpsiInfoMatLong, "RankScore.Ipsi.Long.3900.Cont.npy"),
+    }
+
+    for label, (info_mat, out_name) in infomat_configs.items():
+        print(f"\nComputing RankScore for {label} (from new parquet)...")
+        results = Parallel(n_jobs=10, verbose=5)(
+            delayed(compute_ccs_profile_from_parquet)(i, sibling_bias, info_mat, topNs_arr)
+            for i in range(n_sims)
+        )
+        rank_scores = np.array(results)
+        out_path = os.path.join(RANK_DIR, out_name)
+
+        existing = np.load(out_path)
+        idx_46 = np.where(topNs_arr == 46)[0][0]
+        print(f"  Existing  N=46: mean={existing[:, idx_46].mean():.4f}, std={existing[:, idx_46].std():.4f}")
+        print(f"  New null  N=46: mean={rank_scores[:, idx_46].mean():.4f}, std={rank_scores[:, idx_46].std():.4f}")
+        print(f"  (Not overwriting — new null has different random draws)")
+
+else:
+    print("REGENERATE = None — using existing RankScore files.")
+    print("Set REGENERATE = 'legacy' to reproduce from SubSampleSib CSVs,")
+    print("or REGENERATE = 'new' to generate from frozen sibling parquets.")
+
+# %% [markdown]
 # ## 8. Summary
 #
 # | Gene Set | Source | Genes | In Z2 | Output File |
@@ -661,3 +773,87 @@ fig.patch.set_alpha(0)
 ax.patch.set_alpha(0)
 plt.tight_layout()
 plt.show()
+
+# %% [markdown]
+# ## Figure S4: Bias Replication
+#
+# 3×3 scatter grid comparing SPARK 61 structure bias against alternative gene sets,
+# confound-corrected versions, and subgroup analyses.
+
+# %%
+from scipy.stats import pearsonr as _pearsonr
+import string
+
+# BGMR-corrected bias
+bias_bgmr = MouseSTR_AvgZ_Weighted(STR_BiasMat, GW_Spark61_bgmr)
+
+ref = bias_results["SPARK 61"]
+
+# Panel definitions: (x_data, y_data, x_label, y_label)
+panels = [
+    # Row 1
+    (ref, bias_results["SPARK 159"],
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Mutation Bias\nZhou et al. 159 ASD genes"),
+    (ref, bias_results["ASC 102"],
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Mutation Bias\nSatterstrom et al. 102 ASD genes"),
+    (ref, bias_results["Fu ASD 72"],
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Mutation Bias\nFu et al. 72 ASD genes"),
+    # Row 2
+    (ref, bias_results["Fu ASD 185"],
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Mutation Bias\nFu et al. 185 ASD genes"),
+    (ASD_Male, ASD_Female,
+     "Male Mutation Bias\nZhou et al. 61 ASD genes", "Female Mutation Bias\nZhou et al. 61 ASD genes"),
+    (ref, bias_bgmr,
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Mutation Bias (Expected Correction)\nZhou et al. 61 ASD genes"),
+    # Row 3
+    (ref, ASD_Neuron_den_norm_bias,
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Neuronal Density Normalized Bias\nZhou et al. 61 ASD genes"),
+    (ref, ASD_Glia_norm_bias,
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Neuro-to-Glia Ratio Normalized Bias\nZhou et al. 61 ASD genes"),
+    (ref, top20_Bias,
+     "Mutation Bias\nZhou et al. 61 ASD genes", "Mutation Bias\nTop 20 ASD genes"),
+]
+
+fig, axes = plt.subplots(3, 3, figsize=(24, 24), dpi=300)
+
+for idx, (ax, (x_data, y_data, xlabel, ylabel)) in enumerate(zip(axes.flat, panels)):
+    common = x_data.index.intersection(y_data.index)
+    x = x_data.loc[common, "EFFECT"].values
+    y = y_data.loc[common, "EFFECT"].values
+    r, p = _pearsonr(x, y)
+
+    ax.scatter(x, y, s=30, color="#2166ac", alpha=0.7, edgecolors='none')
+
+    # y=x reference line
+    all_vals = np.concatenate([x, y])
+    lo, hi = all_vals.min() - 0.05, all_vals.max() + 0.05
+    ax.plot([lo, hi], [lo, hi], 'r--', lw=2, alpha=0.7)
+
+    # Stats box
+    p_str = "p <1e-10" if p < 1e-10 else f"p = {p:.2e}"
+    stats_text = f"r = {r:.3f}\n{p_str}"
+    ax.text(0.05, 0.95, stats_text, transform=ax.transAxes,
+            fontsize=24, verticalalignment='top',
+            bbox=dict(boxstyle='square,pad=0.4', facecolor='white', edgecolor='black', linewidth=1.5))
+
+    ax.set_xlabel(xlabel, fontsize=24)
+    ax.set_ylabel(ylabel, fontsize=24)
+    ax.tick_params(labelsize=20)
+
+    # Panel label
+    ax.text(-0.15, 1.08, string.ascii_lowercase[idx], transform=ax.transAxes,
+            fontsize=36, fontweight='bold')
+
+    # y=x legend (lower right)
+    ax.plot([], [], 'r--', lw=2, label='y=x')
+    ax.legend(loc='lower right', fontsize=22, frameon=False)
+
+fig.patch.set_alpha(0)
+for ax in axes.flat:
+    ax.patch.set_alpha(0)
+plt.tight_layout()
+os.makedirs("../results/figs", exist_ok=True)
+fig.savefig("../results/figs/FigureS4_Bias_replication.pdf",
+            transparent=True, dpi=300, bbox_inches='tight')
+plt.show()
+print("Saved: results/figs/FigureS4_Bias_replication.pdf")
