@@ -1132,3 +1132,121 @@ scipy.stats.ks_2samp(ASD_Dists, SIB_Dists)
 # %% [markdown] heading_collapsed=true
 # #### Phenotype
 
+# %% [markdown]
+# ## Figure S6: CCS Significance
+#
+# Panels a–d: Histograms of sibling null CCS vs ASD observed at circuit size 46.
+# Panel e: -log10(P) profile across structure ranks for full/short/long connectome.
+
+# %%
+# Load connection count distributions (not loaded earlier)
+ASD_Conn = np.load(f"{RANKSCORE_DIR}/RankConn.C.Ipsi.ASD.npy")
+Cont_Conn = np.load(f"{RANKSCORE_DIR}/RankConn.C.Ipsi.Cont.npy")
+
+
+def PlotPermutationP(Null, Obs, ax, alt="auto", title="", xlabel="", dist_label="", bar_label=""):
+    """Plot histogram of null distribution with observed value line."""
+    n, bins, patches = ax.hist(Null, bins=20, histtype="barstacked", align='mid',
+                                facecolor='#a1d99b', alpha=0.8, label=dist_label,
+                                edgecolor="black", linewidth=0.5)
+    if alt == "auto":
+        gt = Obs >= np.mean(Null)
+    else:
+        gt = (alt == "greater")
+    Z, P, _ = GetPermutationP(Null, Obs, greater_than=gt)
+    ax.vlines(x=Obs, ymin=0, ymax=max(n), label=bar_label, color="#8c510a", linewidth=3)
+    ax.text(x=Obs, y=max(n) * 0.7, s=" p=%.0e" % P, fontsize=20)
+    return ax
+
+
+size = 46
+idx = np.where(topNs == size)[0][0]
+
+fig = plt.figure(figsize=(16, 18), dpi=300)
+gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.8], hspace=0.35, wspace=0.3)
+
+# Panel a: Full Connectome CCS
+ax_a = fig.add_subplot(gs[0, 0])
+PlotPermutationP(Cont_Distance[:, idx], ASD_Distance[idx], ax_a,
+                 title="Full Connectome", xlabel="CCS",
+                 dist_label="Siblings", bar_label="ASD")
+ax_a.text(-0.12, 1.08, 'a', transform=ax_a.transAxes, fontsize=32, fontweight='bold')
+ax_a.set_title("Full Connectome", fontsize=24)
+ax_a.set_xlabel("CCS", fontsize=22)
+ax_a.tick_params(labelsize=18)
+ax_a.legend(fontsize=18)
+
+# Panel b: Full Connectome Number of Connections
+ax_b = fig.add_subplot(gs[0, 1])
+PlotPermutationP(Cont_Conn[:, idx], ASD_Conn[idx], ax_b,
+                 title="Full Connectome", xlabel="Number of Connections",
+                 dist_label="Siblings", bar_label="ASD")
+ax_b.text(-0.12, 1.08, 'b', transform=ax_b.transAxes, fontsize=32, fontweight='bold')
+ax_b.set_title("Full Connectome", fontsize=24)
+ax_b.set_xlabel("Number of Connections", fontsize=22)
+ax_b.tick_params(labelsize=18)
+ax_b.xaxis.set_major_locator(plt.MaxNLocator(5))
+ax_b.legend(fontsize=18)
+
+# Panel c: Long Distance Connectome CCS
+ax_c = fig.add_subplot(gs[1, 0])
+PlotPermutationP(Cont_DistanceLong[:, idx], ASD_DistanceLong[idx], ax_c,
+                 title="Long Distance Connectome", xlabel="CCS",
+                 dist_label="Siblings", bar_label="ASD")
+ax_c.text(-0.12, 1.08, 'c', transform=ax_c.transAxes, fontsize=32, fontweight='bold')
+ax_c.set_title("Long Distance Connectome", fontsize=24)
+ax_c.set_xlabel("CCS", fontsize=22)
+ax_c.tick_params(labelsize=18)
+ax_c.legend(fontsize=18)
+
+# Panel d: Short Distance Connectome CCS
+ax_d = fig.add_subplot(gs[1, 1])
+PlotPermutationP(Cont_DistanceShort[:, idx], ASD_DistanceShort[idx], ax_d,
+                 title="Short Distance Connectome", xlabel="CCS",
+                 dist_label="Siblings", bar_label="ASD")
+ax_d.text(-0.12, 1.08, 'd', transform=ax_d.transAxes, fontsize=32, fontweight='bold')
+ax_d.set_title("Short Distance Connectome", fontsize=24)
+ax_d.set_xlabel("CCS", fontsize=22)
+ax_d.tick_params(labelsize=18)
+ax_d.legend(fontsize=18)
+
+# Panel e: -log10(P) profile across structure ranks
+ax_e = fig.add_subplot(gs[2, :])
+
+
+def _compute_pvalues(asd_scores, cont_scores):
+    """Compute permutation p-values across structure ranks."""
+    pvals = []
+    for case, cont in zip(asd_scores, cont_scores.T):
+        _, P, _ = GetPermutationP(cont, case, greater_than=True)
+        pvals.append(P)
+    return np.array(pvals)
+
+
+pvals_full = _compute_pvalues(ASD_Distance, Cont_Distance)
+pvals_short = _compute_pvalues(ASD_DistanceShort, Cont_DistanceShort)
+pvals_long = _compute_pvalues(ASD_DistanceLong, Cont_DistanceLong)
+
+ax_e.plot(topNs, -np.log10(pvals_full), label="Full Connectome",
+          marker="o", markersize=4, lw=1, ls="dashed", color='#1f77b4')
+ax_e.plot(topNs, -np.log10(pvals_short), label="Short Distance Connectome",
+          marker="o", markersize=4, lw=1, ls="dashed", color='#ff7f0e')
+ax_e.plot(topNs, -np.log10(pvals_long), label="Long Distance Connectome",
+          marker="o", markersize=4, lw=1, ls="dashed", color='#2ca02c')
+ax_e.axhline(y=-np.log10(0.05), color='grey', linestyle='--', lw=1.5)
+ax_e.set_xlabel("Structure Rank", fontsize=24)
+ax_e.set_ylabel("-log10(P)", fontsize=24)
+ax_e.set_xlim(5, 121)
+ax_e.tick_params(labelsize=18)
+ax_e.legend(loc="upper left", fontsize=20)
+ax_e.text(-0.06, 1.08, 'e', transform=ax_e.transAxes, fontsize=32, fontweight='bold')
+
+fig.patch.set_alpha(0)
+for ax in [ax_a, ax_b, ax_c, ax_d, ax_e]:
+    ax.patch.set_alpha(0)
+
+fig.savefig("../results/figs/FigureS6_CCS_Significance.pdf",
+            transparent=True, dpi=300, bbox_inches='tight')
+plt.show()
+print("Saved: results/figs/FigureS6_CCS_Significance.pdf")
+
