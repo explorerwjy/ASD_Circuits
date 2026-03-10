@@ -129,15 +129,7 @@ mem_sel = mem_sel.sort_values("n_sizes", ascending=False)
 # %%
 Anno = STR2Region()
 
-REGION_COLORS_MAP = {
-    'Isocortex': '#268ad5', 'Olfactory_areas': '#5ab4ac',
-    'Cortical_subplate': '#7ac3fa', 'Hippocampus': '#2c9d39',
-    'Amygdala': '#742eb5', 'Striatum': '#ed8921',
-    'Thalamus': '#e82315', 'Hypothalamus': '#c27ba0',
-    'Midbrain': '#f6b26b', 'Pallidum': '#2ECC71',
-    'Cerebellum': '#8B4513', 'Medulla': '#708090',
-    'Pons': '#A0522D',
-}
+from plot import REGION_COLORS as REGION_COLORS_MAP
 
 def _prep_heatmap_data(mem_df, anno):
     """Shared data prep for both heatmap styles."""

@@ -15,6 +15,34 @@ import networkx as nx
 from adjustText import adjust_text
 from matplotlib.patches import Patch, FancyArrowPatch
 
+# ---------------------------------------------------------------------------
+# Canonical region color palette — use this everywhere for consistency
+# ---------------------------------------------------------------------------
+REGION_COLORS = {
+    'Isocortex': '#268ad5',
+    'Olfactory_areas': '#D5DBDB',
+    'Cortical_subplate': '#7ac3fa',
+    'Hippocampus': '#2c9d39',
+    'Amygdala': '#742eb5',
+    'Striatum': '#ed8921',
+    'Thalamus': '#e82315',
+    'Hypothalamus': '#E6B0AA',
+    'Midbrain': '#f6b26b',
+    'Pallidum': '#2ECC71',
+    'Cerebellum': '#ffd966',
+    'Medulla': '#20124d',
+    'Pons': '#D2B4DE',
+}
+
+# Region order for legend display
+REGIONS_SEQ = list(REGION_COLORS.keys())
+
+# Region overrides: structures that should be re-classified for display
+REGION_OVERRIDES = {
+    'Bed_nuclei_of_the_stria_terminalis': 'Amygdala',  # extended amygdala
+}
+
+
 # Helper for pretty p-value formatting everywhere
 def format_pval(pval):
     """Format a p-value as a string (number only, no 'p =' prefix)."""
@@ -221,16 +249,7 @@ def plot_structure_bias_comparison(
     show_region_legend : bool
         Whether to show the region color legend (default: True)
     """
-    REGIONS_seq = ['Isocortex','Olfactory_areas', 'Cortical_subplate', 
-                    'Hippocampus','Amygdala','Striatum', 
-                    "Thalamus", "Hypothalamus", "Midbrain", 
-                    "Medulla", "Pallidum", "Pons", 
-                    "Cerebellum"]
-    REG_COR_Dic = dict(zip(REGIONS_seq, ["#268ad5", "#D5DBDB", "#7ac3fa", 
-                                        "#2c9d39", "#742eb5", "#ed8921", 
-                                        "#e82315", "#E6B0AA", "#f6b26b",  
-                                        "#20124d", "#2ECC71", "#D2B4DE", 
-                                        "#ffd966", ]))
+    REG_COR_Dic = REGION_COLORS
 
     plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -244,17 +263,17 @@ def plot_structure_bias_comparison(
     scatter_handles = []
     scatter_labels = []
 
-    for region in REGIONS_seq:
+    for region in REGIONS_SEQ:
         region_data = merged_data[merged_data['Region'] == region]
         if len(region_data) > 0:  # Only plot if there's data for this region
             sc = ax1.scatter(
-                region_data[f'{metric}{suffixes[1]}'], 
-                region_data[f'{metric}{suffixes[0]}'], 
-                c=region_color_map[region], 
-                s=60, 
-                edgecolors='black', 
-                linewidth=0.5, 
-                alpha=0.8, 
+                region_data[f'{metric}{suffixes[1]}'],
+                region_data[f'{metric}{suffixes[0]}'],
+                color=region_color_map[region],
+                s=60,
+                edgecolors='black',
+                linewidth=0.5,
+                alpha=0.8,
                 label=region
             )
             scatter_handles.append(sc)
@@ -306,15 +325,17 @@ def plot_structure_bias_comparison(
 
     # Show region legend conditionally
     if show_region_legend:
-        # Build legend from the artists and region names (guaranteed unique order)
-        handles = []
-        used_labels = set()
+        # Build legend preserving REGIONS_SEQ order
+        unique_handles = []
+        unique_labels = []
+        seen = set()
         for reg, h in zip(scatter_labels, scatter_handles):
-            if reg not in used_labels:
-                handles.append(h)
-                used_labels.add(reg)
+            if reg not in seen:
+                unique_handles.append(h)
+                unique_labels.append(reg)
+                seen.add(reg)
         ax1.legend(
-            handles, list(used_labels), fontsize=12, bbox_to_anchor=(1.02, 1), loc='upper left'
+            unique_handles, unique_labels, fontsize=12, bbox_to_anchor=(1.02, 1), loc='upper left'
         )
     else:
         # No legend for regions
@@ -1114,17 +1135,8 @@ def plot_top_residual_structures_with_CI(merged_data, residual_ci_df=None, top_n
     else:
         top_diff['residual_plot'] = top_diff['residual']
 
-    # Define regions and colors
-    REGIONS_seq = ['Isocortex','Olfactory_areas', 'Cortical_subplate',
-                    'Hippocampus','Amygdala','Striatum',
-                    "Thalamus", "Hypothalamus", "Midbrain",
-                    "Medulla", "Pallidum", "Pons",
-                    "Cerebellum"]
-    REG_COR_Dic = dict(zip(REGIONS_seq, ["#268ad5", "#D5DBDB", "#7ac3fa",
-                                        "#2c9d39", "#742eb5", "#ed8921",
-                                        "#e82315", "#E6B0AA", "#f6b26b",
-                                        "#20124d", "#2ECC71", "#D2B4DE",
-                                        "#ffd966", ]))
+    # Use canonical region colors
+    REG_COR_Dic = REGION_COLORS
 
     # Create publication-quality plot of residuals for top_diff structures
     plt.rcParams.update({'font.size': 12, 'font.family': 'Arial'})
@@ -1148,8 +1160,8 @@ def plot_top_residual_structures_with_CI(merged_data, residual_ci_df=None, top_n
 
     # Add error bars if CI data is available
     if residual_ci_df is not None:
-        xerr_lower = x_vals - top_diff_sorted['ci_lower_plot'].values
-        xerr_upper = top_diff_sorted['ci_upper_plot'].values - x_vals
+        xerr_lower = np.maximum(0, x_vals - top_diff_sorted['ci_lower_plot'].values)
+        xerr_upper = np.maximum(0, top_diff_sorted['ci_upper_plot'].values - x_vals)
         ax.errorbar(x_vals, y_pos,
                     xerr=[xerr_lower, xerr_upper],
                     fmt='none', ecolor='black', elinewidth=1.5, capsize=3, capthick=1.5, alpha=0.7)
@@ -1575,20 +1587,7 @@ def plot_combined_bias_only(
     import matplotlib.patches as mpatches
     import os
 
-    REGIONS_seq = [
-        'Isocortex', 'Olfactory_areas', 'Cortical_subplate',
-        'Hippocampus', 'Amygdala', 'Striatum',
-        "Thalamus", "Hypothalamus", "Midbrain",
-        "Medulla", "Pallidum", "Pons",
-        "Cerebellum"
-    ]
-    REG_COR_Dic = dict(zip(REGIONS_seq, [
-        "#268ad5", "#D5DBDB", "#7ac3fa",
-        "#2c9d39", "#742eb5", "#ed8921",
-        "#e82315", "#E6B0AA", "#f6b26b",
-        "#20124d", "#2ECC71", "#D2B4DE",
-        "#ffd966",
-    ]))
+    REG_COR_Dic = REGION_COLORS
 
     def get_significance_star(q):
         if q < 0.001:
@@ -1628,9 +1627,9 @@ def plot_combined_bias_only(
         else:
             found_region_colors["Unknown"] = "#888888"
 
-    # For legend: order by REGIONS_seq, then add others
-    used_regions = [r for r in REGIONS_seq if r in found_region_colors]
-    others = sorted([r for r in found_region_colors if r not in REGIONS_seq])
+    # For legend: order by REGIONS_SEQ, then add others
+    used_regions = [r for r in REGIONS_SEQ if r in found_region_colors]
+    others = sorted([r for r in found_region_colors if r not in REGIONS_SEQ])
     legend_entries = used_regions + others
     legend_handles = [
         mpatches.Patch(color=found_region_colors[r], label=r.replace('_', ' ')) for r in legend_entries
@@ -2182,24 +2181,7 @@ def plot_circuit_scores_with_bootstrap_ci(
     return fig
 
 
-# ---------------------------------------------------------------------------
-# Region color palette (shared across circuit network and heatmap figures)
-# ---------------------------------------------------------------------------
-REGION_COLORS = {
-    'Isocortex': '#268ad5', 'Olfactory_areas': '#5ab4ac',
-    'Cortical_subplate': '#7ac3fa', 'Hippocampus': '#2c9d39',
-    'Amygdala': '#742eb5', 'Striatum': '#ed8921',
-    'Thalamus': '#e82315', 'Hypothalamus': '#c27ba0',
-    'Midbrain': '#f6b26b', 'Pallidum': '#2ECC71',
-    'Cerebellum': '#8B4513', 'Medulla': '#708090',
-    'Pons': '#A0522D',
-}
-
-
-# Region overrides: structures that should be re-classified for display
-_REGION_OVERRIDES = {
-    'Bed_nuclei_of_the_stria_terminalis': 'Amygdala',  # extended amygdala
-}
+# REGION_COLORS and REGION_OVERRIDES are defined at the top of this file
 
 
 def _wrap_label(name, max_chars=20):
@@ -2262,7 +2244,7 @@ def plot_circuit_network(structures, bias_df, weight_mat, anno_dict,
         Custom node positions {structure_name: (x, y)}. Overrides layout.
     region_overrides : dict or None
         Structure name -> region name overrides.  Defaults to
-        _REGION_OVERRIDES (e.g. BNST -> Amygdala).
+        REGION_OVERRIDES (e.g. BNST -> Amygdala).
     label_max_chars : int
         Max characters per line for label wrapping.
 
@@ -2273,7 +2255,7 @@ def plot_circuit_network(structures, bias_df, weight_mat, anno_dict,
     if region_colors is None:
         region_colors = REGION_COLORS
     if region_overrides is None:
-        region_overrides = _REGION_OVERRIDES
+        region_overrides = REGION_OVERRIDES
 
     structures = list(structures)
     n = len(structures)

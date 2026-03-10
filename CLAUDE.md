@@ -198,5 +198,21 @@ When reworking a notebook, apply every item:
 - This machine has 40 CPU cores and 2 GPUs
 - When plotting, use transparent backgrounds (`facecolor='none'`, `transparent=True` in savefig)
 - Gene weight `.gw` files are CSV format: `EntrezID,weight` (no header)
+- **Denoised (DN) gene weights are for cell-type (SC) analysis ONLY** — never use them for structure-level (STR_ISH) analysis. DN weights (`dat/Genetics/GeneWeights_DN/*.DN.gw`) apply a V2-V3 Spearman reproducibility filter (`weight_DN = weight_ISH × max(r, 0)²`), which changes EFFECT values. Using DN weights for STR_ISH pipelines (Snakefile.bias, Snakefile.circuit) produces corrupted results. Structure-level analysis must use the original weights (e.g., `Spark_Meta_EWS.GeneWeight.csv` or `ASD_All.gw`).
 - Structure bias DataFrames have columns: EFFECT, Rank, REGION (indexed by structure name)
 - Cell type bias DataFrames have columns: EFFECT, Rank (indexed by cell type cluster ID)
+
+### Region Colors
+- **Canonical region colors** are defined in `src/plot.py` as `REGION_COLORS` dict. Always import from there — never define local copies in notebooks.
+  ```python
+  from plot import REGION_COLORS
+  ```
+- Key colors: Isocortex=#268ad5 (blue), Striatum=#ed8921 (orange), Thalamus=#e82315 (red), Hippocampus=#2c9d39 (green), Cerebellum=#ffd966 (gold), Medulla=#20124d (dark purple)
+
+### Matplotlib Scatter Color Pitfalls
+- **Always use `color=` (not `c=`)** in `ax.scatter()` when specifying explicit colors with `plt.style.use('seaborn-v0_8-whitegrid')`. The `c=` parameter can be overridden by the seaborn style's prop_cycle; `color=` is not.
+- **Never convert a set to a list for legend labels** — `list(some_set)` has non-deterministic order, which scrambles legend labels vs handles. Use ordered deduplication instead:
+  ```python
+  seen = set()
+  unique = [x for x in items if x not in seen and not seen.add(x)]
+  ```
