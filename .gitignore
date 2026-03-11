@@ -31,7 +31,9 @@ notebook_validation/
 scripts/test_*.py
 
 # Legacy rebuttal notebooks (migrated to notebooks_mouse_str/)
-notebook_rebuttal/
+notebook_rebuttal/*
+!notebook_rebuttal/SplitHalf_Correlation.py
+!notebook_rebuttal/SplitHalf_Correlation.ipynb
 
 # Astro agent directory
 .astro/
