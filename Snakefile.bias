@@ -1,6 +1,8 @@
 import os
 
-configfile: "config/config.yaml"
+# No default configfile — must specify via --configfile to avoid accidental merging.
+# STR analysis: snakemake -s Snakefile.bias --configfile config/config.STR.yaml --cores 10
+# CT analysis:  snakemake -s Snakefile.bias --configfile config/config.SC.DN.yaml --cores 10
 
 # Pull variables from config
 GENESETS = config["gene_sets"]

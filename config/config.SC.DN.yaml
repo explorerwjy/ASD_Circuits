@@ -1,12 +1,12 @@
-# List of gene sets to analyze
+# Cell-type (CT) bias analysis — uses DN-denoised gene weights.
+# Usage: snakemake -s Snakefile.bias --configfile config/config.SC.DN.yaml --cores 10
+# DN weights: weight_DN = weight_ISH * max(spearman_r, 0)^2  (V2-V3 reproducibility)
+# Gene sets to analyze
 ProjDIR: "/home/jw3514/Work/ASD_Circuits_CellType/"  # Change to your project directory
 
 gene_sets:
   ASD_All:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw"
-    null_model: "mutability"
-  DDD_285:
-    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights_DN/DDD.top285.DN.gw"
     null_model: "mutability"
   DDD_285_ExcludeASD:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights_DN/DDD.top237.ExcludeASD.DN.gw"

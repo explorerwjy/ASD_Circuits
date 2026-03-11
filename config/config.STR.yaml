@@ -1,4 +1,6 @@
-# List of gene sets to analyze
+# STR-level (ISH) bias analysis — uses original (non-DN) gene weights.
+# Usage: snakemake -s Snakefile.bias --configfile config/config.STR.yaml --cores 10
+# Gene sets to analyze
 ProjDIR: "/home/jw3514/Work/ASD_Circuits_CellType/"  # Change to your project directory
 
 gene_sets:
@@ -100,11 +102,11 @@ analysis_types:
   # STR_MERIFH: 
   #   expr_matrix: "dat/BiasMatrices/MouseBrain_MERIFHbias.parquet"
   #   mode: "mouse_str_bias"
-  # CT_Z2 is here for notebook data loading only.
-  # For Snakefile.bias CT pipeline, use: --configfile config/config.SC.DN.yaml
-  CT_Z2:
-    expr_matrix: "dat/BiasMatrices/Cluster_Z2Mat_ISHMatch.z1clip3.parquet"
-    mode: "mouse_ct_bias"
+  # CT_Z2: DO NOT enable here — uses non-DN gene weights.
+  # Use config.SC.DN.yaml for cell-type analysis (DN-denoised weights).
+  # CT_Z2:
+  #   expr_matrix: "dat/BiasMatrices/Cluster_Z2Mat_ISHMatch.z1clip3.parquet"
+  #   mode: "mouse_ct_bias"
 
 # Output directory for all results
 output_dir: "results"
