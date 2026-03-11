@@ -21,6 +21,7 @@ from core.data_loader import (
     load_structure_region_map,
     load_weight_matrix,
 )
+from core.result_cache import load_result, save_result
 
 st.set_page_config(page_title="Circuit Search — GENCIC", page_icon="🔍", layout="wide")
 
@@ -84,37 +85,59 @@ st.info(
 run_btn = st.button("🚀 Run Circuit Search", use_container_width=True, type="primary")
 
 if run_btn:
-    progress_bar = st.progress(0, text="Starting circuit search…")
+    cache_params = {
+        "gene_set_label": gene_set_label,
+        "circuit_size": circuit_size,
+        "n_points": n_points,
+        "sa_runs": sa_runs,
+        "sa_steps": sa_steps,
+        "seed": seed,
+    }
 
-    def update_progress(completed: int, total: int):
-        progress_bar.progress(
-            completed / total,
-            text=f"SA run {completed} / {total}",
+    # Check cache first
+    cached_df = load_result("circuit_search", cache_params)
+    if cached_df is not None:
+        pareto_df = cached_df
+        st.session_state["pareto_results"] = pareto_df
+        st.success(
+            f"Loaded from cache — {len(pareto_df)} Pareto points.",
+            icon="✅",
+        )
+    else:
+        progress_bar = st.progress(0, text="Starting circuit search…")
+
+        def update_progress(completed: int, total: int):
+            progress_bar.progress(
+                completed / total,
+                text=f"SA run {completed} / {total}",
+            )
+
+        with st.spinner("Loading connectome matrices…"):
+            info_mat = load_info_matrix()
+            adj_mat = load_weight_matrix()
+
+        pareto_df = run_pareto_search(
+            bias_df=str_bias,
+            info_mat=info_mat,
+            adj_mat=adj_mat,
+            circuit_size=circuit_size,
+            n_points=n_points,
+            sa_runs=sa_runs,
+            sa_steps=sa_steps,
+            n_workers=10,
+            seed=seed,
+            progress_callback=update_progress,
         )
 
-    with st.spinner("Loading connectome matrices…"):
-        info_mat = load_info_matrix()
-        adj_mat = load_weight_matrix()
+        progress_bar.empty()
+        st.session_state["pareto_results"] = pareto_df
 
-    pareto_df = run_pareto_search(
-        bias_df=str_bias,
-        info_mat=info_mat,
-        adj_mat=adj_mat,
-        circuit_size=circuit_size,
-        n_points=n_points,
-        sa_runs=sa_runs,
-        sa_steps=sa_steps,
-        n_workers=10,
-        seed=seed,
-        progress_callback=update_progress,
-    )
-
-    progress_bar.empty()
-    st.session_state["pareto_results"] = pareto_df
-    st.success(
-        f"Circuit search complete! Found {len(pareto_df)} Pareto points.",
-        icon="✅",
-    )
+        # Save to cache
+        save_result("circuit_search", cache_params, pareto_df)
+        st.success(
+            f"Circuit search complete! Found {len(pareto_df)} Pareto points. (Cached for reuse)",
+            icon="✅",
+        )
 
 # ---------------------------------------------------------------------------
 # Display Pareto front

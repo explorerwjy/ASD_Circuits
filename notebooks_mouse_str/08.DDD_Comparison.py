@@ -50,30 +50,26 @@ topNs = np.arange(200, 5, -1)
 
 # %%
 # Load ASD bias and gene weights
-Spark_ASD_STR_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv", index_col=0)
+Spark_ASD_STR_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv", index_col=0)
 Spark_ASD_STR_Bias["Region"] = Spark_ASD_STR_Bias["REGION"]
-ASD_GW = Fil2Dict(os.path.join(ProjDIR, "dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw"))
+ASD_GW = Fil2Dict(os.path.join(ProjDIR, "dat/Genetics/GeneWeights/ASD_All.gw"))
 ASD_GENES = list(ASD_GW.keys())
 
-# Load DDD bias and gene weights
-DDD_GW = Fil2Dict(config["gene_sets"]["DDD_293"]["geneweights"])
+# Load DDD bias (recomputed from config gene weights)
+DDD_GW = Fil2Dict(config["gene_sets"]["DDD_285"]["geneweights"])
 DDD_STR_Bias = MouseSTR_AvgZ_Weighted(STR_BiasMat, DDD_GW)
 DDD_STR_Bias["Region"] = [STR_Anno.get(s, "Unknown") for s in DDD_STR_Bias.index]
 
-# DDD excluding ASD genes
+# DDD excluding ASD genes (recompute from full DDD minus ASD_All genes)
 DDD_GW_filt_ASD = {k: v for k, v in DDD_GW.items() if k not in ASD_GENES}
-print(f"DDD genes: {len(DDD_GW)}, after excluding ASD: {len(DDD_GW_filt_ASD)}")
+print(f"DDD genes: {len(DDD_GW)}, after excluding ASD ({len(ASD_GENES)} genes): {len(DDD_GW_filt_ASD)}")
 DDD_rmASD_STR_Bias = MouseSTR_AvgZ_Weighted(STR_BiasMat, DDD_GW_filt_ASD)
 DDD_rmASD_STR_Bias["Region"] = [STR_Anno.get(s, "Unknown") for s in DDD_rmASD_STR_Bias.index]
 
-# Save gene weight files
-Dict2Fil(DDD_GW, os.path.join(ProjDIR, "dat/Genetics/GeneWeights/DDD.top293.gw"))
-Dict2Fil(DDD_GW_filt_ASD, os.path.join(ProjDIR, "dat/Genetics/GeneWeights/DDD.top245.ExcludeASD.gw"))
-
 # %%
-# Load circuit structures
-GENCIC = pd.read_csv('../results/GENCIC_MouseSTRBias.csv', index_col=0)
-Circuit_STRs = GENCIC[GENCIC["Circuits.46"] == 1]["Structure"].values
+# Load circuit structures (canonical pipeline output)
+ASD_CircuitsSet = pd.read_csv("../results/STR_ISH/ASD.SA.Circuits.Size46.csv", index_col="idx")
+Circuit_STRs = ASD_CircuitsSet.loc[3, "STRs"].split(";")
 
 # %% [markdown]
 # # Section 1: DDD vs ASD -- Structure Level

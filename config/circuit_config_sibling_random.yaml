@@ -24,7 +24,7 @@ sibling_bias_parquet: "results/Sibling_bias/Random_61gene/sibling_random_bias.pa
 # reference at the same rank.  SA search uses transferred values;
 # real sibling bias is recalculated during aggregation.
 # Change this to align siblings to a different test dataset (e.g., SCZ).
-reference_bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+reference_bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv"
 
 # Prefix for dataset names
 sibling_dataset_prefix: "ASD_Sib_Random_"
@@ -41,7 +41,7 @@ include_main_dataset: true
 Input_str_bias:
   ASD_Main:
     name: "ASD_SPARK_Main"
-    bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+    bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv"
     description: "Main ASD SPARK result (for comparison with sibling null)"
 
 # ============================================================================

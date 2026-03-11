@@ -106,7 +106,7 @@ class STRBias:
 
 # %% hidden=true
 # ASD Z2 and 61 Rand Genes
-ASD_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv", index_col="STR")
+ASD_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv", index_col="STR")
 ASD_Sim_dir = "../dat/Unionize_bias/SubSampleSib/"
 ASD_Z2_Bias, ASD_Z2_Match_Bias_Rank, ASD_Z2_Sim_Bias_STR = LoadBiasData2(
     ASD_Bias, ASD_Sim_dir)
@@ -115,17 +115,9 @@ ASD_Z2_Bias, ASD_Z2_Match_Bias_Rank, ASD_Z2_Sim_Bias_STR = LoadBiasData2(
 mpl.style.use('default')
 fig, ax = plt.subplots(figsize=(6, 8), dpi=480)
 
-# Define region color mapping
-REGIONS_seq = ['Isocortex','Olfactory_areas', 'Cortical_subplate', 
-                'Hippocampus','Amygdala','Striatum', 
-                "Thalamus", "Hypothalamus", "Midbrain", 
-                "Medulla", "Pallidum", "Pons", 
-                "Cerebellum"]
-REG_COR_Dic = dict(zip(REGIONS_seq, ["#268ad5", "#D5DBDB", "#7ac3fa", 
-                                    "#2c9d39", "#742eb5", "#ed8921", 
-                                    "#e82315", "#E6B0AA", "#f6b26b",  
-                                    "#20124d", "#2ECC71", "#D2B4DE", 
-                                    "#ffd966", ]))
+# Use canonical region color mapping from plot.py
+REG_COR_Dic = REGION_COLORS
+REGIONS_seq = REGIONS_SEQ
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -192,16 +184,8 @@ main_legend = ax.legend(marker_handles, ['ASD Probands', 'Siblings'],
 main_legend.get_frame().set_edgecolor('grey')
 main_legend.get_frame().set_linewidth(0.5)
 
-REGIONS_seq = ['Isocortex','Olfactory_areas', 'Cortical_subplate', 
-                'Hippocampus','Amygdala','Striatum', 
-                "Thalamus", "Hypothalamus", "Midbrain", 
-                "Medulla", "Pallidum", "Pons", 
-                "Cerebellum"]
-REG_COR_Dic = dict(zip(REGIONS_seq, ["#268ad5", "#D5DBDB", "#7ac3fa", 
-                                    "#2c9d39", "#742eb5", "#ed8921", 
-                                    "#e82315", "#E6B0AA", "#f6b26b",  
-                                    "#20124d", "#2ECC71", "#D2B4DE", 
-                                    "#ffd966", ]))
+REG_COR_Dic = REGION_COLORS
+REGIONS_seq = REGIONS_SEQ
 
 # Add a legend to highlight region color mapping
 from matplotlib.lines import Line2D
@@ -225,17 +209,9 @@ ax.grid(True)
 mpl.style.use('default')
 fig, ax = plt.subplots(figsize=(6, 8), dpi=480)
 
-# Define region color mapping
-REGIONS_seq = ['Isocortex','Olfactory_areas', 'Cortical_subplate', 
-                'Hippocampus','Amygdala','Striatum', 
-                "Thalamus", "Hypothalamus", "Midbrain", 
-                "Medulla", "Pallidum", "Pons", 
-                "Cerebellum"]
-REG_COR_Dic = dict(zip(REGIONS_seq, ["#268ad5", "#D5DBDB", "#7ac3fa", 
-                                    "#2c9d39", "#742eb5", "#ed8921", 
-                                    "#e82315", "#E6B0AA", "#f6b26b",  
-                                    "#20124d", "#2ECC71", "#D2B4DE", 
-                                    "#ffd966", ]))
+# Use canonical region color mapping from plot.py
+REG_COR_Dic = REGION_COLORS
+REGIONS_seq = REGIONS_SEQ
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -302,16 +278,8 @@ main_legend = ax.legend(marker_handles, ['ASD Probands', 'Siblings'],
 main_legend.get_frame().set_edgecolor('grey')
 main_legend.get_frame().set_linewidth(0.5)
 
-REGIONS_seq = ['Isocortex','Olfactory_areas', 'Cortical_subplate', 
-                'Hippocampus','Amygdala','Striatum', 
-                "Thalamus", "Hypothalamus", "Midbrain", 
-                "Medulla", "Pallidum", "Pons", 
-                "Cerebellum"]
-REG_COR_Dic = dict(zip(REGIONS_seq, ["#268ad5", "#D5DBDB", "#7ac3fa", 
-                                    "#2c9d39", "#742eb5", "#ed8921", 
-                                    "#e82315", "#E6B0AA", "#f6b26b",  
-                                    "#20124d", "#2ECC71", "#D2B4DE", 
-                                    "#ffd966", ]))
+REG_COR_Dic = REGION_COLORS
+REGIONS_seq = REGIONS_SEQ
 
 # Add a legend to highlight region color mapping
 from matplotlib.lines import Line2D
@@ -344,25 +312,8 @@ from matplotlib.lines import Line2D
 plt.style.use('seaborn-v0_8-whitegrid')
 fig, ax = plt.subplots(figsize=(6, 8), dpi=480)
 
-# ----------------------------------------------------
-# Define region color mapping
-# ----------------------------------------------------
-REGIONS_SEQ = [
-    'Isocortex', 'Olfactory_areas', 'Cortical_subplate',
-    'Hippocampus', 'Amygdala', 'Striatum',
-    'Thalamus', 'Hypothalamus', 'Midbrain',
-    'Medulla', 'Pallidum', 'Pons', 'Cerebellum'
-]
-
-REG_COLORS = [
-    "#268ad5", "#D5DBDB", "#7ac3fa",
-    "#2c9d39", "#742eb5", "#ed8921",
-    "#e82315", "#E6B0AA", "#f6b26b",
-    "#20124d", "#2ECC71", "#D2B4DE",
-    "#ffd966"
-]
-
-REG_COLOR_DICT = dict(zip(REGIONS_SEQ, REG_COLORS))
+# Use canonical region color mapping from plot.py
+REG_COLOR_DICT = REGION_COLORS
 
 # ----------------------------------------------------
 # Determine region annotations from dataframe
@@ -546,13 +497,14 @@ for file in os.listdir(ASD_Sim_dir):
 
 # %%
 DIR = "../results/STR_ISH/"
+# Negative controls are GWAS gene sets (not mutation-derived), so random null is appropriate
 control_files = {
-    "T2D": "T2D_bias_addP_sibling.csv",
-    #"Parkinson": "Parkinson_bias_addP_sibling.csv",
-    #"HBALC": "hba1c_bias_addP_sibling.csv",
-    "IBD": "IBD_bias_addP_sibling.csv",
-    "HDL_C": "HDL_C_bias_addP_sibling.csv",
-    #"Alzheimer": "Alzheimer_bias_addP_sibling.csv"
+    "T2D": "T2D_bias_addP_random.csv",
+    #"Parkinson": "Parkinson_bias_addP_random.csv",
+    #"HBALC": "hba1c_bias_addP_random.csv",
+    "IBD": "IBD_bias_addP_random.csv",
+    "HDL_C": "HDL_C_bias_addP_random.csv",
+    #"Alzheimer": "Alzheimer_bias_addP_random.csv"
 }
 
 control_dfs = {}
@@ -654,23 +606,8 @@ fig, (ax1, ax2, ax3) = plt.subplots(3,1, dpi=480, figsize=(6,9))
 BarLen = 34.1
 #BarLen = 47.5
 
-# Define region color mapping
-REGIONS_SEQ = [
-    'Isocortex', 'Olfactory_areas', 'Cortical_subplate',
-    'Hippocampus', 'Amygdala', 'Striatum', 
-    'Thalamus', 'Hypothalamus', 'Midbrain',
-    'Medulla', 'Pallidum', 'Pons', 'Cerebellum'
-]
-
-REG_COLORS = [
-    "#268ad5", "#D5DBDB", "#7ac3fa",
-    "#2c9d39", "#742eb5", "#ed8921",
-    "#e82315", "#E6B0AA", "#f6b26b", 
-    "#20124d", "#2ECC71", "#D2B4DE",
-    "#ffd966"
-]
-
-REG_COLOR_DICT = dict(zip(REGIONS_SEQ, REG_COLORS))
+# Use canonical region color mapping from plot.py
+REG_COLOR_DICT = REGION_COLORS
 
 cont = np.median(Cont_Distance, axis=0)
 for i, (score, region) in enumerate(zip(ASD_Distance, ASD_Bias['REGION'])):
@@ -912,7 +849,7 @@ ax.set_ylabel("Mean Top 5 Expression Bias")
 # #### Normalization for neuronal density and neuron-to-glia ratio.
 
 # %% hidden=true
-ASD_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv", index_col="STR")
+ASD_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv", index_col="STR")
 ASD_Neuron_den_norm_bias = pd.read_csv("../dat/Unionize_bias/ASD.neuron.density.norm.bias.csv", 
                                       index_col="STR")
 ASD_Glia_norm_bias = pd.read_csv("../dat/Unionize_bias/ASD.neuro2glia.norm.bias.csv", 
@@ -982,7 +919,7 @@ plt.show()
 # #### ASC 102, Spark 159, Spark 61
 
 # %% hidden=true
-ASD_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv", index_col="STR")
+ASD_Bias = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv", index_col="STR")
 ASD_ASC = pd.read_csv("../dat/Unionize_bias/ASD.ASC102.Z2.bias.csv", 
                                       index_col="STR")
 ASD_159 = pd.read_csv("../dat/Unionize_bias/ASD.159.pLI.z2.csv", 

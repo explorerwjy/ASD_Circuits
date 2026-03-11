@@ -18,7 +18,7 @@ The analysis pipeline:
 ```bash
 python scripts/script_permutation_bias_comparison.py \
     --gw1 dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw \
-    --gw2 dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw \
+    --gw2 dat/Genetics/GeneWeights_DN/DDD.top237.ExcludeASD.DN.gw \
     --expr_mat dat/BiasMatrices/MouseCT.TPM.1.Filt.Spec.clip.lowexp.100000.qn.parquet \
     --cluster_ann dat/MouseCT_Cluster_Anno.csv \
     --n_perms 10000 \
@@ -33,7 +33,7 @@ python scripts/script_permutation_bias_comparison.py \
 ```bash
 python scripts/script_permutation_bias_comparison.py \
     --gw1 dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw \
-    --gw2 dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw \
+    --gw2 dat/Genetics/GeneWeights_DN/DDD.top237.ExcludeASD.DN.gw \
     --expr_mat dat/BiasMatrices/MouseCT.TPM.1.Filt.Spec.clip.lowexp.100000.qn.parquet \
     --cluster_ann dat/MouseCT_Cluster_Anno.csv \
     --filter_class "09 CNU-LGE GABA" \
@@ -64,7 +64,7 @@ python scripts/script_permutation_bias_comparison.py \
 ```bash
 python scripts/script_permutation_bias_comparison.py \
     --gw1 dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw \
-    --gw2 dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw \
+    --gw2 dat/Genetics/GeneWeights_DN/DDD.top237.ExcludeASD.DN.gw \
     --expr_mat dat/BiasMatrices/MouseCT.TPM.1.Filt.Spec.clip.lowexp.100000.qn.parquet \
     --cluster_ann dat/MouseCT_Cluster_Anno.csv \
     --n_perms 1000 \
@@ -79,7 +79,7 @@ python scripts/script_permutation_bias_comparison.py \
 ```bash
 python scripts/script_permutation_bias_comparison.py \
     --gw1 dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw \
-    --gw2 dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw \
+    --gw2 dat/Genetics/GeneWeights_DN/DDD.top237.ExcludeASD.DN.gw \
     --expr_mat dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet \
     --n_perms 10000 \
     --output results/permutation_ASD_vs_DDD_structures.csv \

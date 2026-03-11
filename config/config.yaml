@@ -17,11 +17,11 @@ gene_sets:
   DDD_61:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top61.gw"
     null_model: "mutability"
-  DDD_293:
-    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.gw"
+  DDD_285:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top285.gw"
     null_model: "mutability"
-  DDD_293_ExcludeASD:
-    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top293.ExcludeASD.gw"
+  DDD_285_ExcludeASD:
+    geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/DDD.top237.ExcludeASD.gw"
     null_model: "mutability"
   ASC_102:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/GW_ASC_102.gw"
@@ -141,7 +141,7 @@ data_files:
   merfish_annotation_parquet: "dat/MERFISH/MERFISH.ISH_Annot.parquet"
   merfish_ccf_ontology: "dat/MERFISH/CCF_V3_ISH_MERFISH.csv"
   # Structure-level bias (FDR-adjusted, used as ISH structure reference list)
-  str_bias_fdr: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+  str_bias_fdr: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv"
   asd_gene_weights_v2: "dat/Unionize_bias/Spark_Meta_EWS.GeneWeight.v2.csv"
   # MERFISH Z2 expression matrices (structure-level, ISH-matched)
   merfish_z2_cell_mean: "dat/MERFISH/STR_Cell_Mean_Z2Mat_ISHMatch.csv"
@@ -172,7 +172,8 @@ data_files:
   merfish_zhuang_vol_mean_umi: "dat/MERFISH_Zhuang/STR_Vol_Mean_DF.UMI.csv"
   # Cell-type gene weights (DN = expressed in Allen ISH + matched gene set)
   asd_gene_weights_dn: "dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw"
-  ddd_gene_weights_dn: "dat/Genetics/GeneWeights_DN/DDD.top293.ExcludeASD.DN.gw"
+  ddd_gene_weights_dn: "dat/Genetics/GeneWeights_DN/DDD.top237.ExcludeASD.DN.gw"
+  loeuf_gene_weights_dn: "dat/Genetics/GeneWeights_DN/constraint_top25_LOEUF.DN.gw"
   # MERFISH cells annotated with ASD bias (produced by 06.Bias_Display)
   merfish_cells_bias_annotated: "notebooks_mouse_sc/dat/MERFISH/MERFISH.cells.ASD.Bias.Anno.parquet"
   # Subclass expression matrices split by 10x chemistry (V2 vs V3, for DN weighting)

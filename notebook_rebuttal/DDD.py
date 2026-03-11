@@ -76,9 +76,8 @@ print(f"DDD genes: {len(DDD_GW)}, after excluding ASD: {len(DDD_GW_filt_ASD)}")
 DDD_rmASD_STR_Bias = MouseSTR_AvgZ_Weighted(STR_BiasMat, DDD_GW_filt_ASD)
 DDD_rmASD_STR_Bias["Region"] = [STR_Anno.get(s, "Unknown") for s in DDD_rmASD_STR_Bias.index]
 
-# Save gene weight files
-Dict2Fil(DDD_GW, ProjDIR + "/dat/Genetics/GeneWeights/DDD.top293.gw")
-Dict2Fil(DDD_GW_filt_ASD, ProjDIR + "/dat/Genetics/GeneWeights/DDD.top245.ExcludeASD.gw")
+# NOTE: DDD gene weight files (DDD.top293.gw, DDD.top245.ExcludeASD.gw) are produced by
+# notebook_rebuttal/Mut_Bootstrap.ipynb from the original DDD Excel source.
 
 # %%
 # Load cell type bias data

@@ -56,7 +56,7 @@ DEFAULTS = {
     'gene_weights': 'dat/Genetics/GeneWeights/Spark_Meta_160.GeneWeight.csv',
     'sibling_pool': 'dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv',
     'gene_prob': 'dat/Genetics/GeneWeights/GeneProb_LGD_Dmis.csv',
-    'reference_bias_df': 'dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv',
+    'reference_bias_df': 'dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv',
     'n_sims': 10000,
     'base_seed': 20260210,
 }

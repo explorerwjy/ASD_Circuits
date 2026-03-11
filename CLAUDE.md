@@ -122,7 +122,7 @@ snakemake -s Snakefile.circuit.sibling --configfile config/circuit_config_siblin
 
 ### Gene Set Types in `config.yaml`
 - **ASD cohorts**: ASD_HIQ, ASD_LIQ, ASD_SPARK_159, Spark_top20, Fu_ASD_72/185, ASC_102
-- **NDD**: DDD_61, DDD_293, DDD_293_ExcludeASD
+- **NDD**: DDD_61, DDD_285, DDD_285_ExcludeASD
 - **Schizophrenia**: SCZ
 - **Constraint**: Constraint_top25_LOEUF
 - **Neurotransmitter systems**: Dopamine/Serotonin/Oxytocin/Acetylcholine (source/target/combined)

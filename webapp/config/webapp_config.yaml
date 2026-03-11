@@ -5,6 +5,12 @@
 # "../dat/" resolves to the project-root dat/ directory when running from webapp/.
 
 # ============================================================================
+# Result Cache (absolute path — isolates webapp outputs from project source)
+# ============================================================================
+cache:
+  cache_dir: "/mnt/data0/Gencic_web_Cache"
+
+# ============================================================================
 # Data File Paths (relative to webapp/ directory)
 # ============================================================================
 data_files:
@@ -110,6 +116,18 @@ gene_set_presets:
     category: "ASD"
     description: "185 ASD-associated genes from Fu et al. 2022"
 
+  - name: "ASD_All"
+    label: "ASD All (61 genes)"
+    file: "ASD_All.gw"
+    category: "ASD"
+    description: "Combined ASD gene set — 61 high-confidence genes"
+
+  - name: "SPARK_61"
+    label: "SPARK EWS (61 genes)"
+    file: "Spark_Meta_EWS.GeneWeight.gw"
+    category: "ASD"
+    description: "SPARK meta-analysis, exome-wide significant — 61 genes"
+
   # NDD cohorts
   - name: "DDD_61"
     label: "DDD (61 genes)"
@@ -117,17 +135,17 @@ gene_set_presets:
     category: "NDD"
     description: "Top 61 NDD genes from Deciphering Developmental Disorders study"
 
-  - name: "DDD_293"
-    label: "DDD (293 genes)"
-    file: "DDD.top293.gw"
+  - name: "DDD_285"
+    label: "DDD (285 genes)"
+    file: "DDD.top285.gw"
     category: "NDD"
-    description: "Top 293 NDD genes from Deciphering Developmental Disorders study"
+    description: "Top 285 NDD genes from Deciphering Developmental Disorders study"
 
-  - name: "DDD_293_ExcludeASD"
-    label: "DDD (293 genes, excluding ASD)"
-    file: "DDD.top293.ExcludeASD.gw"
+  - name: "DDD_285_ExcludeASD"
+    label: "DDD (285 genes, excluding ASD)"
+    file: "DDD.top237.ExcludeASD.gw"
     category: "NDD"
-    description: "293 NDD genes from DDD, excluding ASD overlap genes"
+    description: "285 NDD genes from DDD, excluding ASD overlap genes"
 
   # Constraint
   - name: "Constraint_top25_LOEUF"

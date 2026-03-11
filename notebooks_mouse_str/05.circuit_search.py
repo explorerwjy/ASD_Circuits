@@ -156,23 +156,9 @@ plt.show()
 # Each bootstrap sample resamples mutations and runs the full SA pipeline.
 
 # %%
-import glob
-
-Boot_DIR = "../results/CircuitSearch_Bootstrap/"
-pareto_files = glob.glob(Boot_DIR + "*/pareto_fronts/*_pareto_front.csv")
-pareto_files.sort()
-print(f"Found {len(pareto_files)} pareto front files")
-
-# %%
-# Read and combine all pareto front CSV files
-all_pareto_data = []
-for pf_file in pareto_files:
-    boot_id = os.path.basename(os.path.dirname(os.path.dirname(pf_file)))
-    df = pd.read_csv(pf_file)
-    df['boot_id'] = boot_id
-    all_pareto_data.append(df)
-
-combined_pareto_df = pd.concat(all_pareto_data, ignore_index=True)
+# Load pre-aggregated bootstrap pareto fronts (from CircuitSearch_Bootstrap_Summary)
+combined_pareto_path = "../results/CircuitSearch_Bootstrap_Summary/all_pareto_fronts_size_46_combined.csv"
+combined_pareto_df = pd.read_csv(combined_pareto_path)
 print(f"Total rows: {len(combined_pareto_df)}, "
       f"boot IDs: {combined_pareto_df['boot_id'].nunique()}")
 

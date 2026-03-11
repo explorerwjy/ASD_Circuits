@@ -159,7 +159,7 @@ print(pearson_corr.round(3))
 # Load GENCIC bias from primary source files (not compiled Excel)
 import yaml
 
-bias_fdr = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"))
+bias_fdr = pd.read_csv(os.path.join(ProjDIR, "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv"))
 if "Structure" in bias_fdr.columns and "STR" not in bias_fdr.columns:
     bias_fdr = bias_fdr.rename(columns={"Structure": "STR"})
 bias_fdr = bias_fdr.set_index("STR")

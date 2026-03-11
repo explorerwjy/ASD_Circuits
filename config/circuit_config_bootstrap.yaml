@@ -29,7 +29,7 @@ include_main_dataset: true
 Input_str_bias:
   ASD_Main:
     name: "ASD_SPARK_Main"
-    bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+    bias_df: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv"
     description: "Main ASD SPARK result (for comparison with bootstrap CI)"
 
 # ============================================================================

@@ -31,6 +31,7 @@ from core.data_loader import (
     load_structure_region_map,
     load_webapp_config,
 )
+from core.result_cache import load_result, save_result
 
 logger = logging.getLogger(__name__)
 
@@ -404,41 +405,68 @@ run_btn = st.button(
 # ---------------------------------------------------------------------------
 if run_btn:
     st.divider()
-    progress_bar = st.progress(0, text="Starting permutation test\u2026")
 
-    try:
-        result_df, null_matrix = _run_permutation_test(
-            expr_mat=expr_mat,
-            gene_weights=gene_weights,
-            n_perms=n_perms,
-            seed=seed,
-            progress_bar=progress_bar,
+    cache_params = {
+        "gene_set_label": gene_set_label,
+        "analysis_type": selected_analysis,
+        "n_perms": n_perms,
+        "seed": seed,
+    }
+
+    # Check cache first
+    cached_df = load_result("permutation", cache_params)
+    if cached_df is not None:
+        result_df = cached_df
+        null_matrix = None  # Not cached (too large)
+
+        st.session_state["permutation_results"] = result_df
+        st.session_state["permutation_null_matrix"] = null_matrix
+        st.session_state["perm_gene_set_label"] = gene_set_label
+        st.session_state["perm_analysis_type_used"] = selected_analysis
+        st.session_state["perm_n_perms"] = n_perms
+
+        st.success(
+            f"Loaded from cache ({n_perms:,} permutations, seed={seed}).",
+            icon="\u2705",
         )
-    except ValueError as exc:
+    else:
+        progress_bar = st.progress(0, text="Starting permutation test\u2026")
+
+        try:
+            result_df, null_matrix = _run_permutation_test(
+                expr_mat=expr_mat,
+                gene_weights=gene_weights,
+                n_perms=n_perms,
+                seed=seed,
+                progress_bar=progress_bar,
+            )
+        except ValueError as exc:
+            progress_bar.empty()
+            st.error(str(exc), icon="\u274c")
+            st.stop()
+
         progress_bar.empty()
-        st.error(str(exc), icon="\u274c")
-        st.stop()
 
-    progress_bar.empty()
+        # Add region info for structure-level analysis
+        if selected_analysis == "STR_ISH":
+            region_map = load_structure_region_map()
+            result_df["Region"] = result_df.index.map(
+                lambda s: region_map.get(s, "Unknown")
+            )
 
-    # Add region info for structure-level analysis
-    if selected_analysis == "STR_ISH":
-        region_map = load_structure_region_map()
-        result_df["Region"] = result_df.index.map(
-            lambda s: region_map.get(s, "Unknown")
+        # Persist results in session_state
+        st.session_state["permutation_results"] = result_df
+        st.session_state["permutation_null_matrix"] = null_matrix
+        st.session_state["perm_gene_set_label"] = gene_set_label
+        st.session_state["perm_analysis_type_used"] = selected_analysis
+        st.session_state["perm_n_perms"] = n_perms
+
+        # Save to cache (result_df only, not the large null_matrix)
+        save_result("permutation", cache_params, result_df)
+        st.success(
+            f"Permutation test complete ({n_perms:,} permutations, seed={seed}). (Cached for reuse)",
+            icon="\u2705",
         )
-
-    # Persist results in session_state
-    st.session_state["permutation_results"] = result_df
-    st.session_state["permutation_null_matrix"] = null_matrix
-    st.session_state["perm_gene_set_label"] = gene_set_label
-    st.session_state["perm_analysis_type_used"] = selected_analysis
-    st.session_state["perm_n_perms"] = n_perms
-
-    st.success(
-        f"Permutation test complete ({n_perms:,} permutations, seed={seed}).",
-        icon="\u2705",
-    )
 
 # ---------------------------------------------------------------------------
 # Display results (if available in session_state)

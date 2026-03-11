@@ -327,6 +327,40 @@ def load_preset_gene_weights(preset_name: str) -> Dict[int, float]:
 
 
 # ---------------------------------------------------------------------------
+# Cell-type cluster annotation loader
+# ---------------------------------------------------------------------------
+
+@st.cache_resource(show_spinner="Loading cell-type cluster annotations…")
+def load_ct_cluster_annotation() -> pd.DataFrame:
+    """Load the Allen Brain Cell Atlas cluster annotation table.
+
+    Rows are indexed by ``cluster_id_label`` (matching CT bias matrix columns).
+    Contains class/subclass hierarchy, neurotransmitter type, and spatial
+    composition (CCF_broad.freq).
+
+    Returns
+    -------
+    pd.DataFrame
+        Shape (5322, ~46).  Index is cluster_id_label.
+    """
+    cfg = load_webapp_config()
+    rel_path = cfg["data_files"]["ct_cluster_annotation"]
+    abs_path = _resolve(rel_path)
+
+    logger.info("Loading CT cluster annotation from %s", abs_path)
+    if not abs_path.exists():
+        raise FileNotFoundError(
+            f"CT cluster annotation not found: {abs_path}\n"
+            f"Expected at: {rel_path} (relative to webapp/)"
+        )
+
+    df = pd.read_csv(abs_path)
+    df = df.set_index("cluster_id_label")
+    logger.info("CT cluster annotation loaded — shape: %s", df.shape)
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Structure-to-region mapping loader
 # ---------------------------------------------------------------------------
 

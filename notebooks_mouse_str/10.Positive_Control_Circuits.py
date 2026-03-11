@@ -207,7 +207,7 @@ IBD = pd.read_csv(os.path.join(DIR, "IBD_bias_addP_sibling.csv"), index_col=0)
 HDL_C = pd.read_csv(os.path.join(DIR, "HDL_C_bias_addP_sibling.csv"), index_col=0)
 Alzheimer = pd.read_csv(os.path.join(DIR, "Alzheimer_bias_addP_sibling.csv"), index_col=0)
 #ASD = pd.read_csv(DIR + "ASD_bias_addP_sibling.csv", index_col=0)
-ASD = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv", index_col="STR")
+ASD = pd.read_csv("../dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv", index_col="STR")
 
 # %%
 # Calculate circuit scores for each disorder dataset

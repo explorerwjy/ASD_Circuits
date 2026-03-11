@@ -49,161 +49,62 @@ entrez_ids = [int(GeneSymbol2Entrez.get(x, -1)) for x in hc_df["symbol"].values]
 hc_df["EntrezID"] = entrez_ids
 hc_df.shape
 
-# %%
-hc_df.head(5)
+# %% [markdown]
+# ## Generate DDD Gene Weight Files
 
 # %%
-hc_df["AutismMerged_LoF"] = (
-    df.loc[hc_df.index, "frameshift_variant"].fillna(0)
-    + df.loc[hc_df.index, "splice_acceptor_variant"].fillna(0)
-    + df.loc[hc_df.index, "splice_donor_variant"].fillna(0)
-    + df.loc[hc_df.index, "stop_gained"].fillna(0)
-    + df.loc[hc_df.index, "stop_lost"].fillna(0)
-).astype(int).clip(lower=0)
-
-hc_df["AutismMerged_Dmis_REVEL0.5"] = df.loc[hc_df.index, "missense_variant"].fillna(0).astype(int).clip(lower=0)
-
-hc_df = hc_df[["EntrezID", "symbol", "AutismMerged_LoF", "AutismMerged_Dmis_REVEL0.5"]]
-hc_df = hc_df.set_index("EntrezID", drop=False)
+# Produce DDD.top293.gw from full 293 significant genes (before ASD exclusion)
+# This is the canonical source for this gene weight file
+DDD_top293_GW = Aggregate_Gene_Weights_NDD(hc_df, out="../dat/Genetics/GeneWeights/DDD.top293.gw")
+print(f"DDD.top293.gw: {len(DDD_top293_GW)} genes, top weight: {max(DDD_top293_GW.values()):.3f}")
 
 # %%
-# Exclude ASD genes from hc_df before bootstrap
+# Exclude ASD genes (using DN weights) — done before column subsetting
+# so Aggregate_Gene_Weights_NDD can read the raw Excel columns directly
 ASD_GW = Fil2Dict(ProjDIR+"dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw")
 ASD_GENES = list(ASD_GW.keys())
-print(f"Total genes in hc_df before excluding ASD: {len(hc_df)}")
-print(f"Number of ASD genes to exclude: {len(ASD_GENES)}")
-
-# Filter out ASD genes
-hc_df = hc_df[~hc_df["EntrezID"].isin(ASD_GENES)]
-print(f"Total genes in hc_df after excluding ASD: {len(hc_df)}")
-print(f"Excluded {len(ASD_GENES)} ASD genes")
-
+hc_df_excl = hc_df[~hc_df["EntrezID"].isin(ASD_GENES)]
+print(f"DDD genes: {len(hc_df)}, after excluding {len(ASD_GENES)} ASD genes: {len(hc_df_excl)}")
 
 # %%
-hc_df.head(5)
-
-
-# %%
-# DDD_hc_GW = Aggregate_Gene_Weights_NDD(hc_df, out="../dat/GeneWeights/DDD.hc.gw.csv")
-# NDD_top61_DF = hc_df.head(61)
-# DDD_top61_GW = Aggregate_Gene_Weights_NDD(NDD_top61_DF, out="../dat/GeneWeights/DDD.top61.gw.csv")
-#Dict2Fil(DDD_top61_GW, "../dat/GeneWeights/DDD.top61.gw.csv")
+# Produce DDD.top245.ExcludeASD.gw using library function (reads raw variant columns)
+DDD_ExcludeASD_GW = Aggregate_Gene_Weights_NDD(hc_df_excl, out="../dat/Genetics/GeneWeights/DDD.top245.ExcludeASD.gw")
+print(f"DDD.top245.ExcludeASD.gw: {len(DDD_ExcludeASD_GW)} genes")
 
 # %%
-def bootstrap_gene_mutations(
-    df,
-    n_boot=10,
-    weighted=True,
-    lof_col="AutismMerged_LoF",
-    dmis_col="AutismMerged_Dmis_REVEL0.5",
-    rng=None,
-):
-    """
-    Bootstrap mutation counts at the mutation level, preserving gene identity
-    and total mutation load. Supports weighted (mutation-rate) or uniform resampling.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input dataframe with gene-level LOF and Dmis mutation counts.
-    n_boot : int, optional
-        Number of bootstrap replicates (default = 10).
-    weighted : bool, optional
-        If True, mutations are resampled with probability proportional to observed counts.
-        If False, each gene has equal probability of receiving any mutation.
-    lof_col, dmis_col : str
-        Column names for LOF and Dmis counts.
-    rng : np.random.Generator, optional
-        Numpy random generator for reproducibility.
-
-    Returns
-    -------
-    boot_DFs : list of pd.DataFrame
-        List of bootstrapped dataframes with resampled mutation counts and 'bootstrap_iter' column.
-    """
-    if rng is None:
-        rng = np.random.default_rng(42)
-
-    n = len(df)
-    boot_DFs = []
-
-    # Ensure integer non-negative mutation counts
-    # lof = (df["frameshift_variant"] + df["splice_acceptor_variant"] + df["splice_donor_variant"] + df["stop_gained"] + df["stop_lost"]).astype(int).clip(lower=0)
-    # dmis = df["missense_variant"].astype(int).clip(lower=0) 
-
-    lof = df[lof_col].astype(int).clip(lower=0)
-    dmis = df[dmis_col].astype(int).clip(lower=0)
-
-    total_lof = lof.sum()
-    total_dmis = dmis.sum()
-
-    # Probability vectors for mutation assignment
-    if weighted:
-        # Weighted by observed mutation burden per gene
-        p_lof = lof / total_lof if total_lof > 0 else np.ones(n) / n
-        p_dmis = dmis / total_dmis if total_dmis > 0 else np.ones(n) / n
-    else:
-        # Uniform: every gene equally likely
-        p_lof = np.ones(n) / n
-        p_dmis = np.ones(n) / n
-
-    for i in range(1, n_boot + 1):
-        # Draw total_lof mutation events, assign to genes
-        new_lof_counts = np.bincount(
-            rng.choice(n, size=total_lof, replace=True, p=p_lof),
-            minlength=n
-        )
-        new_dmis_counts = np.bincount(
-            rng.choice(n, size=total_dmis, replace=True, p=p_dmis),
-            minlength=n
-        )
-
-        # Create bootstrap replicate
-        df_boot = df.copy().reset_index(drop=True)
-        df_boot[lof_col] = new_lof_counts
-        df_boot[dmis_col] = new_dmis_counts
-        df_boot["bootstrap_iter"] = i
-        df_boot["bootstrap_type"] = "weighted" if weighted else "uniform"
-        boot_DFs.append(df_boot)
-
-    return boot_DFs
-
+# Prepare columns for bootstrap (aggregate LoF variants, rename for NDD context)
+hc_df_excl["NDD_LoF"] = (
+    hc_df_excl["frameshift_variant"].fillna(0)
+    + hc_df_excl["splice_acceptor_variant"].fillna(0)
+    + hc_df_excl["splice_donor_variant"].fillna(0)
+    + hc_df_excl["stop_gained"].fillna(0)
+    + hc_df_excl["stop_lost"].fillna(0)
+).astype(int).clip(lower=0)
+hc_df_excl["NDD_Dmis"] = hc_df_excl["missense_variant"].fillna(0).astype(int).clip(lower=0)
+hc_df_excl = hc_df_excl[["EntrezID", "symbol", "NDD_LoF", "NDD_Dmis"]]
+hc_df_excl = hc_df_excl.set_index("EntrezID", drop=False)
+hc_df_excl.head(5)
 
 # %%
-boot_DFs_weights = bootstrap_gene_mutations(hc_df, 1000, weighted=True, lof_col="AutismMerged_LoF", dmis_col="AutismMerged_Dmis_REVEL0.5")
+boot_DFs_weights = bootstrap_gene_mutations(hc_df_excl, 1000, weighted=True, lof_col="NDD_LoF", dmis_col="NDD_Dmis")
 
 # %%
 boot_DFs_weights[0]
 
 
 # %%
-def Aggregate_Gene_Weights_NDD2(MutFil, usepLI=False, Bmis=False, out=None):
-    gene2MutN = {}
-    for i, row in MutFil.iterrows():
-        try:
-            g = int(row["EntrezID"])
-        except:
-            print(g, "Error converting Entrez ID")
-
-        nLGD = row["AutismMerged_LoF"] 
-        nMis = row["AutismMerged_Dmis_REVEL0.5"] 
-
-        gene2MutN[g] = nLGD * 0.347 + nMis * 0.194
-    if out != None:
-        writer = csv.writer(open(out, 'wt'))
-        for k,v in sorted(gene2MutN.items(), key=lambda x:x[1], reverse=True):
-           writer.writerow([k,v]) 
-    return gene2MutN
-
-
-# %%
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
+
+def ndd_gene_weights(df, lof_col="NDD_LoF", dmis_col="NDD_Dmis"):
+    """Compute NDD gene weights from aggregated LoF/Dmis counts."""
+    return {int(row["EntrezID"]): row[lof_col] * 0.347 + row[dmis_col] * 0.194
+            for _, row in df.iterrows()}
 
 def process_bootstrap_iter(args):
     """Worker function to process a single bootstrap iteration"""
     i, DF, save_dir, str_bias_mat = args
-    boot_gw = Aggregate_Gene_Weights_NDD2(DF)
+    boot_gw = ndd_gene_weights(DF)
     boot_bias = MouseSTR_AvgZ_Weighted(str_bias_mat, boot_gw)
     boot_bias.to_csv(os.path.join(save_dir, f"DDD_ExomeWide.GeneWeight.boot{i}.csv"))
     return i, boot_bias

@@ -31,7 +31,7 @@ Files from the structure-level pipeline (`notebooks_mouse_str/`) are also requir
 | `dat/MouseCT_Cluster_Anno.csv` | Cluster metadata (class, subclass, supertype) | External |
 | `dat/CellTypeHierarchy.csv` | Cell type hierarchy mapping | External |
 | `dat/Genetics/GeneWeights/Spark_Meta_EWS.gw` | ASD ISH gene weights (61 genes) | `notebooks_mouse_str/04` |
-| `dat/Genetics/GeneWeights/DDD.top293.ExcludeASD.gw` | DDD ISH gene weights (293 genes) | `notebooks_mouse_str/04` |
+| `dat/Genetics/GeneWeights/DDD.top237.ExcludeASD.gw` | DDD ISH gene weights (285 genes, ASD excluded) | `notebooks_mouse_str/04` |
 
 ## Running
 
@@ -161,13 +161,15 @@ bias via 10,000 permutations.
 snakemake -s Snakefile.bias --configfile config/config.SC.DN.yaml --cores 10
 ```
 
-**Config**: `config/config.SC.DN.yaml` (ASD_All + DDD_293_ExcludeASD, mutability null model)
+**Config**: `config/config.SC.DN.yaml` (ASD_All + DDD_285 + DDD_285_ExcludeASD, mutability null model)
 
 **Outputs** (in `results/CT_Z2/`):
 - `ASD_All_bias_addP_sibling.csv` — ASD bias with sibling-null p-values (149 at FDR<0.05)
 - `ASD_All_bias_addP_random.csv` — ASD bias with random-null p-values
-- `DDD_293_ExcludeASD_bias_addP_sibling.csv` — DDD bias with sibling-null p-values
-- `DDD_293_ExcludeASD_bias_addP_random.csv` — DDD bias with random-null p-values
+- `DDD_285_bias_addP_sibling.csv` — DDD bias with sibling-null p-values
+- `DDD_285_bias_addP_random.csv` — DDD bias with random-null p-values
+- `DDD_285_ExcludeASD_bias_addP_sibling.csv` — DDD (ASD excluded) bias with sibling-null p-values
+- `DDD_285_ExcludeASD_bias_addP_random.csv` — DDD (ASD excluded) bias with random-null p-values
 
 ## Notebook Conventions
 

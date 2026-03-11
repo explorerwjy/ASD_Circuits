@@ -50,7 +50,7 @@ os.makedirs(BIAS_DIR, exist_ok=True)
 # 1. **Load** Jon's log2+QN expression matrix (R-generated, 17,208 genes × 213 structures)
 # 2. **Z1** — per-gene z-score across structures
 # 3. **Expression features** — quantile ranks for expression matching
-# 4. **Z2** — expression-matched z-score (parallelized via `script_compute_Z2.py`)
+# 4. **Z2** — expression-matched z-score (frozen 17,180-gene set, legacy match files)
 #
 # **Why Jon's R QN?** Python's quantile normalization differs from R's
 # `preprocessCore::normalize.quantiles` in tie-breaking (r=0.993 between them).
@@ -133,15 +133,33 @@ print(f"  Saved: {exp_features_path}")
 #
 # $$Z2(g, s) = \frac{Z1(g, s) - \text{mean}(Z1(\text{matched}, s))}{\text{std}(Z1(\text{matched}, s))}$$
 #
-# Uses legacy expression match files (10,000 samples with replacement per gene,
-# ±5% quantile window). These are the same match files used to produce the
-# original published Z2.
+# Uses **legacy** expression match files from the original Jon+JW intersection
+# (10,000 samples with replacement per gene, ±5% quantile window).
+# Z1 is filtered to the frozen 17,180-gene set before Z2 computation.
 #
 # Computation is parallelized via `scripts/script_compute_Z2.py`.
 
 # %%
 z2_path = os.path.join(BIAS_DIR, "AllenMouseBrain_Z2bias.parquet")
-MATCH_DIR = os.path.join(ProjDIR, config["data_files"]["ish_match_dir"])
+# CRITICAL: Use legacy match files (Jon+JW intersection, 17,180 genes).
+# The new ExpMatch/ files (17,191) use a different homolog mapping and produce
+# a different Z2. The frozen gene list is the legacy set. See MEMORY.md.
+MATCH_DIR = os.path.join(ProjDIR, config["data_files"]["legacy_match_dir"])
+
+# Filter Z1 to genes that have legacy match files (the frozen 17,180-gene set)
+legacy_genes = set()
+for f in os.listdir(MATCH_DIR):
+    if f.endswith(".csv"):
+        legacy_genes.add(int(f.replace(".csv", "")))
+z1_genes_in_legacy = [g for g in Z1Mat.index if g in legacy_genes]
+n_dropped = len(Z1Mat) - len(z1_genes_in_legacy)
+if n_dropped > 0:
+    print(f"Filtering Z1 to frozen gene set: {len(Z1Mat)} → {len(z1_genes_in_legacy)} ({n_dropped} genes dropped)")
+    Z1Mat_filtered = Z1Mat.loc[z1_genes_in_legacy]
+    Z1Mat_filtered.to_parquet(z1_path)
+    Z1Mat = Z1Mat_filtered
+else:
+    print(f"Z1 already matches frozen gene set: {len(Z1Mat)} genes")
 
 if os.path.exists(z2_path) and os.path.getmtime(z2_path) > os.path.getmtime(z1_path):
     print(f"Loading cached Z2 from {z2_path}")
@@ -278,14 +296,14 @@ for label, z1_in, z1_out_path in [
 #
 # | Step | Output | Shape | Path |
 # |------|--------|-------|------|
-# | Z1 | Per-gene z-score | 17,208 × 213 | `dat/BiasMatrices/AllenMouseBrain_Z1.parquet` |
-# | Z2 | Exp-matched z-score | 17,208 × 213 | `dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet` |
+# | Z1 | Per-gene z-score | 17,180 × 213 | `dat/BiasMatrices/AllenMouseBrain_Z1.parquet` |
+# | Z2 | Exp-matched z-score | 17,180 × 213 | `dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet` |
 # | NeuroDen Z2 | Neuron density-normalized | 17,208 × 213 | `dat/BiasMatrices/NeuroDensityNorm_Z2.parquet` |
 # | Neuro2Glia Z2 | Neuro-to-glia ratio-normalized | 17,208 × 213 | `dat/BiasMatrices/Neuro2GliaNorm_Z2.parquet` |
 #
 # **Input**: Jon's log2+QN expression (`dat/allen-mouse-exp/Jon_ExpMat.log2.qn.csv`)
 #
-# **Match files**: ISH expression match files (`dat/allen-mouse-exp/ExpMatch/`)
+# **Match files**: Legacy ISH expression match files (`dat/allen-mouse-exp/ExpMatch_Legacy/`)
 #
 # **Note**: Python QN was tested but shifts the CCS local peak away from size 46.
 # See `notebook_validation/Validate_ISH_Z2_Pipeline` for details.

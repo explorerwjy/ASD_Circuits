@@ -147,7 +147,7 @@ Dict2Fil(ASD_GW_DN, asd_dn_path)
 print(f"ASD: {len(ASD_GW_raw)} raw genes -> {len(ASD_GW_DN)} DN genes -> {asd_dn_path}")
 
 # DDD DN weights
-DDD_GW_raw = Fil2Dict(config['gene_sets']['DDD_293_ExcludeASD']['geneweights'])
+DDD_GW_raw = Fil2Dict(config['gene_sets']['DDD_285_ExcludeASD']['geneweights'])
 DDD_GW_DN = {}
 for gene, weight in DDD_GW_raw.items():
     if gene in v2v3_corr.index:
@@ -157,16 +157,16 @@ ddd_dn_path = f"../{config['data_files']['ddd_gene_weights_dn']}"
 Dict2Fil(DDD_GW_DN, ddd_dn_path)
 print(f"DDD: {len(DDD_GW_raw)} raw genes -> {len(DDD_GW_DN)} DN genes -> {ddd_dn_path}")
 
-# %%
-# Validate against existing DN files
-for label, computed_gw, existing_path in [
-    ("ASD", ASD_GW_DN, asd_dn_path),
-    ("DDD", DDD_GW_DN, ddd_dn_path),
-]:
-    existing_gw = Fil2Dict(existing_path)
-    assert set(computed_gw.keys()) == set(existing_gw.keys()), f"{label}: gene sets differ"
-    max_diff = max(abs(computed_gw[g] - existing_gw[g]) for g in computed_gw)
-    print(f"{label} DN validation: {len(computed_gw)} genes, max weight diff = {max_diff:.2e}")
+# LOEUF25 DN weights (uniform weight=1 for all constrained genes)
+LOEUF_GW_raw = Fil2Dict("../dat/Genetics/GeneWeights/constraint_top25_LOEUF.gw")
+LOEUF_GW_DN = {}
+for gene, weight in LOEUF_GW_raw.items():
+    if gene in v2v3_corr.index:
+        LOEUF_GW_DN[gene] = weight * (v2v3_corr.loc[gene] ** 2)
+
+loeuf_dn_path = f"../{config['data_files']['loeuf_gene_weights_dn']}"
+Dict2Fil(LOEUF_GW_DN, loeuf_dn_path)
+print(f"LOEUF25: {len(LOEUF_GW_raw)} raw genes -> {len(LOEUF_GW_DN)} DN genes -> {loeuf_dn_path}")
 
 # %% [markdown]
 # ## 3. Load Data
@@ -207,7 +207,7 @@ print(f"ASD bias: {ASD_SC_Bias.shape}, top cluster: {ASD_SC_Bias.index[0]}, "
 DDD_GW = Fil2Dict(f"../{config['data_files']['ddd_gene_weights_dn']}")
 DDD_SC_Bias = MouseCT_AvgZ_Weighted(MouseSC_Z2, DDD_GW)
 DDD_SC_Bias = add_class(DDD_SC_Bias, ClusterAnn)
-DDD_SC_Bias.to_csv("../results/CT_Z2/DDD_293_ExcludeASD_DN.csv")
+DDD_SC_Bias.to_csv("../results/CT_Z2/DDD_285_ExcludeASD_DN.csv")
 print(f"DDD bias: {DDD_SC_Bias.shape}, top cluster: {DDD_SC_Bias.index[0]}, "
       f"EFFECT = {DDD_SC_Bias['EFFECT'].iloc[0]:.4f}")
 

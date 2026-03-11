@@ -42,8 +42,8 @@ CT_Anno = pd.read_csv(os.path.join(ProjDIR, "dat/MouseCT_Cluster_Anno.csv"), ind
 # %%
 # Load cell type bias results (from Snakefile.bias pipeline)
 ASD_SC_Bias = pd.read_csv(os.path.join(ProjDIR, "results/CT_Z2/ASD_All_bias_addP_sibling.csv"), index_col=0)
-DDD_SC_Bias = pd.read_csv(os.path.join(ProjDIR, "results/CT_Z2/DDD_293_bias_addP_sibling.csv"), index_col=0)
-DDD_rmASD_SC_Bias = pd.read_csv(os.path.join(ProjDIR, "results/CT_Z2/DDD_293_ExcludeASD_bias_addP_sibling.csv"), index_col=0)
+DDD_SC_Bias = pd.read_csv(os.path.join(ProjDIR, "results/CT_Z2/DDD_285_bias_addP_sibling.csv"), index_col=0)
+DDD_rmASD_SC_Bias = pd.read_csv(os.path.join(ProjDIR, "results/CT_Z2/DDD_285_ExcludeASD_bias_addP_sibling.csv"), index_col=0)
 
 # Load ASD gene weights (for filtering DDD genes)
 ASD_GW = Fil2Dict(os.path.join(ProjDIR, "dat/Genetics/GeneWeights_DN/Spark_Meta_EWS.GeneWeight.DN.gw"))

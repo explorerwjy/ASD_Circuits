@@ -14,7 +14,7 @@ tables:
       Statistical significance determined by comparison with 10,000 subsampled sibling
       gene sets.
     sources:
-      bias_fdr: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.csv"
+      bias_fdr: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv"
       bias_male: "dat/Unionize_bias/ASD.Male.ALL.bias.csv"
       bias_female: "dat/Unionize_bias/ASD.Female.ALL.bias.csv"
       bias_spark159: "dat/Unionize_bias/ASD.159.pLI.z2.csv"
@@ -145,7 +145,7 @@ tables:
       Mutation biases calculated for 213 brain structures using 285 high-confidence
       DD genes (Kaplanis et al. 2020), excluding genes overlapping with SPARK ASD set.
     sources:
-      bias: "results/STR_ISH/DDD_293_ExcludeASD_bias_addP_sibling.csv"
+      bias: "results/STR_ISH/DDD_285_ExcludeASD_bias_addP_sibling.csv"
 
   S11:
     sheet_name: "Table S11 - DD Cell Type Bias"
@@ -154,7 +154,7 @@ tables:
       Mutation biases calculated for cell type clusters in the ABC atlas using the
       DD gene set.
     sources:
-      bias: "results/CT_Z2/DDD_293_ExcludeASD_bias_addP_sibling.csv"
+      bias: "results/CT_Z2/DDD_285_ExcludeASD_bias_addP_sibling.csv"
 
   S12:
     sheet_name: "Table S12 - Constrained STR Bias"
