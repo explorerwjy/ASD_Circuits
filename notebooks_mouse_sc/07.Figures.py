@@ -274,11 +274,19 @@ def subclass_bias_boxplot(target_classes, CT_Bias, CellTypesDF, figsize=(8, 8)):
     dat = [dat[i] for i in idx]
     labels = [labels[i] for i in idx]
 
+    # Build a long-form DataFrame so seaborn maps labels correctly
+    rows = []
+    for label, vals in zip(labels, dat):
+        for v in vals:
+            rows.append({"subclass": label, "EFFECT": v})
+    plot_df = pd.DataFrame(rows)
+    plot_df["subclass"] = pd.Categorical(plot_df["subclass"], categories=labels, ordered=True)
+
     fig, ax = plt.subplots(dpi=300, figsize=figsize)
     fig.patch.set_alpha(0)
     ax.patch.set_alpha(0)
-    sns.boxplot(data=dat, orient="h", ax=ax, palette="deep")
-    ax.set_yticklabels(labels, fontsize=10)
+    sns.boxplot(data=plot_df, y="subclass", x="EFFECT", orient="h", ax=ax, palette="deep")
+    ax.set_ylabel("")
     ax.set_xlabel("ASD Bias", fontsize=14)
     ax.axvline(0, color="grey", ls="--", lw=0.5)
     ax.grid(True, ls="--", alpha=0.3)
@@ -287,19 +295,142 @@ def subclass_bias_boxplot(target_classes, CT_Bias, CellTypesDF, figsize=(8, 8)):
 
 
 # %%
-# Cortical Glutamatergic (IT-ET + NP-CT-L6b)
+# Cortical Glutamatergic (IT-ET + NP-CT-L6b, 34 subclasses)
 subclass_bias_boxplot(["01 IT-ET Glut", "02 NP-CT-L6b Glut"],
                       CT_Bias, CellTypesDF, figsize=(8, 10))
 
 # %%
-# Forebrain GABAergic (CTX-CGE + CNU-LGE)
-subclass_bias_boxplot(["06 CTX-CGE GABA", "09 CNU-LGE GABA"],
+# Cortical GABAergic interneurons (CTX-CGE + CTX-MGE + LSX, 14 subclasses)
+# Excludes CNU-MGE (striatal interneurons) — not represented in human cortical postmortem data
+subclass_bias_boxplot(["06 CTX-CGE GABA", "07 CTX-MGE GABA", "10 LSX GABA"],
+                      CT_Bias, CellTypesDF, figsize=(8, 7))
+
+# %%
+# Medium Spiny Neurons + DG/OB (CNU-LGE + DG-IMN + OB-CR, 11 subclasses)
+subclass_bias_boxplot(["09 CNU-LGE GABA", "04 DG-IMN Glut", "03 OB-CR Glut"],
                       CT_Bias, CellTypesDF, figsize=(8, 6))
 
 # %%
-# Subcortical (CNU-HYa GABA + CNU-HYa Glut + TH Glut)
-subclass_bias_boxplot(["11 CNU-HYa GABA", "13 CNU-HYa Glut", "18 TH Glut"],
-                      CT_Bias, CellTypesDF, figsize=(8, 10))
+# Subcortical (CNU-HYa GABA + HY GABA + CNU-HYa Glut, 51 subclasses)
+subclass_bias_boxplot(["11 CNU-HYa GABA", "12 HY GABA", "13 CNU-HYa Glut"],
+                      CT_Bias, CellTypesDF, figsize=(8, 14))
+
+# %% [markdown]
+# ## 5b. Postmortem Overlap — Rank-Sum Permutation Test
+#
+# Test whether cell types identified in human postmortem ASD studies
+# (Velmeshev et al. 2019; Wamsley et al. 2024) rank unusually high among
+# GENCIC-prioritized subclasses. Uses a rank-sum statistic with permutation null.
+
+# %%
+def rank_subclasses(target_classes, CT_Bias, CellTypesDF):
+    """Rank subclasses within target_classes by median ASD bias (descending).
+    Returns list of (subclass_name, median_bias) sorted by rank."""
+    sub_df = CellTypesDF[CellTypesDF["class"].isin(target_classes)]
+    subclasses = sorted(sub_df["subclass"].unique())
+
+    results = []
+    for sub in subclasses:
+        clusters = sub_df[sub_df["subclass"] == sub]["cluster"].values
+        valid = [c for c in clusters if c in CT_Bias.index]
+        vals = CT_Bias.loc[valid, "EFFECT"].dropna().values
+        if len(vals) > 0:
+            results.append((sub, np.median(vals)))
+
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results
+
+
+def joint_ranksum_permutation_test(ranked_groups, target_names_per_group,
+                                    n_perm=1_000_000, seed=42):
+    """Joint rank-sum permutation test across multiple subclass groups.
+
+    For each group, finds ranks of target cell types. The test statistic is the
+    sum of all target ranks across groups. The null draws the same number of
+    random ranks from each group independently and sums them.
+
+    Parameters
+    ----------
+    ranked_groups : list of lists of (name, median) tuples, each sorted descending
+    target_names_per_group : list of lists of subclass name substrings to match
+    n_perm : number of permutations
+    seed : random seed
+
+    Returns
+    -------
+    dict with per-group details, observed total rank sum, and p-value
+    """
+    rng = np.random.default_rng(seed)
+    group_details = []
+    observed_total = 0
+
+    for ranked, targets in zip(ranked_groups, target_names_per_group):
+        n = len(ranked)
+        names = [r[0] for r in ranked]
+        target_ranks, matched = [], []
+        for tgt in targets:
+            for rank, name in enumerate(names, 1):
+                if tgt in name:
+                    target_ranks.append(rank)
+                    matched.append(name)
+                    break
+        observed_total += sum(target_ranks)
+        group_details.append({
+            "n_subclasses": n, "k": len(target_ranks),
+            "matched_names": matched, "target_ranks": target_ranks,
+        })
+
+    # Null distribution
+    null_sums = np.zeros(n_perm)
+    for i in range(n_perm):
+        s = 0
+        for gd in group_details:
+            s += rng.choice(np.arange(1, gd["n_subclasses"] + 1),
+                            size=gd["k"], replace=False).sum()
+        null_sums[i] = s
+
+    p_value = np.mean(null_sums <= observed_total)
+
+    return {
+        "group_details": group_details,
+        "observed_total_ranksum": observed_total,
+        "p_value": p_value,
+        "n_perm": n_perm,
+    }
+
+
+# %%
+# Rank subclasses within each group
+glut_ranked = rank_subclasses(
+    ["01 IT-ET Glut", "02 NP-CT-L6b Glut"], CT_Bias, CellTypesDF
+)
+gaba_ranked = rank_subclasses(
+    ["06 CTX-CGE GABA", "07 CTX-MGE GABA", "10 LSX GABA"],
+    CT_Bias, CellTypesDF,
+)
+
+# Joint rank-sum permutation test
+# Excitatory targets: L2/3 IT CTX (primary cortical L2/3), L4/5 IT CTX (primary cortical L4)
+# Inhibitory targets: Vip, Sst (matching postmortem DEG cell types from Velmeshev/Wamsley)
+result = joint_ranksum_permutation_test(
+    [glut_ranked, gaba_ranked],
+    [["L2/3 IT CTX Glut", "L4/5 IT CTX Glut"], ["Vip Gaba", "Sst Gaba"]],
+    n_perm=1_000_000, seed=42,
+)
+
+print("Postmortem overlap — Joint rank-sum permutation test")
+print("=" * 55)
+for i, (gd, label) in enumerate(zip(
+    result["group_details"],
+    ["Excitatory (IT/ET Glut, 34 subclasses)",
+     "Inhibitory (Cortical GABA, 14 subclasses)"],
+)):
+    print(f"\n{label}:")
+    for name, rank in zip(gd["matched_names"], gd["target_ranks"]):
+        print(f"  {name}: rank {rank}/{gd['n_subclasses']}")
+
+print(f"\nTotal rank sum = {result['observed_total_ranksum']}")
+print(f"Permutation P-value = {result['p_value']:.3f} ({result['n_perm']:,} permutations)")
 
 # %% [markdown]
 # ## 6. Figure 5C — Circuit Structure × Cell-Type Dotplot

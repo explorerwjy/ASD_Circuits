@@ -71,6 +71,13 @@ with st.sidebar:
     st.caption(ui.get("app_subtitle", "Brain Circuit Explorer"))
     st.divider()
 
+    st.markdown(
+        '<a href="/" target="_self" style="display:inline-flex;align-items:center;gap:6px;'
+        'color:#aab;text-decoration:none;font-size:14px;padding:4px 0;">'
+        '&larr; UNIMED Portal</a>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
     st.header("Navigation")
     st.page_link("app.py", label="🏠 Home", icon=None)
     st.page_link("pages/01_bias_explorer.py", label="📊 Bias Explorer")

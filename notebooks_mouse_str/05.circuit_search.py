@@ -147,6 +147,134 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
+# ## 3.1 Pareto Front P-value (AUC method)
+#
+# Compare the area under the ASD Pareto front (SI vs bias) against the
+# distribution of AUCs from sibling Pareto fronts. P-value = fraction of
+# sibling AUCs >= ASD AUC.
+#
+# Manuscript claim: P = 2×10⁻³ (size 46), P = 6×10⁻³ (size 32).
+
+# %%
+from scipy.interpolate import interp1d
+
+# %%
+# Build Pareto fronts from all 6000 sibling SA runs (keepN_46)
+# Each sibling directory has 5 SA runs per bias limit; take the best SI.
+import glob
+
+SA_DIR = "../dat/Circuits/SA/SubSib_ScoreInfo_Dec21"
+sib_dirs = sorted(glob.glob(f"{SA_DIR}/cont.bias.*"))
+print(f"Total sibling SA directories: {len(sib_dirs)}")
+
+cache_path = "../results/cache/sibling_pareto_aucs_size46.npz"
+if os.path.exists(cache_path):
+    _cache = np.load(cache_path)
+    sib_best_si = _cache["sib_best_si"]
+    bias_limits_sib = _cache["bias_limits"]
+    asd_at_limits = _cache["asd_at_limits"]
+    asd_auc = float(_cache["asd_auc"])
+    print(f"Loaded from cache: {sib_best_si.shape[0]} siblings, {sib_best_si.shape[1]} bias limits")
+else:
+    bias_limits_sib = np.array([
+        0.3, 0.305, 0.31, 0.315, 0.32, 0.325, 0.33, 0.335,
+        0.34, 0.345, 0.35, 0.355, 0.36, 0.365, 0.37, 0.375, 0.38,
+    ])
+    sib_best_si = np.full((len(sib_dirs), len(bias_limits_sib)), np.nan)
+    for i, d in enumerate(sib_dirs):
+        for j, bl in enumerate(bias_limits_sib):
+            bl_str = f"{bl:.3f}".rstrip("0").rstrip(".")
+            pattern = f"{d}/SA.*keepN_46-minbias_{bl_str}.txt"
+            for f in glob.glob(pattern):
+                with open(f) as fh:
+                    for line in fh:
+                        si = float(line.split("\t")[0])
+                        if np.isnan(sib_best_si[i, j]) or si > sib_best_si[i, j]:
+                            sib_best_si[i, j] = si
+        if i % 1000 == 0:
+            print(f"  Processed {i}/{len(sib_dirs)}...")
+
+    asd_interp = interp1d(
+        pareto_df["mean_bias"].values, pareto_df["circuit_score"].values,
+        bounds_error=False, fill_value=np.nan,
+    )
+    asd_at_limits = asd_interp(bias_limits_sib)
+    valid = ~np.isnan(asd_at_limits)
+    asd_auc = np.trapz(asd_at_limits[valid], bias_limits_sib[valid])
+
+    np.savez(cache_path, sib_best_si=sib_best_si, bias_limits=bias_limits_sib,
+             asd_at_limits=asd_at_limits, asd_auc=asd_auc)
+    print(f"Cached to {cache_path}")
+
+# %%
+# Pareto front P-values: multiple methods
+valid_mask = ~np.isnan(asd_at_limits)
+
+# Method 1: AUC (integral of SI over bias)
+sib_aucs = np.full(sib_best_si.shape[0], np.nan)
+for i in range(sib_best_si.shape[0]):
+    si_i = sib_best_si[i, :]
+    mask = ~np.isnan(si_i) & valid_mask
+    if mask.sum() >= 2:
+        sib_aucs[i] = np.trapz(si_i[mask], bias_limits_sib[mask])
+
+valid_sib = ~np.isnan(sib_aucs)
+p_auc = np.mean(sib_aucs[valid_sib] >= asd_auc)
+print(f"AUC: ASD={asd_auc:.4f}, sib mean={np.nanmean(sib_aucs):.4f}, P={p_auc:.4f} (n={valid_sib.sum()})")
+
+# Method 2: Mean SI across Pareto points
+asd_mean_si = np.nanmean(asd_at_limits[valid_mask])
+sib_mean_si = np.nanmean(sib_best_si[:, valid_mask], axis=1)
+p_mean = np.nanmean(sib_mean_si >= asd_mean_si)
+print(f"Mean SI: ASD={asd_mean_si:.4f}, sib mean={np.nanmean(sib_mean_si):.4f}, P={p_mean:.4f}")
+
+# Method 3: Point-wise at each bias limit
+print("\nPoint-wise P-values:")
+for j, bl in enumerate(bias_limits_sib):
+    if valid_mask[j]:
+        sib_vals = sib_best_si[:, j]
+        v = ~np.isnan(sib_vals)
+        p_j = np.mean(sib_vals[v] >= asd_at_limits[j])
+        print(f"  bias={bl:.3f}: ASD SI={asd_at_limits[j]:.4f}, P={p_j:.4f} (n={v.sum()})")
+
+# %% [markdown]
+# ## 3.2 Single-Point Dominance Test (Original Method)
+#
+# The original Pareto P-value was computed as follows:
+# 1. Take the **selected circuit** (red X on the Pareto front) as a reference point
+#    with coordinates (CCS_ref, bias_ref).
+# 2. For each sibling, check if **any point** on its SA profile has BOTH
+#    higher bias AND higher CCS than the reference. If so, that sibling "dominates".
+# 3. P-value = fraction of siblings that dominate.
+#
+# **Important**: The NPZ stores the sibling's OWN gene-weighted bias (mean ~0.17–0.24),
+# not the SA constraint bias. The SA output files in `SubSib_ScoreInfo_Dec21/` store
+# bias values that track the SA constraint limit (always >= limit). These are different
+# metrics and should not be mixed.
+#
+# Original result: 3/2000 = 0.0015 (≈ 2×10⁻³ in manuscript).
+
+# %%
+ref_ccs = pareto_df.loc[SELECTED_IDX, 'circuit_score']
+ref_bias = pareto_df.loc[SELECTED_IDX, 'mean_bias']
+print(f"Selected circuit reference: CCS={ref_ccs:.4f}, bias={ref_bias:.4f}")
+
+# topbias_sub: dim 0 = sibling's own mean bias, dim 1 = CCS (SI)
+n_dominate = 0
+for i in range(sib_topbias_sub.shape[0]):
+    for j in range(sib_topbias_sub.shape[2]):
+        sib_bias = sib_topbias_sub[i, 0, j]
+        sib_si = sib_topbias_sub[i, 1, j]
+        if sib_bias > ref_bias and sib_si > ref_ccs:
+            n_dominate += 1
+            break
+
+p_dom = n_dominate / sib_topbias_sub.shape[0]
+print(f"Dominance test ({sib_topbias_sub.shape[0]} siblings): "
+      f"{n_dominate}/{sib_topbias_sub.shape[0]} dominate, P = {p_dom:.4f}")
+print(f"Original result (2000 siblings): 3/2000 = 0.0015")
+
+# %% [markdown]
 # # 4. Bootstrap ASD
 
 # %% [markdown]
