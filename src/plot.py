@@ -1437,9 +1437,10 @@ def cluster_residual_boxplot(
     y_min = float(np.nanmin(plot_df[metric].values))
     y_max = float(np.nanmax(plot_df[metric].values))
     y_range = (y_max - y_min) if y_max != y_min else 1.0
-    h = 0.020 * y_range
-    clearance = 0.03 * y_range
-    y_step = 0.10 * y_range
+    h = 0.015 * y_range          # bracket arm height
+    clearance = 0.04 * y_range   # gap above data before first bracket
+    text_h = 0.05 * y_range      # vertical space reserved for star/label text
+    y_step = 0.04 * y_range      # increment when scanning for free vertical slot
 
     # draw group bars above boxplots (before p-value brackets so brackets clear them)
     placed = []
@@ -1464,10 +1465,11 @@ def cluster_residual_boxplot(
                     grp_label, ha='center', va='bottom', fontsize=fontsize,
                     fontstyle='italic', color='0.25', zorder=5)
             # reserve space so p-value brackets clear this bar + label
-            label_h = 0.06 * y_range
-            placed.append((xlo_b, xhi_b, bar_y, bar_y + label_h))
+            label_reserve = 0.06 * y_range
+            placed.append((xlo_b, xhi_b, bar_y, bar_y + label_reserve))
 
-    tests_sorted = sorted(tests, key=lambda t: (t["local_top"], abs(t["x2"] - t["x1"])))
+    # sort: narrow (local) brackets first, then wider ones on top
+    tests_sorted = sorted(tests, key=lambda t: abs(t["x2"] - t["x1"]))
 
     for t in tests_sorted:
         p_use = t["p_adj"] if p_adjust else t["p"]
@@ -1480,20 +1482,26 @@ def cluster_residual_boxplot(
 
         y = t["local_top"] + clearance
         while True:
-            yhi = y + h
+            yhi = y + h + text_h   # reserve bracket arm + text above
             overlap = False
             for pxlo, pxhi, pylo, pyhi in placed:
                 if not (xhi < pxlo - 0.3 or xlo > pxhi + 0.3):
-                    if not (yhi < pylo - 0.01 or y > pyhi + 0.01):
+                    if not (yhi < pylo - 0.005 * y_range or y > pyhi + 0.005 * y_range):
                         overlap = True
                         break
             if not overlap:
                 break
             y += y_step
 
-        placed.append((xlo, xhi, y, y + h))
+        placed.append((xlo, xhi, y, y + h + text_h))
         ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=1.1, c="k", alpha=0.9)
-        ax.text((x1 + x2) / 2, y + h - 2*h, label, ha="center", va="bottom", fontsize=fontsize*2.0)
+        ax.text((x1 + x2) / 2, y + h + 0.003 * y_range, label,
+                ha="center", va="bottom", fontsize=fontsize * 1.5)
+
+    # expand y-axis to fit all brackets + text with padding
+    if placed:
+        top_y = max(pyhi for _, _, _, pyhi in placed)
+        ax.set_ylim(top=top_y + 0.03 * y_range)
 
     bot = 0.28
     plt.subplots_adjust(bottom=bot, top=0.92)

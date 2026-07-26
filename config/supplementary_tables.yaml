@@ -8,11 +8,21 @@ tables:
     sheet_name: "Table S1 - Structure Bias"
     title: "ASD mutation biases across all mouse brain structures"
     description: >
-      Comprehensive analysis of mutation biases calculated for 213 brain structures
-      using the Allen Mouse Brain Atlas ISH data. Bias values reflect the weighted
-      average of gene-specific expression biases from SPARK exome-wide significant genes.
-      Statistical significance determined by comparison with 10,000 subsampled sibling
-      gene sets.
+      ASD mutation bias for each of 213 mouse brain structures from the Allen Mouse
+      Brain Atlas, computed using the GENCIC framework. Bias values represent the
+      mutation-weighted average expression bias of 61 SPARK exome-wide
+      significant ASD genes. Statistical significance was assessed against a null
+      distribution of 10,000 sibling gene sets.
+      Columns: STR = structure name; Bias = mutational expression bias (EFFECT);
+      REGION = major brain division; Rank = bias rank (1 = highest); Pvalue = empirical
+      P-value from sibling null; Pvalue_adj = Benjamini-Hochberg FDR-adjusted P-value;
+      Bias.Male / Bias.Female = sex-stratified bias; Bias.Fu_72 / Bias.Fu_185 = bias
+      using Fu et al. (2022) ASD gene sets (72 and 185 genes); Bias.Spark159 = bias
+      using 159 SPARK genes with pDenovoWEST < 1e-3 in their discovery cohort;
+      Bias.Neuron_density_normalized /
+      Bias.Neuron_glia_ratio_normalized = bias after normalizing by neuronal density or
+      neuron-to-glia ratio; Circuits.46 / Circuits.32 = membership in the 46- or
+      32-structure ASD circuits with SA search (1 = member, 0 = not).
     sources:
       bias_fdr: "dat/Unionize_bias/Spark_Meta_EWS.Z2.bias.FDR.SubSampleSib.csv"
       bias_male: "dat/Unionize_bias/ASD.Male.ALL.bias.csv"
@@ -63,9 +73,14 @@ tables:
     sheet_name: "Table S2 - Connectome Info"
     title: "Connectome information score matrix for mouse brain structure connections"
     description: >
-      Matrix of connectome weights representing the information content (-log probability)
-      of connections between brain structure pairs, derived from the Allen Mouse Brain
-      Connectivity Atlas.
+      Symmetric 213 x 213 matrix of ipsilateral connectome information scores between
+      mouse brain structure pairs, derived from the Allen Mouse Brain Connectivity Atlas
+      (Oh et al. 2014). Values represent Shannon information content conditioned on
+      inter-structure distance: I_connected = -log2(P) for connected pairs (P < 0.05)
+      and I_unconnected = -log2(1-P) for unconnected pairs, where P is the connection
+      probability in the corresponding distance decile bin. This matrix is used to compute
+      the Circuit Connectivity Score (CCS) via joint Shannon information across all
+      pairwise connections within a circuit.
     sources:
       info_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
 
@@ -73,8 +88,18 @@ tables:
     sheet_name: "Table S3 - Cell Type Bias"
     title: "ASD mutation biases for cell types (ABC atlas 10x v3)"
     description: >
-      Analysis of mutation biases at the cell type cluster level based on the Allen
-      Brain Cell (ABC) atlas 10x v3 RNA sequencing data.
+      ASD mutation bias for 5,312 cell type clusters from the Allen Brain Cell (ABC)
+      atlas, computed from 10x v3 single-cell RNA sequencing data (2,341,350 cells).
+      Gene weights were denoised using V2-V3 Spearman reproducibility (weight_DN =
+      weight_ISH * max(r, 0)^2). Statistical significance assessed against 10,000
+      mutability-matched sibling null gene sets.
+      Columns: ct_idx = cluster index; EFFECT = weighted mean Z2 bias; Rank = bias rank;
+      class_id_label / subclass_id_label / supertype_id_label = ABC taxonomy hierarchy
+      (34 classes, 338 subclasses, 1,201 supertypes); CCF_broad.freq / CCF_acronym.freq =
+      most frequent brain region assignment from MERFISH spatial data; v3.size / v2.size =
+      number of cells in 10x v3 / v2 datasets; P-value = empirical P-value from sibling
+      null; Z-score = standard normal equivalent; EFFECT_adj = adjusted effect size;
+      q-value = Benjamini-Hochberg FDR-adjusted P-value; -logP = -log10(P-value).
     sources:
       bias: "results/CT_Z2/ASD_All_bias_addP_sibling.csv"
       annotation: "dat/MouseCT_Cluster_Anno.csv"
@@ -83,9 +108,12 @@ tables:
     sheet_name: "Table S4 - Cell Composition"
     title: "Cellular composition of brain structures within the ASD circuit"
     description: >
-      Analysis of cell type distributions across circuit structures based on the Allen
-      Brain Cell (ABC) atlas MERFISH data. Cell proportions sum to 1 within each
-      structure; only cell types with >= 500 cells per structure are included.
+      Cell type composition of brain structures within the 46-structure ASD circuit,
+      based on the Allen Brain Cell (ABC) atlas MERFISH spatial transcriptomics data.
+      Each column represents one circuit structure; each row represents a cell type
+      subclass. Values are proportions (summing to 1 within each structure). Only cell
+      types with >= 500 MERFISH-profiled cells per structure are included;
+      The index column contains subclass labels from the ABC taxonomy.
     sources:
       composition: "notebooks_mouse_sc/dat/ASD.Cir.SubClassCellComp.csv"
 
@@ -93,9 +121,16 @@ tables:
     sheet_name: "Table S5 - Structure Bias IQ"
     title: "ASD mutation biases stratified by proband cognitive function"
     description: >
-      Comparison of structure-specific mutation biases between probands with higher
-      cognitive function (FSIQ > 70) and lower cognitive function (FSIQ <= 70).
-      Statistical significance based on IQ-mutation permutation test.
+      Structure-level ASD mutation biases stratified by proband IQ for the 46
+      ASD circuit structures. Probands were divided into higher cognitive function
+      (FSIQ > 70) and lower cognitive function (FSIQ <= 70) groups. Statistical
+      significance was assessed by a permutation test randomly reassigning IQ labels
+      to mutations.
+      Columns: STR = structure name; REG = major brain region; HighGroup_Bias /
+      LowGroup_Bias = mean expression bias for the high- and low-IQ groups;
+      HighGroup_Rank / LowGroup_Rank = rank within each group; Bias_Diff =
+      HighGroup_Bias - LowGroup_Bias; Rank_Diff = difference in rank; Pvalue =
+      permutation P-value for the bias difference.
     sources:
       bias_hiq: "dat/Unionize_bias/ASD.HIQ_spec.bias.csv"
       bias_liq: "dat/Unionize_bias/ASD.LIQ_spec.bias.csv"
@@ -107,10 +142,16 @@ tables:
     sheet_name: "Table S6 - NT Genes"
     title: "Genes included in the neurotransmitter systems analysis"
     description: >
-      List of genes included in the dopamine (14 genes), serotonin (11 genes), and
-      oxytocin (2 genes) gene sets used to validate the GENCIC method. Includes
-      UniProt function descriptions and Gene Ontology biological process annotations
-      for each gene.
+      Genes comprising the dopamine (11 genes), serotonin (11 genes), and oxytocin
+      (2 genes) sets used as positive controls to validate the GENCIC framework.
+      Gene sets include receptors, transporters, and biosynthetic enzymes for each
+      neurotransmitter system. Expression-weighted combined sets were used for
+      circuit connectivity scoring.
+      Columns: gene_symbol = HGNC gene symbol; entrez_id = NCBI Entrez gene ID;
+      neurotransmitter_system = dopamine, serotonin, or oxytocin; category = source
+      (biosynthesis/release), target (receptor/reuptake); uniprot_function =
+      protein function from UniProt; go_biological_process = Gene Ontology biological
+      process annotations.
     sources:
       genes: "dat/NeuralSystem_S6.csv"
 
@@ -118,7 +159,14 @@ tables:
     sheet_name: "Table S7 - Dopamine Bias"
     title: "Dopamine brain structure-level bias"
     description: >
-      Expression biases for the dopamine gene set across 213 mouse brain structures.
+      Expression bias for the expression-weighted combined dopamine gene set (11 genes)
+      across 213 mouse brain structures. Gene weights reflect known roles as source
+      (biosynthetic enzymes) or target (receptors, transporters) neurons. Statistical
+      significance assessed against 10,000 mutability-matched sibling gene sets.
+      Columns: Structure = structure name; EFFECT = weighted mean Z2 expression bias;
+      Rank = bias rank; REGION / Region = major brain division; P-value = empirical
+      P-value; Z-score = standard normal equivalent; EFFECT_adj = adjusted effect;
+      q-value = FDR-adjusted P-value; -logP = -log10(P-value).
     sources:
       bias: "results/STR_ISH/NT_Dopamine_combined_bias_addP_sibling.csv"
 
@@ -126,7 +174,10 @@ tables:
     sheet_name: "Table S8 - Serotonin Bias"
     title: "Serotonin brain structure-level bias"
     description: >
-      Expression biases for the serotonin gene set across 213 mouse brain structures.
+      Expression bias for the expression-weighted combined serotonin gene set (11 genes)
+      across 213 mouse brain structures. Gene weights reflect known roles as source
+      (biosynthetic enzymes, transporters) or target (receptors) neurons.
+      Columns: same as Table S7.
     sources:
       bias: "results/STR_ISH/NT_Serotonin_combined_bias_addP_sibling.csv"
 
@@ -134,7 +185,10 @@ tables:
     sheet_name: "Table S9 - Oxytocin Bias"
     title: "Oxytocin brain structure-level bias"
     description: >
-      Expression biases for the oxytocin gene set across 213 mouse brain structures.
+      Expression bias for the expression-weighted combined oxytocin gene set (2 genes:
+      OXT and OXTR) across 213 mouse brain structures. Gene weights reflect roles as
+      source (OXT, biosynthesis) or target (OXTR, receptor).
+      Columns: same as Table S7.
     sources:
       bias: "results/STR_ISH/NT_Oxytocin_combined_bias_addP_sibling.csv"
 
@@ -142,8 +196,13 @@ tables:
     sheet_name: "Table S10 - DD Structure Bias"
     title: "Developmental Disorder brain structure bias"
     description: >
-      Mutation biases calculated for 213 brain structures using 285 high-confidence
-      DD genes (Kaplanis et al. 2020), excluding genes overlapping with SPARK ASD set.
+      Structure-level mutation bias for 213 mouse brain structures using 285
+      high-confidence developmental disorder (DD) genes from Kaplanis et al. (2020),
+      after excluding genes overlapping with the 61 SPARK ASD gene set (237 genes
+      remaining). Gene weights derived from DDD Study de novo mutation data using
+      the NDD aggregation method. Statistical significance assessed against 10,000
+      mutability-matched sibling null gene sets.
+      Columns: same as Table S7.
     sources:
       bias: "results/STR_ISH/DDD_285_ExcludeASD_bias_addP_sibling.csv"
 
@@ -151,8 +210,10 @@ tables:
     sheet_name: "Table S11 - DD Cell Type Bias"
     title: "Developmental Disorder cell type mutation bias"
     description: >
-      Mutation biases calculated for cell type clusters in the ABC atlas using the
-      DD gene set.
+      Cell type-level mutation bias for 5,312 ABC atlas clusters using the DD gene set
+      (237 genes after ASD exclusion).
+      Statistical significance assessed against 10,000 sibling null gene sets.
+      Columns: same as Table S3.
     sources:
       bias: "results/CT_Z2/DDD_285_ExcludeASD_bias_addP_sibling.csv"
 
@@ -160,8 +221,11 @@ tables:
     sheet_name: "Table S12 - Constrained STR Bias"
     title: "Constrained gene structure bias"
     description: >
-      Mutation biases for 213 brain structures using the top 25% of genes with lowest
-      LOEUF scores from gnomAD v4.0. Uniform mutation weight (W=1) applied.
+      Structure-level expression bias for 213 mouse brain structures using the top 25%
+      most constrained genes by LOEUF score (gnomAD v4.0, 4,322 genes). All genes
+      receive uniform weight (W = 1).
+      Statistical significance assessed against 10,000 random gene sets of equal size.
+      Columns: same as Table S7.
     sources:
       bias: "results/STR_ISH/Constraint_top25_LOEUF_bias_addP_random.csv"
 
@@ -169,8 +233,11 @@ tables:
     sheet_name: "Table S13 - Constrained CT Bias"
     title: "Constrained gene cell type mutation bias"
     description: >
-      Mutation biases for cell type clusters in the ABC atlas using the top 25%
-      LOEUF constrained gene set from gnomAD v4.0.
+      Cell type-level expression bias for 5,312 ABC atlas clusters using the top 25%
+      most constrained genes by LOEUF score (gnomAD v4.0).
+      All genes receive uniform weight (W = 1). Statistical
+      significance assessed against 10,000 random gene sets of equal size.
+      Columns: same as Table S3.
     sources:
       bias: "results/CT_Z2/Constraint_top25_LOEUF_bias_addP_random.csv"
 
@@ -178,12 +245,16 @@ tables:
     sheet_name: "Table S14 - Region Mapping"
     title: "Mapping of homologous human and mouse brain regions"
     description: >
-      Anatomical correspondence between 135 mouse brain structures (Allen CCFv3)
-      and human brain regions (Power atlas). Four-tier confidence classification:
-      High (clear anatomical and functional homology), Medium-high (conserved
-      function at different granularity), Medium-low (functional proximity),
-      and Low (moderate similarity only). High and Medium-high confidence mappings
-      (107 and 111 structures, respectively) were used for cross-species fMRI
-      validation.
+      Cross-species anatomical correspondence between mouse brain structures (Allen
+      CCFv3) and human brain region groups from the Power functional atlas (Buch et
+      al. 2015). Used to translate mouse ASD circuit structure bias to human fMRI
+      functional connectivity space. Four-tier confidence classification: High (clear
+      anatomical and functional homology), Medium-high (conserved function at different
+      granularity), Medium-low (functional proximity), and Low (moderate similarity
+      only).
+      Columns: Mouse_Structure = Allen CCFv3 structure name; Mouse_REGION = major brain
+      division; Representative_Human_Group = Power atlas functional group assignment;
+      Confidence = mapping confidence tier (High, Medium-high, Medium-low, Low);
+      Notes = additional information about the mapping rationale.
     sources:
       mapping: "dat/Buch_et_al/mouse_human_region_mapping_S14.csv"
