@@ -13,7 +13,14 @@
 !.gitignore
 !.gitkeep
 
-# 4. Explicitly ignore Mac system files (the .DS_Store files in your status)
+# 4. Data and pipeline outputs are never tracked. The extension whitelist above
+#    applies at every directory level, so without these rules the .txt/.yaml
+#    files written by the SA / bootstrap / sibling pipelines show up untracked.
+dat/
+results/
+.ipynb_checkpoints/
+
+# 5. Explicitly ignore Mac system files (the .DS_Store files in your status)
 .DS_Store
 ._*
 .snakemake/
