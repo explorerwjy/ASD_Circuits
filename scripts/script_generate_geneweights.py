@@ -59,7 +59,8 @@ def prepare_gene_probabilities(GeneProb, valid_genes, sibling_filter=None):
     
     return Gene2Prob.index.values, Gene2Prob["Prob"].values
 
-def SiblingGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
+def SiblingGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000, seed=42):
+    rng = np.random.default_rng(seed)
     # Load sibling genes
     sibling_weights_path = os.path.join(ProjDIR, config["data_files"]["sibling_weights"])
     SibWeightDF = pd.read_csv(sibling_weights_path, header=None)
@@ -113,11 +114,11 @@ def SiblingGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
             return
             
         for i in range(n_sims):
-            Genes = np.random.choice(gene_pool, size=len(Gene_Weights), p=gene_probs, replace=False)
+            Genes = rng.choice(gene_pool, size=len(Gene_Weights), p=gene_probs, replace=False)
             sim_matrix[:, i] = Genes
     else:
         for i in range(n_sims):
-            Genes = np.random.choice(sibling_valid_genes, size=len(Gene_Weights), replace=False)
+            Genes = rng.choice(sibling_valid_genes, size=len(Gene_Weights), replace=False)
             sim_matrix[:, i] = Genes
 
     # Build output DataFrame
@@ -131,7 +132,8 @@ def SiblingGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
     out_df.to_csv(outfile)
     print(f"Saved all {n_sims} sibling gene simulations to {outfile}")
 
-def RandomGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
+def RandomGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000, seed=42):
+    rng = np.random.default_rng(seed)
     if '.parquet' in ExpMat:
         ExpMat = pd.read_parquet(ExpMat)
     else:
@@ -153,11 +155,11 @@ def RandomGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
 
     if gene_pool is not None:
         for i in range(n_sims):
-            Genes = np.random.choice(gene_pool, size=len(Gene_Weights), p=gene_probs, replace=False)
+            Genes = rng.choice(gene_pool, size=len(Gene_Weights), p=gene_probs, replace=False)
             sim_matrix[:, i] = Genes
     else:
         for i in range(n_sims):
-            Genes = np.random.choice(valid_genes, size=len(Gene_Weights), replace=False)
+            Genes = rng.choice(valid_genes, size=len(Gene_Weights), replace=False)
             sim_matrix[:, i] = Genes
 
     # Build output DataFrame
@@ -172,6 +174,34 @@ def RandomGenes(ExpMat, WeightDF, outfile, GeneProb, n_sims=10000):
     print(f"Saved all {n_sims} simulations to {outfile}")
 
 
+def ExpMatchedGenes(ExpMat, WeightDF, outfile, ExpMatchFil, n_sims=10000, seed=42):
+    """Expression-decile-matched null. Same output contract as RandomGenes."""
+    sys.path.insert(1, os.path.join(ProjDIR, 'src'))
+    from disease_validation import expression_decile_map, sample_expression_matched
+
+    ExpMat = pd.read_parquet(ExpMat) if '.parquet' in ExpMat else pd.read_csv(ExpMat, index_col=0)
+    valid_genes = ExpMat.index.values
+
+    WeightDF = pd.read_csv(WeightDF, header=None)
+    ValidWeightDF = WeightDF[WeightDF[0].isin(valid_genes)]
+    entrez_ids = ValidWeightDF[0].values
+    Gene_Weights = ValidWeightDF[1].values
+
+    exp_df = pd.read_csv(ExpMatchFil, index_col=0)
+    decile_map = expression_decile_map(exp_df, valid_genes)
+    rng = np.random.default_rng(seed)
+    sims = sample_expression_matched(entrez_ids, decile_map, n_sims, rng)
+
+    out_df = pd.DataFrame(sims, index=entrez_ids,
+                          columns=[str(i) for i in range(n_sims)])
+    out_df.insert(0, "GeneWeight", Gene_Weights)
+    outdir = os.path.dirname(outfile)
+    if outdir:
+        os.makedirs(outdir, exist_ok=True)
+    out_df.to_csv(outfile)
+    print(f"Saved {n_sims} expression-matched simulations to {outfile}")
+
+
 ###########################################################################
 ## Args and Main Functions
 ###########################################################################
@@ -183,6 +213,13 @@ def GetOptions():
     parser.add_argument('--n_sims', type=int, default=10000, help='Number of ctrl simulations')
     parser.add_argument('--GW_Dir', type=str, help="dirctory of ctrl gene weights")
     parser.add_argument('--SpecMat', type=str, help="Filename of bias matrix")
+    parser.add_argument('--null_mode', type=str, default='uniform',
+                        choices=['uniform', 'mutability', 'expmatched'],
+                        help='Null sampling scheme for the _random output')
+    parser.add_argument('--ExpMatch', type=str, default=None,
+                        help='ExpMatchFeatures.csv, required when null_mode=expmatched')
+    parser.add_argument('--seed', type=int, default=42,
+                        help='RNG seed; the existing samplers were unseeded')
 
     args = parser.parse_args()
     return args
@@ -196,7 +233,9 @@ def main():
     if GeneProb is not None and GeneProb.lower() == "none":
         GeneProb = None
     n_sims = args.n_sims
-    
+    null_mode = args.null_mode
+    seed = args.seed
+
     # The Snakefile passes the _random.csv filename, but we need both _sibling.csv and _random.csv
     # So we derive the sibling filename from the random filename
     if outfile.endswith('_random.csv'):
@@ -207,9 +246,12 @@ def main():
         base_name = outfile.replace('.csv', '')
         sibling_outfile = f"{base_name}_sibling.csv"
         random_outfile = f"{base_name}_random.csv"
-    
-    SiblingGenes(SpecMat, WeightDF, sibling_outfile, GeneProb, n_sims)
-    RandomGenes(SpecMat, WeightDF, random_outfile, GeneProb, n_sims)
+
+    SiblingGenes(SpecMat, WeightDF, sibling_outfile, GeneProb, n_sims, seed=seed)
+    if null_mode == 'expmatched':
+        ExpMatchedGenes(SpecMat, WeightDF, random_outfile, args.ExpMatch, n_sims, seed=seed)
+    else:
+        RandomGenes(SpecMat, WeightDF, random_outfile, GeneProb, n_sims, seed=seed)
 
 
     return

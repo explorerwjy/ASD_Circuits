@@ -61,3 +61,34 @@ def test_genes_absent_from_the_map_are_dropped(toy_exp):
     dm = expression_decile_map(toy_exp, valid_genes=toy_exp.index)
     draws = sample_expression_matched([1000, 999999], dm, 5, np.random.default_rng(42))
     assert draws.shape == (1, 5)
+
+
+import subprocess, tempfile, csv
+
+
+def test_generate_geneweights_expmatched_cli(tmp_path):
+    """The script must emit an entrez x n_sims table whose first column is the
+    original weight, matching the existing sibling/random output contract."""
+    gw = tmp_path / "toy.gw"
+    gw.write_text("2629,1\n120892,1\n6622,1\n")     # GBA, LRRK2, SNCA
+    # NOTE: filename deliberately ends in "_random.csv" so main()'s existing
+    # (preserved) output-path derivation writes here directly rather than to
+    # a further-suffixed "..._random.csv" — this matches how the real
+    # Snakefile always names the --outfile it passes (weights_random target).
+    out = tmp_path / "null_random.csv"
+    r = subprocess.run(
+        ["python", "scripts/script_generate_geneweights.py",
+         "--WeightDF", str(gw),
+         "--SpecMat", "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet",
+         "--n_sims", "25",
+         "--GeneProb", "None",
+         "--null_mode", "expmatched",
+         "--ExpMatch", "dat/allen-mouse-exp/ExpMatchFeatures.csv",
+         "--outfile", str(out)],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, r.stderr[-2000:]
+    df = pd.read_csv(out, index_col=0)
+    assert df.columns[0] == "GeneWeight"
+    assert df.shape == (3, 26)
+    assert set(df.index) == {2629, 120892, 6622}

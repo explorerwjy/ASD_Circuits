@@ -131,6 +131,8 @@ data_files:
   legacy_match_dir: "dat/allen-mouse-exp/ExpMatch_Legacy"
   sibling_weights: "dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv"
   gene_prob: "dat/Genetics/GeneWeights/GeneProb_LGD_Dmis.csv"
+  # Expression-decile features for the expression-matched null model.
+  exp_match_features: "dat/allen-mouse-exp/ExpMatchFeatures.csv"
   mouse_ct_annotation: "dat/MouseCT_Cluster_Anno.csv"
   cell_type_hierarchy: "dat/CellTypeHierarchy.csv"
   protein_coding_genes: "dat/Genetics/protein-coding_gene.txt"

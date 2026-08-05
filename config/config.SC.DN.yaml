@@ -33,6 +33,8 @@ n_random_weights: 10000
 data_files:
   sibling_weights: "dat/Genetics/GeneWeights/sibling_weights_LGD_Dmis.csv"
   gene_prob: "dat/Genetics/GeneWeights/GeneProb_LGD_Dmis.csv"
+  # Expression-decile features for the expression-matched null model.
+  exp_match_features: "dat/allen-mouse-exp/ExpMatchFeatures.csv"
   mouse_ct_annotation: "dat/MouseCT_Cluster_Anno.csv"
   protein_coding_genes: "dat/Genetics/protein-coding_gene.txt"
   major_brain_divisions: "dat/structure2region.tsv"
