@@ -31,7 +31,11 @@ __pycache__/
 **/archive/
 **/draft/
 **/drafts/
-docs/
+
+# docs/ tracks prose only (.md via the whitelist above), so design docs and plans
+# are visible in the repo and from Claude Code remote. The manuscript tree stays
+# ignored: it is ~227 MB of .docx drafts and copyrighted PDF reprints.
+docs/MS/
 
 # Validation and test files (not for publication)
 notebook_validation/
