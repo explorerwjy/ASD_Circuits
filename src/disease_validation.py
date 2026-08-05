@@ -90,3 +90,41 @@ def gene_set_report(records, symbol2entrez, valid_genes):
             "in_matrix": e is not None and int(e) in valid,
         })
     return pd.DataFrame(rows)
+
+
+def expression_decile_map(exp_df, valid_genes, n_bins=10, exp_col="EXP"):
+    """Bin genes into equal-count expression deciles.
+
+    Ranks before binning so ties cannot collapse a bin. Returns a Series
+    entrez -> bin index, restricted to genes present in both inputs.
+    """
+    idx = pd.Index([int(g) for g in valid_genes])
+    exp = exp_df.copy()
+    exp.index = exp.index.astype(int)
+    shared = exp.index.intersection(idx)
+    vals = exp.loc[shared, exp_col].rank(method="first")
+    bins = pd.qcut(vals, n_bins, labels=False)
+    return pd.Series(bins.values, index=shared, name="decile")
+
+
+def sample_expression_matched(target, decile_map, n_sims, rng):
+    """Draw n_sims gene sets matching target's per-decile composition.
+
+    Sampling is without replacement within a simulation. Genes in target that
+    are absent from decile_map are dropped. Returns shape (n_kept, n_sims).
+    """
+    kept = [int(g) for g in target if int(g) in decile_map.index]
+    if not kept:
+        raise ValueError("no target genes present in decile_map")
+    counts = decile_map.loc[kept].value_counts()
+    pools = {d: decile_map.index[decile_map == d].to_numpy() for d in counts.index}
+    for d, k in counts.items():
+        if len(pools[d]) < k:
+            raise ValueError(f"decile {d} has {len(pools[d])} genes, need {k}")
+    out = np.empty((len(kept), n_sims), dtype=np.int64)
+    for j in range(n_sims):
+        drawn = []
+        for d, k in counts.items():
+            drawn.extend(rng.choice(pools[d], size=k, replace=False))
+        out[:, j] = drawn
+    return out
