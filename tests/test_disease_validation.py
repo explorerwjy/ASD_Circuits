@@ -210,3 +210,33 @@ def test_null_auroc_handles_ties_like_scipy():
 def test_empirical_p_is_add_one_smoothed():
     assert empirical_p(1.0, np.zeros(99)) == pytest.approx(1 / 100)
     assert empirical_p(-1.0, np.zeros(99)) == pytest.approx(100 / 100)
+
+
+# --- NaN hardening: rankdata(axis=0) turns a WHOLE column NaN if even one
+# cell in it is NaN, regardless of whether that cell is a ground-truth row
+# or a background row. recovery_null_aurocs must fail loudly rather than
+# silently hand back a NaN AUROC for that simulation. ---
+
+
+def test_null_aurocs_raises_on_nan_in_non_ground_truth_row():
+    order = [f"S{i:03d}" for i in range(10)]
+    rng = np.random.default_rng(42)
+    null = pd.DataFrame(rng.normal(size=(10, 5)), index=order,
+                        columns=[str(i) for i in range(5)])
+    null.loc["S009", "2"] = np.nan  # S009 is background, not ground truth
+    with pytest.raises(ValueError) as excinfo:
+        recovery_null_aurocs(null, order[:3])
+    assert "NaN" in str(excinfo.value)
+    assert "2" in str(excinfo.value)
+
+
+def test_null_aurocs_raises_on_nan_in_ground_truth_row():
+    order = [f"S{i:03d}" for i in range(10)]
+    rng = np.random.default_rng(42)
+    null = pd.DataFrame(rng.normal(size=(10, 5)), index=order,
+                        columns=[str(i) for i in range(5)])
+    null.loc["S000", "2"] = np.nan  # S000 IS in the ground-truth set below
+    with pytest.raises(ValueError) as excinfo:
+        recovery_null_aurocs(null, order[:3])
+    assert "NaN" in str(excinfo.value)
+    assert "2" in str(excinfo.value)

@@ -182,6 +182,18 @@ def recovery_null_aurocs(null_bias_df, ground_truth):
     of which null was configured, so comparing recovery_stats() across nulls
     compares nothing. Confirmed empirically: for ASD_All the uniform and
     sibling bias files differ in P-value but max|dEFFECT| is exactly 0.0.
+
+    Raises ValueError if any column contains NaN, naming the offending
+    columns. rankdata(axis=0) turns an ENTIRE column NaN if even a single
+    cell in it is NaN - confirmed empirically, and true regardless of
+    whether the NaN cell is a ground-truth row or a background row - so
+    without this guard a NaN would silently poison that simulation's AUROC
+    and then empirical_p, with no error or warning. This is not
+    hypothetical: 15 of 61 files in results/STR_ISH/null_bias/ (the NT_*
+    source/target neurotransmitter sets) already contain NaN cells (1 to
+    25,861 per file). A caller that needs to tolerate NaN (e.g. drop the
+    affected columns first) must do so explicitly before calling; this
+    function will not guess at a policy.
     """
     present = [s for s in ground_truth if s in null_bias_df.index]
     if not present:
@@ -190,6 +202,16 @@ def recovery_null_aurocs(null_bias_df, ground_truth):
     n_pos, n_neg = int(mask.sum()), int((~mask).sum())
     if n_neg == 0:
         raise ValueError("no background structures to compare against")
+    nan_cols = null_bias_df.columns[null_bias_df.isna().any(axis=0)]
+    if len(nan_cols) > 0:
+        preview = ", ".join(map(str, nan_cols[:10]))
+        more = f" (+{len(nan_cols) - 10} more)" if len(nan_cols) > 10 else ""
+        raise ValueError(
+            f"null_bias_df contains NaN in {len(nan_cols)} column(s): "
+            f"{preview}{more}. recovery_null_aurocs refuses to silently "
+            "propagate NaN into an AUROC - drop or otherwise handle the "
+            "affected columns/rows before calling."
+        )
     vals = null_bias_df.to_numpy(dtype=float)
     # AUROC = (sum of positive ranks - n_pos(n_pos+1)/2) / (n_pos * n_neg),
     # the vectorised Mann-Whitney U formulation.
