@@ -240,3 +240,37 @@ def test_null_aurocs_raises_on_nan_in_ground_truth_row():
         recovery_null_aurocs(null, order[:3])
     assert "NaN" in str(excinfo.value)
     assert "2" in str(excinfo.value)
+
+
+# --- Gene-set size sensitivity: nested subsets and leave-one-out ---
+from disease_validation import nested_subset_recovery, leave_one_out_recovery
+
+
+@pytest.fixture
+def toy_expr():
+    """3 genes x 6 structures. g1 loads on A/B, g2 on C/D, g3 is flat."""
+    return pd.DataFrame(
+        [[3.0, 3.0, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 0.0, 3.0, 3.0, 0.0, 0.0],
+         [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]],
+        index=[1, 2, 3], columns=list("ABCDEF"),
+    )
+
+
+def _bias_fn(expr, weights):
+    from ASD_Circuits import MouseSTR_AvgZ_Weighted
+    return MouseSTR_AvgZ_Weighted(expr, weights)
+
+
+def test_nested_subset_returns_one_row_per_size(toy_expr):
+    out = nested_subset_recovery(toy_expr, [1, 2, 3], ["A", "B"], [1, 2, 3], _bias_fn)
+    assert list(out["n_genes"]) == [1, 2, 3]
+    assert out.loc[out.n_genes == 1, "auroc"].iloc[0] == 1.0
+
+
+def test_leave_one_out_flags_the_driver_gene(toy_expr):
+    weights = {1: 1.0, 2: 1.0, 3: 1.0}
+    out = leave_one_out_recovery(toy_expr, weights, ["A", "B"], {1: "G1", 2: "G2", 3: "G3"}, _bias_fn)
+    assert set(out["dropped_symbol"]) == {"G1", "G2", "G3"}
+    worst = out.sort_values("delta_auroc").iloc[0]
+    assert worst["dropped_symbol"] == "G1"

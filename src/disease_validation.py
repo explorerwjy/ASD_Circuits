@@ -255,3 +255,47 @@ def recovery_permutation_p(bias_df, ground_truth, n_perm=10000,
         if float(u) / (mask.sum() * (~mask).sum()) >= observed:
             hits += 1
     return (hits + 1) / (n_perm + 1)
+
+
+def nested_subset_recovery(expr_mat, ordered_entrez, ground_truth, sizes, bias_fn,
+                           weight=1.0, effect_col="EFFECT"):
+    """Recovery as a function of gene-set size, over nested prefixes.
+
+    ordered_entrez must already be ordered by evidence tier (strongest first).
+    """
+    rows = []
+    for n in sizes:
+        subset = list(ordered_entrez)[:n]
+        if not subset:
+            continue
+        weights = {int(g): weight for g in subset}
+        bias = bias_fn(expr_mat, weights)
+        try:
+            s = recovery_stats(bias, ground_truth, effect_col)
+        except ValueError:
+            continue
+        rows.append({"n_genes": n, "auroc": s["auroc"],
+                     "p_mannwhitney": s["p_mannwhitney"],
+                     "precision_at_20": s["precision_at_20"]})
+    return pd.DataFrame(rows)
+
+
+def leave_one_out_recovery(expr_mat, entrez_weights, ground_truth, entrez2symbol,
+                           bias_fn, effect_col="EFFECT"):
+    """Drop each gene in turn; report the change in AUROC.
+
+    A large negative delta_auroc means that gene was carrying the result.
+    """
+    full = recovery_stats(bias_fn(expr_mat, dict(entrez_weights)),
+                          ground_truth, effect_col)["auroc"]
+    rows = []
+    for g in list(entrez_weights):
+        reduced = {k: v for k, v in entrez_weights.items() if k != g}
+        if not reduced:
+            continue
+        s = recovery_stats(bias_fn(expr_mat, reduced), ground_truth, effect_col)
+        rows.append({"dropped_entrez": g,
+                     "dropped_symbol": entrez2symbol.get(g, str(g)),
+                     "auroc": s["auroc"],
+                     "delta_auroc": s["auroc"] - full})
+    return pd.DataFrame(rows).sort_values("delta_auroc").reset_index(drop=True)
