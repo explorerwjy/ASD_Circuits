@@ -206,24 +206,68 @@ for name in gene_sets:
 
 # %% [markdown]
 # # 7. Verify against the pre-registration
+#
+# Re-reads every `.gw` / `.DN.gw` file **actually written to disk** and
+# checks its real content (entrez key set, weight values) against the
+# expected set derived from `reports[name]` — not merely the file's line
+# count, which cannot distinguish a correct file from one with the right
+# number of genes but a wrong gene.
 
 # %%
 # Section 7: assert the written files match the frozen pre-registration.
 # Same exact contract as tests/test_disease_validation_data.py - no floors.
 # A floor would let this cell pass after writing a corrupted .gw file.
+#
+# CRITICAL: a length check alone cannot detect a wrong gene - a corrupted
+# .gw with the right line count but a bad entrez id would still pass
+# `len(...) == n`. Every assertion below re-parses the file ACTUALLY WRITTEN
+# TO DISK with Fil2Dict (not the in-memory `reports[name]` DataFrame) and
+# checks its real content: the exact entrez key set, and that every raw
+# weight is exactly 1.0. The .DN.gw files get the same key-set check plus a
+# per-gene recomputation of weight_DN = weight_ISH * max(spearman_r, 0)^2
+# from the correlation file, so a corrupted DN value is caught too.
 EXPECTED_IN_MATRIX = {"PD_Primary": 15, "PD_Sens_DA": 20, "PD_Sens_Atypical": 24,
                       "PD_GWAS_L2G": 40, "HD_HTT": 1, "StriatalDegeneration": 8}
 EXPECTED_DROPPED = {"StriatalDegeneration": {"FTL"}, "PD_GWAS_L2G": {"FAM47E"}}
+
 for name, n in EXPECTED_IN_MATRIX.items():
-    got = len(Fil2Dict(f"../dat/Genetics/GeneWeights/{name}.gw"))
-    assert got == n, f"{name}: wrote {got} genes, pre-registration says {n}"
     rep = reports[name]
     dropped = set(rep.loc[~rep["in_matrix"], "symbol"])
     assert dropped == EXPECTED_DROPPED.get(name, set()), \
         f"{name}: dropped {dropped}, expected {EXPECTED_DROPPED.get(name, set())}"
     assert rep["resolved"].all(), \
         f"{name}: unresolved symbols {set(rep.loc[~rep['resolved'], 'symbol'])}"
-print("All gene sets match the pre-registration.")
+
+    expected_entrez = set(int(e) for e in rep.loc[rep["in_matrix"], "entrez"])
+    assert len(expected_entrez) == n, \
+        f"{name}: expected {n} genes per pre-registration, report derives {len(expected_entrez)}"
+
+    # Re-read the .gw actually written to disk - the file every downstream
+    # task loads - and compare its real content, not merely its length.
+    on_disk = {int(k): float(v) for k, v in
+               Fil2Dict(f"../dat/Genetics/GeneWeights/{name}.gw").items()}
+    assert set(on_disk) == expected_entrez, \
+        f"{name}: .gw entrez set differs from expected (symmetric diff: " \
+        f"{set(on_disk) ^ expected_entrez})"
+    assert all(w == 1.0 for w in on_disk.values()), \
+        f"{name}: .gw has non-uniform weights: " \
+        f"{ {k: w for k, w in on_disk.items() if w != 1.0} }"
+
+    # Same identity check for the DN file, plus a recomputed-value check
+    # against the cross-platform correlation file. weight_ISH is 1.0 for
+    # every gene here, so weight_DN reduces to max(spearman_r, 0)^2.
+    expected_dn_entrez = {e for e in expected_entrez if e in v2v3.index}
+    on_disk_dn = {int(k): float(v) for k, v in
+                  Fil2Dict(f"../dat/Genetics/GeneWeights_DN/{name}.DN.gw").items()}
+    assert set(on_disk_dn) == expected_dn_entrez, \
+        f"{name}: .DN.gw entrez set differs from expected (symmetric diff: " \
+        f"{set(on_disk_dn) ^ expected_dn_entrez})"
+    for e, w_dn in on_disk_dn.items():
+        expected_w_dn = 1.0 * (max(v2v3.loc[e], 0.0) ** 2)
+        assert abs(w_dn - expected_w_dn) < 1e-9, \
+            f"{name}: DN weight for entrez {e} is {w_dn}, expected {expected_w_dn}"
+
+print("All gene sets match the pre-registration (content verified from disk, not just length).")
 print("Pre-registration commit:",
       subprocess.run(["git", "log", "-1", "--format=%H", "--",
                       "config/disease_validation_genesets.yaml"],
