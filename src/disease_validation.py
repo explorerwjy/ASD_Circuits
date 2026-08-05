@@ -135,3 +135,101 @@ def sample_expression_matched(target, decile_map, n_sims, rng):
                            for d, k in counts.items()}
         out[:, j] = [next(draws_by_decile[d]) for d in kept_deciles.values]
     return out
+
+
+from scipy.stats import mannwhitneyu, rankdata
+
+
+def recovery_stats(bias_df, ground_truth, effect_col="EFFECT"):
+    """Do the pre-registered structures rank above the rest on bias?
+
+    One-sided Mann-Whitney U (ground truth greater). AUROC is derived from U,
+    so it is the exact rank-based area, not a threshold sweep.
+    """
+    scores = bias_df[effect_col].dropna()
+    present = [s for s in ground_truth if s in scores.index]
+    missing = [s for s in ground_truth if s not in scores.index]
+    if not present:
+        raise ValueError("no ground-truth structures present in bias_df")
+    mask = scores.index.isin(present)
+    pos, neg = scores[mask], scores[~mask]
+    if len(neg) == 0:
+        raise ValueError("no background structures to compare against")
+    u, p = mannwhitneyu(pos, neg, alternative="greater")
+    ranks = bias_df[effect_col].rank(ascending=False)
+    top20 = set(scores.nlargest(20).index)
+    return {
+        "n_ground_truth": len(present),
+        "n_missing": len(missing),
+        "missing": missing,
+        "u_stat": float(u),
+        "p_mannwhitney": float(p),
+        "auroc": float(u) / (len(pos) * len(neg)),
+        "precision_at_20": len(top20 & set(present)) / 20.0,
+        "median_rank": float(ranks[present].median()),
+    }
+
+
+def recovery_null_aurocs(null_bias_df, ground_truth):
+    """AUROC of the ground-truth set under every null GENE SET simulation.
+
+    null_bias_df is the (n_structures x n_sims) matrix written by the bias
+    pipeline to results/{analysis}/null_bias/{geneset}_null_bias_{null}.parquet.
+    Each column is the structure bias profile of one null gene set.
+
+    THIS is the statistic that distinguishes null models. The observed EFFECT
+    column is computed from the real gene set and is byte-identical regardless
+    of which null was configured, so comparing recovery_stats() across nulls
+    compares nothing. Confirmed empirically: for ASD_All the uniform and
+    sibling bias files differ in P-value but max|dEFFECT| is exactly 0.0.
+    """
+    present = [s for s in ground_truth if s in null_bias_df.index]
+    if not present:
+        raise ValueError("no ground-truth structures present in null_bias_df")
+    mask = null_bias_df.index.isin(present)
+    n_pos, n_neg = int(mask.sum()), int((~mask).sum())
+    if n_neg == 0:
+        raise ValueError("no background structures to compare against")
+    vals = null_bias_df.to_numpy(dtype=float)
+    # AUROC = (sum of positive ranks - n_pos(n_pos+1)/2) / (n_pos * n_neg),
+    # the vectorised Mann-Whitney U formulation.
+    # MUST use rankdata(method="average"): a double-argsort assigns arbitrary
+    # distinct ranks to tied values and silently gives the wrong answer. For
+    # scores [1,1,1,0] with positives {A,B}, argsort yields 0.5 where the
+    # correct (and scipy) answer is 0.75.
+    ranks = rankdata(vals, axis=0, method="average")
+    pos_rank_sum = ranks[mask, :].sum(axis=0)
+    u = pos_rank_sum - n_pos * (n_pos + 1) / 2.0
+    return u / (n_pos * n_neg)
+
+
+def empirical_p(observed, null_values):
+    """Add-one-smoothed one-sided p: P(null >= observed)."""
+    null_values = np.asarray(null_values, dtype=float)
+    return (int((null_values >= observed).sum()) + 1) / (len(null_values) + 1)
+
+
+def recovery_permutation_p(bias_df, ground_truth, n_perm=10000,
+                           seed=DEFAULT_SEED, effect_col="EFFECT"):
+    """Permutation p for the AUROC, drawing random STRUCTURE sets of matched size.
+
+    Distinct from recovery_null_aurocs: this asks whether these particular
+    structures sit unusually high in this one ranking (a structure-label
+    permutation), while recovery_null_aurocs asks whether this gene set beats
+    null gene sets. Both are reported; they are not interchangeable.
+    """
+    scores = bias_df[effect_col].dropna()
+    present = [s for s in ground_truth if s in scores.index]
+    if not present:
+        raise ValueError("no ground-truth structures present in bias_df")
+    observed = recovery_stats(bias_df, ground_truth, effect_col)["auroc"]
+    rng = np.random.default_rng(seed)
+    all_structs = scores.index.to_numpy()
+    hits = 0
+    for _ in range(n_perm):
+        draw = rng.choice(all_structs, size=len(present), replace=False)
+        mask = scores.index.isin(draw)
+        u, _ = mannwhitneyu(scores[mask], scores[~mask], alternative="greater")
+        if float(u) / (mask.sum() * (~mask).sum()) >= observed:
+            hits += 1
+    return (hits + 1) / (n_perm + 1)

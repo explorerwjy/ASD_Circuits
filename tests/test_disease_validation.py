@@ -110,3 +110,103 @@ def test_generate_geneweights_expmatched_cli(tmp_path):
     assert df.columns[0] == "GeneWeight"
     assert df.shape == (3, 26)
     assert set(df.index) == {2629, 120892, 6622}
+
+
+from disease_validation import recovery_stats, recovery_permutation_p
+
+
+def _bias(order):
+    """Build a bias frame whose EFFECT decreases down the given structure order."""
+    return pd.DataFrame(
+        {"EFFECT": np.linspace(1.0, 0.0, len(order))}, index=list(order)
+    )
+
+
+def test_perfect_recovery_gives_auroc_one():
+    # 3 positives over 5 negatives: exact one-sided p = 1/C(8,3) = 0.0179.
+    # With 2-over-4 the best achievable p is 1/C(6,2) = 0.0667, which would
+    # make a p<0.05 assertion mathematically impossible.
+    df = _bias(["A", "B", "C", "D", "E", "F", "G", "H"])
+    s = recovery_stats(df, ["A", "B", "C"])
+    assert s["auroc"] == 1.0
+    assert s["p_mannwhitney"] < 0.05
+    assert s["n_ground_truth"] == 3
+
+
+def test_worst_recovery_gives_auroc_zero():
+    df = _bias(["A", "B", "C", "D", "E", "F"])
+    s = recovery_stats(df, ["E", "F"])
+    assert s["auroc"] == 0.0
+    assert s["p_mannwhitney"] > 0.5
+
+
+def test_missing_ground_truth_structures_are_counted_not_fatal():
+    df = _bias(["A", "B", "C"])
+    s = recovery_stats(df, ["A", "NOT_IN_ATLAS"])
+    assert s["n_ground_truth"] == 1
+    assert s["n_missing"] == 1
+
+
+def test_precision_at_20_counts_hits_in_the_top_20():
+    order = [f"S{i:03d}" for i in range(100)]
+    df = _bias(order)
+    s = recovery_stats(df, ["S000", "S001", "S050"])
+    assert s["precision_at_20"] == pytest.approx(2 / 20)
+
+
+def test_permutation_p_is_small_for_perfect_recovery():
+    order = [f"S{i:03d}" for i in range(213)]
+    df = _bias(order)
+    p = recovery_permutation_p(df, order[:13], n_perm=2000, seed=42)
+    assert p < 0.01
+
+
+def test_permutation_p_is_reproducible():
+    order = [f"S{i:03d}" for i in range(213)]
+    df = _bias(order)
+    a = recovery_permutation_p(df, order[:13], n_perm=500, seed=42)
+    b = recovery_permutation_p(df, order[:13], n_perm=500, seed=42)
+    assert a == b
+
+
+def test_all_ground_truth_missing_raises():
+    df = _bias(["A", "B"])
+    with pytest.raises(ValueError):
+        recovery_stats(df, ["X", "Y"])
+
+
+# --- Gene-set null: the test that actually differs between null models ---
+from disease_validation import recovery_null_aurocs, empirical_p
+
+
+def test_null_aurocs_one_per_simulation():
+    order = [f"S{i:03d}" for i in range(20)]
+    rng = np.random.default_rng(42)
+    null = pd.DataFrame(rng.normal(size=(20, 50)), index=order,
+                        columns=[str(i) for i in range(50)])
+    aurocs = recovery_null_aurocs(null, order[:5])
+    assert aurocs.shape == (50,)
+    assert ((aurocs >= 0) & (aurocs <= 1)).all()
+
+
+def test_null_auroc_distribution_is_centred_on_half():
+    order = [f"S{i:03d}" for i in range(50)]
+    rng = np.random.default_rng(42)
+    null = pd.DataFrame(rng.normal(size=(50, 400)), index=order,
+                        columns=[str(i) for i in range(400)])
+    aurocs = recovery_null_aurocs(null, order[:10])
+    assert 0.42 < np.median(aurocs) < 0.58
+
+
+def test_null_auroc_handles_ties_like_scipy():
+    """Regression: a double-argsort gives 0.5 here; the correct answer is 0.75."""
+    null = pd.DataFrame({"0": [1.0, 1.0, 1.0, 0.0]}, index=list("ABCD"))
+    got = recovery_null_aurocs(null, ["A", "B"])
+    pos, neg = null.loc[["A", "B"], "0"], null.loc[["C", "D"], "0"]
+    u, _ = mannwhitneyu(pos, neg, alternative="greater")
+    assert got[0] == pytest.approx(u / (len(pos) * len(neg))) == pytest.approx(0.75)
+
+
+def test_empirical_p_is_add_one_smoothed():
+    assert empirical_p(1.0, np.zeros(99)) == pytest.approx(1 / 100)
+    assert empirical_p(-1.0, np.zeros(99)) == pytest.approx(100 / 100)
