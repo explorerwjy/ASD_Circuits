@@ -189,6 +189,20 @@ def ExpMatchedGenes(ExpMat, WeightDF, outfile, ExpMatchFil, n_sims=10000, seed=4
 
     exp_df = pd.read_csv(ExpMatchFil, index_col=0)
     decile_map = expression_decile_map(exp_df, valid_genes)
+
+    # Genes present in ExpMat but absent from the expression-match feature
+    # file cannot be decile-matched; sample_expression_matched() drops them
+    # internally, which would leave entrez_ids/Gene_Weights longer than sims'
+    # rows. Filter here too so the index attached to the output frame stays
+    # aligned with sims.
+    in_map = np.isin(entrez_ids, decile_map.index)
+    n_dropped = int((~in_map).sum())
+    if n_dropped:
+        print(f"Dropped {n_dropped} gene(s) absent from ExpMatch features: "
+              f"{sorted(set(entrez_ids[~in_map].tolist()))}")
+    entrez_ids = entrez_ids[in_map]
+    Gene_Weights = Gene_Weights[in_map]
+
     rng = np.random.default_rng(seed)
     sims = sample_expression_matched(entrez_ids, decile_map, n_sims, rng)
 

@@ -111,20 +111,27 @@ def sample_expression_matched(target, decile_map, n_sims, rng):
     """Draw n_sims gene sets matching target's per-decile composition.
 
     Sampling is without replacement within a simulation. Genes in target that
-    are absent from decile_map are dropped. Returns shape (n_kept, n_sims).
+    are absent from decile_map are dropped. Returns shape (n_kept, n_sims),
+    with row i decile-matched to kept[i] (target, in its original order,
+    filtered to genes present in decile_map) — not merely to the same
+    multiset of deciles in some other order. Building the per-sim draws
+    decile-group by decile-group and then reassembling in kept's original
+    order (rather than concatenating group by group) is what keeps rows
+    correctly paired to their target gene when deciles are interleaved,
+    e.g. target deciles [9, 0, 9, 0].
     """
     kept = [int(g) for g in target if int(g) in decile_map.index]
     if not kept:
         raise ValueError("no target genes present in decile_map")
-    counts = decile_map.loc[kept].value_counts()
+    kept_deciles = decile_map.loc[kept]
+    counts = kept_deciles.value_counts()
     pools = {d: decile_map.index[decile_map == d].to_numpy() for d in counts.index}
     for d, k in counts.items():
         if len(pools[d]) < k:
             raise ValueError(f"decile {d} has {len(pools[d])} genes, need {k}")
     out = np.empty((len(kept), n_sims), dtype=np.int64)
     for j in range(n_sims):
-        drawn = []
-        for d, k in counts.items():
-            drawn.extend(rng.choice(pools[d], size=k, replace=False))
-        out[:, j] = drawn
+        draws_by_decile = {d: iter(rng.choice(pools[d], size=k, replace=False))
+                           for d, k in counts.items()}
+        out[:, j] = [next(draws_by_decile[d]) for d in kept_deciles.values]
     return out

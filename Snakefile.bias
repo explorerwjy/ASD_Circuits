@@ -1,4 +1,5 @@
 import os
+import zlib
 
 # No default configfile — must specify via --configfile to avoid accidental merging.
 # STR analysis: snakemake -s Snakefile.bias --configfile config/config.STR.yaml --cores 10
@@ -61,8 +62,18 @@ rule generate_geneweights:
         n=N_WEIGHTS,
         gene_prob=lambda wc: get_gene_prob(wc.geneset),
         null_mode=lambda wc: get_null_mode(wc.geneset),
-        seed=42,
-        expmatch=lambda wc: get_expmatch()
+        # Per-geneset seed (not a shared constant): equal-sized gene sets must
+        # not draw byte-identical nulls (e.g. a PD set and its negative
+        # control). Human-authorized exception to the project's "seed 42
+        # everywhere" rule, scoped to null generation only.
+        seed=lambda wc: 42 + zlib.crc32(wc.geneset.encode()) % 10000,
+        # Only evaluate get_expmatch() (and thus require
+        # data_files.exp_match_features in the active config) when a gene set
+        # actually uses the expmatched null — mirrors the input.expmatch
+        # conditional above. Configs that never register an expmatched gene
+        # set (config.yaml, config.SC.DN.100K/.CPM/.CPM.Spearman/.UMI.yaml)
+        # lack that key entirely and must not be forced to add it.
+        expmatch=lambda wc: get_expmatch() if get_null_mode(wc.geneset) == "expmatched" else "None"
     shell:
         """
         mkdir -p $(dirname {output.weights_random})

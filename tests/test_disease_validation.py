@@ -32,6 +32,24 @@ def test_sampled_genes_preserve_decile_composition(toy_exp):
         assert got.equals(want)
 
 
+def test_sampled_rows_stay_paired_with_their_target_gene(toy_exp):
+    """Row i must be decile-matched to target[i] specifically, not merely to
+    the same *multiset* of deciles in some other order. A regression here
+    (e.g. assembling draws decile-group by decile-group and reassigning them
+    to output rows in group order) is invisible to
+    test_sampled_genes_preserve_decile_composition, which only checks the
+    aggregate composition per simulation — it would still pass even if rows
+    were shuffled across genes within the same simulation."""
+    dm = expression_decile_map(toy_exp, valid_genes=toy_exp.index)
+    target = [1099, 1000, 1098, 1001]          # deciles 9, 0, 9, 0 (interleaved)
+    rng = np.random.default_rng(42)
+    draws = sample_expression_matched(target, dm, n_sims=30, rng=rng)
+    want_deciles = dm.loc[target].values
+    for j in range(draws.shape[1]):
+        got_deciles = dm.loc[draws[:, j]].values
+        np.testing.assert_array_equal(got_deciles, want_deciles)
+
+
 def test_sampling_is_without_replacement_within_a_sim(toy_exp):
     dm = expression_decile_map(toy_exp, valid_genes=toy_exp.index)
     target = [1000, 1001, 1002]                 # three genes, same decile
@@ -63,7 +81,7 @@ def test_genes_absent_from_the_map_are_dropped(toy_exp):
     assert draws.shape == (1, 5)
 
 
-import subprocess, tempfile, csv
+import subprocess
 
 
 def test_generate_geneweights_expmatched_cli(tmp_path):
@@ -77,7 +95,7 @@ def test_generate_geneweights_expmatched_cli(tmp_path):
     # Snakefile always names the --outfile it passes (weights_random target).
     out = tmp_path / "null_random.csv"
     r = subprocess.run(
-        ["python", "scripts/script_generate_geneweights.py",
+        [sys.executable, "scripts/script_generate_geneweights.py",
          "--WeightDF", str(gw),
          "--SpecMat", "dat/BiasMatrices/AllenMouseBrain_Z2bias.parquet",
          "--n_sims", "25",
