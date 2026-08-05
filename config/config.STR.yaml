@@ -88,6 +88,45 @@ gene_sets:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/IBD.top61.gw"
   T2D:
     geneweights: "/home/jw3514/Work/ASD_Circuits_CellType/dat/Genetics/GeneWeights/T2D.top61.gw"
+
+  # --- Disease validation (reviewer 2). Uniform random null. ---
+  PD_Primary:
+    geneweights: "dat/Genetics/GeneWeights/PD_Primary.gw"
+    null_model: "uniform"
+  PD_Sens_DA:
+    geneweights: "dat/Genetics/GeneWeights/PD_Sens_DA.gw"
+    null_model: "uniform"
+  PD_Sens_Atypical:
+    geneweights: "dat/Genetics/GeneWeights/PD_Sens_Atypical.gw"
+    null_model: "uniform"
+  PD_GWAS_L2G:
+    geneweights: "dat/Genetics/GeneWeights/PD_GWAS_L2G.gw"
+    null_model: "uniform"
+  HD_HTT:
+    geneweights: "dat/Genetics/GeneWeights/HD_HTT.gw"
+    null_model: "uniform"
+  StriatalDegeneration:
+    geneweights: "dat/Genetics/GeneWeights/StriatalDegeneration.gw"
+    null_model: "uniform"
+  # --- Same sets, expression-decile-matched null. ---
+  PD_Primary_EM:
+    geneweights: "dat/Genetics/GeneWeights/PD_Primary.gw"
+    null_model: "expmatched"
+  PD_Sens_DA_EM:
+    geneweights: "dat/Genetics/GeneWeights/PD_Sens_DA.gw"
+    null_model: "expmatched"
+  PD_Sens_Atypical_EM:
+    geneweights: "dat/Genetics/GeneWeights/PD_Sens_Atypical.gw"
+    null_model: "expmatched"
+  PD_GWAS_L2G_EM:
+    geneweights: "dat/Genetics/GeneWeights/PD_GWAS_L2G.gw"
+    null_model: "expmatched"
+  HD_HTT_EM:
+    geneweights: "dat/Genetics/GeneWeights/HD_HTT.gw"
+    null_model: "expmatched"
+  StriatalDegeneration_EM:
+    geneweights: "dat/Genetics/GeneWeights/StriatalDegeneration.gw"
+    null_model: "expmatched"
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
   STR_ISH:
