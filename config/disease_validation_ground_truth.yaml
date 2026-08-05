@@ -1,0 +1,64 @@
+# Pre-registered ground truth. Frozen BEFORE any bias is computed.
+# Verified 2026-08-05: every structure name exists in STR2Region(),
+# AllenMouseBrain_Z2bias.parquet, and InfoMat.Ipsi.csv.
+version: 1
+frozen: '2026-08-05'
+
+structures:
+  parkinson:
+    core:
+      - Substantia_nigra_compact_part
+      - Substantia_nigra_reticular_part
+      - Ventral_tegmental_area
+      - Caudoputamen
+      - Fundus_of_striatum
+      - Nucleus_accumbens
+      - Globus_pallidus_external_segment
+      - Globus_pallidus_internal_segment
+      - Subthalamic_nucleus
+      - Ventral_anterior_lateral_complex_of_the_thalamus
+      - Ventral_medial_nucleus_of_the_thalamus
+      - Primary_motor_area
+      - Secondary_motor_area
+    braak_early:
+      - Dorsal_nucleus_raphe
+      - Main_olfactory_bulb
+      - Anterior_olfactory_nucleus
+      - Pedunculopontine_nucleus
+  striatal:
+    core:
+      - Caudoputamen
+      - Nucleus_accumbens
+      - Fundus_of_striatum
+      - Globus_pallidus_external_segment
+      - Globus_pallidus_internal_segment
+      - Substantia_nigra_reticular_part
+      - Subthalamic_nucleus
+    late_stage:
+      - Primary_motor_area
+      - Secondary_motor_area
+
+cell_type_subclasses:
+  parkinson:
+    core: ['SNc-VTA-RAmb Foxa1 Dopa']
+  striatal:
+    core: ['STR D1 Gaba', 'STR D2 Gaba', 'STR D1 Sema5a Gaba', 'ACB-BST-FS D1 Gaba']
+  basal_ganglia_context:
+    - 'GPe-SI Sox6 Cyp26b1 Gaba'
+    - 'GPi Tbr1 Cngb3 Gaba-Glut'
+    - 'SNr Six3 Gaba'
+    - 'SNr-VTA Pax5 Npas1 Gaba'
+    - 'STN-PSTN Pitx2 Glut'
+
+# Structures NOT available in the 213-structure atlas; Braak stages 1-2 are
+# therefore only partially testable. Stated in the manuscript, not worked around.
+unavailable: [Locus_coeruleus, Dorsal_motor_nucleus_of_the_vagus_nerve, Zona_incerta]
+
+notes:
+  gene_sets_to_ground_truth:
+    PD_Primary: parkinson
+    PD_Sens_DA: parkinson
+    PD_Sens_Atypical: parkinson
+    PD_GWAS_L2G: parkinson
+    HD_HTT: striatal
+    StriatalDegeneration: striatal

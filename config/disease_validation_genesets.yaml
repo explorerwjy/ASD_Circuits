@@ -1,0 +1,91 @@
+# Pre-registered disease gene sets for GENCIC validation (reviewer 2).
+# Spec: docs/plans/2026-08-05-pd-hd-circuit-validation-design.md
+# Inclusion criterion: the syndrome must involve anatomical DEGENERATION of the
+# target circuit, not merely functional dysfunction of it.
+# Circular expression-marker genes are excluded from every primary tier.
+version: 1
+frozen: '2026-08-05'
+
+gene_pools:
+  pd_core:
+    - {symbol: SNCA,     syndrome: 'PARK1/4 dominant PD',        justification: 'Definitive dominant PD, Lewy/nigral degeneration'}
+    - {symbol: LRRK2,    syndrome: 'PARK8 dominant PD',          justification: 'Definitive dominant PD with nigrostriatal degeneration'}
+    - {symbol: VPS35,    syndrome: 'PARK17 dominant PD',         justification: 'Definitive dominant late-onset PD'}
+    # LoadGeneINFO() maps approved HGNC symbols only - no aliases, no prev_symbol.
+    # GeneSymbol2Entrez['GBA1'] is None; the approved symbol here is GBA (2629).
+    # hgnc_symbol overrides the lookup key wherever the current symbol is an alias.
+    - {symbol: GBA1, hgnc_symbol: GBA, syndrome: 'Gaucher/PD risk',  justification: 'Largest-effect PD risk gene, Lewy/nigral phenotype'}
+    - {symbol: CHCHD2,   syndrome: 'PARK22 dominant PD',         justification: 'Accepted rare dominant PD gene'}
+    - {symbol: RAB39B,   syndrome: 'X-linked parkinsonism-ID',   justification: 'Reported Lewy/nigral pathology'}
+    - {symbol: PRKN,     syndrome: 'PARK2 recessive EOPD',       justification: 'Definitive recessive EOPD with SN dopaminergic loss'}
+    - {symbol: PINK1,    syndrome: 'PARK6 recessive EOPD',       justification: 'Definitive recessive EOPD'}
+    - {symbol: PARK7,    syndrome: 'PARK7 recessive EOPD',       justification: 'Definitive recessive EOPD'}
+    - {symbol: ATP13A2,  syndrome: 'PARK9 Kufor-Rakeb',          justification: 'Recessive juvenile parkinsonism, nigrostriatal involvement'}
+    - {symbol: PLA2G6,   syndrome: 'PARK14',                     justification: 'Neurodegenerative dystonia-parkinsonism, nigrostriatal'}
+    - {symbol: FBXO7,    syndrome: 'PARK15 pallidopyramidal',    justification: 'Established recessive parkinsonism, dopaminergic deficit'}
+    - {symbol: DNAJC6,   syndrome: 'PARK19 juvenile',            justification: 'Juvenile parkinsonism with dopaminergic neurodegeneration'}
+    - {symbol: SYNJ1,    syndrome: 'PARK20 juvenile',            justification: 'Established recessive juvenile parkinsonism'}
+    - {symbol: VPS13C,   syndrome: 'PARK23 recessive EOPD',      justification: 'Established recessive early-onset parkinsonism'}
+  pd_dopamine_markers:
+    - {symbol: TH,       syndrome: 'TH deficiency',              justification: 'CIRCULAR: defining dopaminergic-neuron marker; nondegenerative'}
+    - {symbol: SLC6A3,   syndrome: 'DAT deficiency',             justification: 'CIRCULAR: defining nigrostriatal terminal marker; nondegenerative'}
+    - {symbol: DDC,      syndrome: 'AADC deficiency',            justification: 'Biochemical monoamine deficiency, no degeneration'}
+    - {symbol: GCH1,     syndrome: 'Dopa-responsive dystonia',   justification: 'No nigral degeneration'}
+    - {symbol: SPR,      syndrome: 'BH4-pathway deficiency',     justification: 'Biochemical dopamine deficiency, not degenerative'}
+  pd_atypical:
+    - {symbol: DNAJC13,  syndrome: 'Disputed dominant PD',       justification: 'Disputed candidate, not consensus primary'}
+    - {symbol: LRP10,    syndrome: 'Disputed PD/DLB',            justification: 'Disputed candidate'}
+    - {symbol: DCTN1,    syndrome: 'Perry syndrome',             justification: 'True nigral degeneration but TDP-43 atypical parkinsonism'}
+    - {symbol: MAPT,     syndrome: 'FTDP-17 / PSP',              justification: 'Tau parkinsonism with nigral involvement, not PD'}
+    - {symbol: POLG,     syndrome: 'Mitochondrial parkinsonism', justification: 'Nigrostriatal deficit but multisystem'}
+    - {symbol: TWNK,     syndrome: 'mtDNA maintenance disease',  justification: 'Parkinsonism, multisystem'}
+    - {symbol: SPG11,    syndrome: 'Complicated HSP',            justification: 'Juvenile parkinsonism with dopaminergic deficit'}
+    - {symbol: PTRHD1,   syndrome: 'Parkinsonism-ID',            justification: 'Atypical, limited neuropathology'}
+    - {symbol: DNAJC12,  syndrome: 'Monoamine cofactor defect',  justification: 'Treatable, nondegenerative'}
+  striatal_degeneration:
+    - {symbol: HTT,      syndrome: 'Huntington disease',         justification: 'CAG expansion, caudate/putamen MSN degeneration'}
+    - {symbol: JPH3,     syndrome: 'HDL2',                       justification: 'HD phenocopy with striatal/cortical degeneration'}
+    - {symbol: TBP,      syndrome: 'SCA17 / HDL4',               justification: 'HD-like chorea with basal ganglia degeneration'}
+    - {symbol: VPS13A,   syndrome: 'Chorea-acanthocytosis',      justification: 'Marked caudate/striatal atrophy'}
+    - {symbol: XK,       syndrome: 'McLeod syndrome',            justification: 'Chorea with caudate/putamen degeneration'}
+    - {symbol: FTL,      syndrome: 'Neuroferritinopathy',        justification: 'Marked striatal/pallidal degeneration; ABSENT from Z2 matrix'}
+    - {symbol: ATN1,     syndrome: 'DRPLA',                      justification: 'WEAK: dentatorubral-pallidoluysian, not striatal-selective'}
+    - {symbol: PRNP,     syndrome: 'HDL1',                       justification: 'Very rare prion HD phenocopy'}
+    - {symbol: C9orf72,  syndrome: 'HD phenocopy',               justification: 'WEAK: commonest HD phenocopy but FTLD/ALS pathology'}
+
+  # PD_GWAS_L2G membership is FROZEN HERE, not generated at runtime, so it is
+  # covered by the pre-registration commit. Derived 2026-08-05 from Open Targets
+  # locus-to-gene ML score >= 0.5 pooled over seven PD GWAS (GCST009325,
+  # GCST009324, GCST004902, GCST002544, GCST003984, GCST010049, GCST009512),
+  # minus the artifact loci FLG/HRNR/MUC19. Notebook 01 re-derives and ASSERTS
+  # equality against this list; it never redefines it.
+  # NOTE: written as a YAML flow sequence of mappings - one item per line would
+  # be 41 lines of noise. Validate with `yaml.safe_load` in the Task 1 test.
+  pd_gwas_l2g: [
+    {symbol: LRRK2}, {symbol: SNCA}, {symbol: TMEM175}, {symbol: GPNMB},
+    {symbol: BST1}, {symbol: MCCC1}, {symbol: ACMSD}, {symbol: RIT2},
+    {symbol: STK39}, {symbol: SH3GL2}, {symbol: CTSB}, {symbol: ITPKB},
+    {symbol: SV2C}, {symbol: DLG2}, {symbol: MAPT}, {symbol: RAB29},
+    {symbol: SIPA1L2}, {symbol: NUCKS1}, {symbol: INPP5F}, {symbol: TMEM163},
+    {symbol: FGF20}, {symbol: CAMK2D}, {symbol: HIP1R}, {symbol: BAG3},
+    {symbol: GALC}, {symbol: TOX3}, {symbol: KLHL7}, {symbol: IGSF9B},
+    {symbol: SLC45A3}, {symbol: MAP4K4}, {symbol: GPR65}, {symbol: FAM47E},
+    {symbol: PRICKLE1}, {symbol: PLEKHH1}, {symbol: NDUFAF2}, {symbol: ITGA8},
+    {symbol: TMEM229B}, {symbol: PM20D1}, {symbol: ERCC8}, {symbol: PKP2},
+    {symbol: SLC50A1},
+  ]
+
+gene_sets:
+  PD_Primary:          {include: [pd_core], description: 'Mendelian PD with nigrostriatal degeneration; no dopamine markers'}
+  PD_Sens_DA:          {include: [pd_core, pd_dopamine_markers], description: 'PD_Primary + dopamine synthesis/transport genes'}
+  PD_Sens_Atypical:    {include: [pd_core, pd_atypical], description: 'PD_Primary + disputed and parkinsonism-plus genes'}
+  PD_GWAS_L2G:         {include: [pd_gwas_l2g], description: 'Common-variant tier via Open Targets L2G >= 0.5; NOT nearest-gene'}
+  HD_HTT:              {include: [], explicit: [HTT], description: 'Huntington disease proper; expected negative'}
+  StriatalDegeneration: {include: [striatal_degeneration], description: 'Mendelian striatal degeneration; NOT a Huntington validation'}
+
+excluded:
+  refuted_pd: [TMEM230, UCHL1, HTRA2, EIF4G1, GIGYF2, NR4A2, PODXL, RIC3, PSAP]
+  pd_not_nigrostriatal: [SLC30A10, ATP1A3, PRKRA, WDR45, PANK2, C19orf12, ARSA, VPS16]
+  chorea_functional_not_degenerative: [NKX2-1, FRRS1L, ADCY5, GPR88]
+  chorea_circular_striatal_markers: [PDE10A, PDE2A, PDE8B]
+  l2g_artifact_loci: [FLG, HRNR, MUC19]
