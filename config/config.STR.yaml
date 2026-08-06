@@ -127,6 +127,25 @@ gene_sets:
   StriatalDegeneration_EM:
     geneweights: "dat/Genetics/GeneWeights/StriatalDegeneration.gw"
     null_model: "expmatched"
+  # --- Same sets, sibling-derived null (mutability-weighted), matching the ASD_All procedure. ---
+  PD_Primary_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/PD_Primary.gw"
+    null_model: "mutability"
+  PD_Sens_DA_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/PD_Sens_DA.gw"
+    null_model: "mutability"
+  PD_Sens_Atypical_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/PD_Sens_Atypical.gw"
+    null_model: "mutability"
+  PD_GWAS_L2G_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/PD_GWAS_L2G.gw"
+    null_model: "mutability"
+  HD_HTT_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/HD_HTT.gw"
+    null_model: "mutability"
+  StriatalDegeneration_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/StriatalDegeneration.gw"
+    null_model: "mutability"
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
   STR_ISH:
