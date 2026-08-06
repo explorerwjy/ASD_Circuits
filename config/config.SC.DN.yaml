@@ -35,6 +35,14 @@ gene_sets:
     geneweights: "dat/Genetics/GeneWeights_DN/StriatalDegeneration.DN.gw"
     null_model: "uniform"
 
+  # High-confidence tier (see config.STR.yaml for criterion)
+  PD_HighConf:
+    geneweights: "dat/Genetics/GeneWeights_DN/PD_HighConf.DN.gw"
+    null_model: "uniform"
+  PD_HighConf_DA:
+    geneweights: "dat/Genetics/GeneWeights_DN/PD_HighConf_DA.DN.gw"
+    null_model: "uniform"
+
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
   #STR_ISH: 

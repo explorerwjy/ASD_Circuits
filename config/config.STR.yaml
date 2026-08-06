@@ -146,6 +146,30 @@ gene_sets:
   StriatalDegeneration_SibMut:
     geneweights: "dat/Genetics/GeneWeights/StriatalDegeneration.gw"
     null_model: "mutability"
+  # --- HIGH-CONFIDENCE tier (post-hoc, derived 2026-08-06 from results/tables/PD_gene_literature_evidence.csv).
+  # Criterion applied to the literature table, NOT to any expression result:
+  #   include if ClinGen 'Definitive' OR established Mendelian PD with no dispute flag;
+  #   exclude disputed (DNAJC13, LRP10), insufficient-evidence (PTRHD1), contested replication (CHCHD2),
+  #   and atypical-parkinsonism whose pathology is not nigrostriatal PD (DCTN1, MAPT, POLG, TWNK, SPG11, DNAJC12).
+  PD_HighConf:
+    geneweights: "dat/Genetics/GeneWeights/PD_HighConf.gw"
+    null_model: "uniform"
+  PD_HighConf_EM:
+    geneweights: "dat/Genetics/GeneWeights/PD_HighConf.gw"
+    null_model: "expmatched"
+  PD_HighConf_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/PD_HighConf.gw"
+    null_model: "mutability"
+  PD_HighConf_DA:
+    geneweights: "dat/Genetics/GeneWeights/PD_HighConf_DA.gw"
+    null_model: "uniform"
+  PD_HighConf_DA_EM:
+    geneweights: "dat/Genetics/GeneWeights/PD_HighConf_DA.gw"
+    null_model: "expmatched"
+  PD_HighConf_DA_SibMut:
+    geneweights: "dat/Genetics/GeneWeights/PD_HighConf_DA.gw"
+    null_model: "mutability"
+
 # Analysis types and their corresponding expression matrices and modes
 analysis_types:
   STR_ISH:
