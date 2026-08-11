@@ -71,15 +71,20 @@ Huntington's disease. The analysis was pre-registered, and we report both a posi
 result. It is presented as new Supplementary Note section S-X, with supporting Supplementary Tables
 S-PD1–S-PD5.
 
-**Gene curation.** Our earlier exploratory Parkinson's gene list had been assembled by nearest-gene
-assignment from GWAS and, on inspection, contained almost no genuine PD genes (`COMMD9`, `GOLGA6L2`,
-`KRT76`, `CYP21A2`; only `GBA` and `MAPT` are established). We therefore re-curated from scratch. The
-primary set comprises 19 Mendelian Parkinson's/parkinsonism genes, each traceable to a verified primary
-publication (Table S-PD1); eight are classified "Definitive" for Parkinson disease by the ClinGen
-Gene–Disease Validity panel. Genes with disputed (`DNAJC13`, `LRP10`), insufficient (`PTRHD1`) or
-unreplicated (`CHCHD2`) evidence, and genes whose syndromes are pathologically distinct from
-nigrostriatal PD (`MAPT`, `DCTN1`, `POLG`, `TWNK`, `SPG11`, `DNAJC12`), were excluded by a rule applied
-to the literature table and frozen before any analysis was run.
+**Gene curation.** The primary set comprises 19 Mendelian Parkinson's/parkinsonism genes, each
+traceable to a verified primary publication (Table S-PD1); eight are classified "Definitive" for
+Parkinson disease by the ClinGen Gene–Disease Validity panel. Genes with disputed (`DNAJC13`,
+`LRP10`), insufficient (`PTRHD1`) or unreplicated (`CHCHD2`) evidence, and genes whose syndromes are
+pathologically distinct from nigrostriatal PD (`MAPT`, `DCTN1`, `POLG`, `TWNK`, `SPG11`, `DNAJC12`),
+were excluded by a rule applied to the literature table and frozen before any analysis was run.
+
+We also tested a common-variant tier: 41 genes assigned to Parkinson's GWAS loci by Open Targets
+locus-to-gene scores rather than by proximity. This set does not recover the dopaminergic population
+(AUROC 0.390, n.s.) or the affected structures, whereas the Mendelian set does. The framework
+therefore appears to require gene sets with established causal relationships to the disorder; genes
+nominated from common-variant association alone, even by principled locus-to-gene mapping, do not
+carry the same spatial signal. We regard this as a useful delimitation of the method's input
+requirements.
 
 **Cell-type level.** Against the 43 dopaminergic clusters of the Allen Brain Cell Atlas
 (`SNc-VTA-RAmb Foxa1 Dopa`), the PD gene set gives AUROC 0.986 (gene-set permutation p = 1×10⁻⁴).

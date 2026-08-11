@@ -12,12 +12,12 @@ have carried out the requested validation on Parkinson's disease, and — as the
 suggested — on Huntington's disease. The analysis is pre-registered, and we report both a positive
 and a negative result.
 
-**Curation.** Our earlier exploratory Parkinson's gene list was assembled by nearest-gene assignment
-from GWAS and, on inspection, contained almost no genuine PD genes (`COMMD9`, `GOLGA6L2`, `KRT76`,
-`CYP21A2`; only `GBA` and `MAPT` are established). We therefore re-curated from scratch. The primary
-set comprises 19 Mendelian Parkinson's/parkinsonism genes, each traceable to a verified primary
-publication (Supplementary Table S-PD1); eight are classified "Definitive" for Parkinson disease by
-the ClinGen Gene–Disease Validity panel. Genes with disputed (`DNAJC13`, `LRP10`), insufficient
+**Curation.** The primary set comprises 19 Mendelian Parkinson's/parkinsonism genes, each traceable
+to a verified primary publication (Supplementary Table S-PD1); eight are classified "Definitive" for
+Parkinson disease by the ClinGen Gene–Disease Validity panel. We additionally tested a common-variant
+tier of 41 genes assigned to PD GWAS loci by Open Targets locus-to-gene scores rather than proximity;
+that set recovers neither the dopaminergic population (AUROC 0.390, n.s.) nor the affected structures,
+delimiting the kind of genetic evidence the framework requires. Genes with disputed (`DNAJC13`, `LRP10`), insufficient
 (`PTRHD1`) or unreplicated (`CHCHD2`) evidence, and genes whose syndromes are pathologically distinct
 from nigrostriatal PD (`MAPT`, `DCTN1`, `POLG`, `TWNK`, `SPG11`, `DNAJC12`), were excluded by a rule
 applied to the literature table and frozen before any analysis was run.
