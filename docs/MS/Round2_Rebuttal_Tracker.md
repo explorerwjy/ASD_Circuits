@@ -1,14 +1,13 @@
 # Round 2 Rebuttal — Status Tracker
 
-**Manuscript:** GENCIC / ASD circuits (resubmission 2)
-**Scope of this file:** Reviewer #2 (Reviewer #1 to be added)
+**Manuscript:** GENCIC / ASD circuits — `*_resub_final` bundle + `Reviewers_Reponse_Letter_resub_33.docx`
+**Comments source:** `docs/MS/ReviewComments_Round2.docx`
+**Scope of this file:** Reviewer #2 in detail; Reviewer #1 indexed only (22 comments, to be scoped later)
 **Last updated:** 2026-08-11
 
-> ⚠️ **Reviewer comments not yet ingested.** The round-2 bundle has not reached this machine
-> (Archon) as of 2026-08-11 — nothing manuscript-related modified since March in `docs/MS/`,
-> and no recent `.docx`/`.zip` anywhere under `/home/jw3514` or `/mnt/data0`. Only R2-Q2 (PD/HD)
-> is recorded below, transcribed from chat. **Remaining comments are placeholders and must be
-> filled in from the bundle before this tracker is usable for planning.**
+**Referee expertise (stated in the file):** #1 connectomics + computational · #2 ASD genetics/genomics + computational.
+R#2 explicitly defers circuit-biology judgement to R#1 — so R#2 answers should lead with statistics,
+controls and genetics, not neuroanatomy.
 
 ## Status legend
 
@@ -18,22 +17,32 @@
 | 🟩 | Near complete — analysis done, packaging/figures outstanding |
 | 🟨 | In progress |
 | ⬜ | Not started |
-| ❓ | Comment text not yet available |
 
 ---
 
-## Reviewer #2
+## Reviewer #2 — overview
 
-| ID | Topic | Status | Owner | Blocking |
+| ID | Topic | Status | Effort | Notes |
 |---|---|---|---|---|
-| R2-Q1 | ❓ TBD — read from bundle | ❓ | — | bundle |
-| **R2-Q2** | **PD / HD validation of CCS-GENCIC** | **🟩** | Claude | manuscript figures |
-| R2-Q3 | ❓ TBD — read from bundle | ❓ | — | bundle |
-| R2-Q4+ | ❓ TBD — read from bundle | ❓ | — | bundle |
+| R2-M1 | Why mouse? ASD-relevant conservation; mouse models | ⬜ | Medium | Needs literature work, not new computation |
+| **R2-M2** | **Validate on a disease with known genes+circuit (PD/HD)** | **🟩** | — | **Essentially done — see below** |
+| R2-M3 | What does a single "ASD circuit" mean given heterogeneity? | ⬜ | Low–Med | Conceptual/discussion; possibly reuse gene-clustering work |
+| R2-M4a | Why expression *specificity* rather than overall expression? | ⬜ | Low | Justification + possibly a supporting analysis |
+| R2-M4b | Is ASD>sibling built into the metric? Alternative nulls | ⬜ | **Medium** | **Reusable: the 4-null framework built for R2-M2** |
+| R2-M5 | Circuit implicates much of the brain — specificity? core circuit? | ⬜ | Medium | **PD circuit (13 structures, 9-structure core) is a useful precedent** |
+| R2-m1 | Satterstrom/Fu overlap with SPARK — temper "independent" | ⬜ | Low | Compute overlap, soften language |
+| R2-m2 | CCS interpretation — what does the maximum mean? | ⬜ | Low–Med | Ties to R2-m3 |
+| R2-m3 | Are connectivity and bias really competing objectives? | ⬜ | Low | **We have direct evidence from the PD Pareto analysis** |
+| R2-m4 | Same metric used for ranking, sizing, optimizing AND evaluating | ⬜ | **Medium** | Held-out validation requested; PD/HD IS external validation |
+
+**Cross-cutting opportunity.** R2-M2 produced machinery that answers several other comments:
+the expression-decile-matched null and the four-null comparison (R2-M4b), a small high-confidence
+circuit with a stable core (R2-M5), the Pareto operating-point analysis (R2-m3), and an
+externally-validated test set (R2-m4). Draft those four with explicit pointers to the PD work.
 
 ---
 
-### R2-Q2 — Validate the framework on a disease with established causal genes 🟩
+### R2-M2 — Validate the framework on a disease with established causal genes 🟩
 
 **Comment (verbatim).** "The CCS/GENCIC framework is the primary methodological contribution of this
 work, so I would like to see stronger validation of its ability to recover biologically meaningful
@@ -44,11 +53,6 @@ disease-relevant neural circuits. Neurotransmitter systems are much more evoluti
 complex neurodevelopmental disorders. I would find it more convincing to validate the framework using
 a disease with both well-established causal genes and a well-characterized affected circuit, such as
 Parkinson's disease and/or Huntington's disease."
-
-**Approach.** Re-curated PD gene sets from scratch (the legacy `Parkinson.top61.gw` was nearest-gene
-GWAS output containing almost no real PD genes). Pre-registered gene sets and expected
-structures/cell types before computing anything. Tested at structure, cell-type and circuit level
-under four null models, with a blinded two-rater neuropathology evaluation and specificity controls.
 
 **Headline results** — main gene set `PD_HighConf_DA`, 19 literature-backed Mendelian PD genes:
 
@@ -96,35 +100,96 @@ under four null models, with a blinded two-rater neuropathology evaluation and s
 
 ---
 
-### R2-Q1 — ❓ awaiting bundle
+### R2-M1 — Justify the use of mouse data for a human-specific disorder ⬜
 
-- [ ] Transcribe comment
-- [ ] Scope the analysis
-- [ ] Draft response
+Asks: why are ASD-relevant circuits expected to be conserved? How many analysed ASD genes have mouse
+models with ASD-relevant phenotypes? Do the implicated mouse circuits overlap circuits disrupted in
+existing ASD mouse models?
 
-### R2-Q3 — ❓ awaiting bundle
+- [ ] Count ASD genes in the analysed set with published mouse models showing ASD-relevant phenotypes
+      (candidate source: SFARI Gene animal-model annotations)
+- [ ] Literature survey: circuits disrupted across ASD mouse models vs our implicated structures
+- [ ] Draft the conservation argument; concede human-specific phenotypes explicitly
+- Note: mostly literature work. The R2-M2 curation pipeline (Europe PMC + verified PMIDs) is reusable.
 
-- [ ] Transcribe comment
-- [ ] Scope the analysis
-- [ ] Draft response
+### R2-M3 — What does a single "ASD circuit" mean given heterogeneity? ⬜
 
-### R2-Q4+ — ❓ awaiting bundle
+Asks: convergence on a common circuit, or an average population-level vulnerability landscape?
 
-- [ ] Determine how many comments Reviewer #2 raised
-- [ ] Create an entry per comment
+- [ ] Decide and state the claim explicitly
+- [ ] Consider reusing the existing gene-clustering analysis to show convergence vs heterogeneity
+- [ ] Discussion text on how genetic/phenotypic heterogeneity fits the framework
+
+### R2-M4a — Why expression specificity rather than overall expression? ⬜
+
+- [ ] Biological justification for specificity (Z2) over mean expression
+- [ ] Consider a supporting analysis: repeat the main result using overall expression, show it is weaker
+
+### R2-M4b — Is the ASD>sibling result built into the metric? ⬜ **(reuse R2-M2)**
+
+Asks which analyses are independent of the mutation weighting, and whether alternative nulls agree.
+
+- [ ] State plainly which analyses are weighting-independent
+- [ ] **Reuse the four-null framework from R2-M2** (uniform random, expression-decile-matched,
+      sibling-uniform, sibling-mutability). Code: `scripts/script_generate_geneweights.py`
+      (`expmatched` branch) + `Snakefile.bias`
+- [ ] Report ASD under all four nulls as PD was
+- Note: the expression-decile-matched null also partly answers **R#1 comment 7 and 9**.
+
+### R2-M5 — Is the circuit too large to be specific? Is there a core? ⬜
+
+- [ ] Report the dynamic range of bias values
+- [ ] Address whether a 46-structure circuit is typical for complex disorders
+- [ ] Identify a smaller high-confidence core for ASD
+- Note: PD gives a strong precedent — a 13-structure circuit with a 9-structure core stable across
+  sizes 11–20. The same consensus-core method transfers directly.
+
+### R2-m1 — Temper "independent" for Satterstrom / Fu gene sets ⬜
+
+- [ ] Compute exact overlap with SPARK; report it
+- [ ] Soften "independent validation" wording throughout
+
+### R2-m2 — CCS interpretation ⬜
+
+- [ ] Explain what maximum CCS means biologically and how to read absolute values
+- [ ] Justify why peak CCS sets the preferred circuit size
+
+### R2-m3 — Are connectivity and bias genuinely competing? ⬜ **(evidence exists)**
+
+- [ ] Answer using the PD Pareto analysis: they *are* competing — at the permissive end the optimiser
+      drops SNc/VTA for densely-connected reticular formation, while at the ASD-matched operating
+      point (−20% bias, +77–137% CCS) the dopaminergic core is retained. That trade-off is exactly
+      what a Pareto formulation is for. Figure `04b_pareto_fronts_operating_points.png`.
+
+### R2-m4 — Same metric used for ranking, sizing, optimizing and evaluating ⬜
+
+- [ ] **Point at R2-M2 as external validation**: the PD analysis evaluates against an independent
+      criterion (published human neuropathology, blinded two-rater) rather than the bias metric itself
+- [ ] Consider a held-out validation for ASD
 
 ---
 
-## Reviewer #1 — ❓ awaiting bundle
+## Reviewer #1 — 22 comments, not yet scoped ⬜
 
-Not yet scoped. Add a matching section once the comments are available.
+Connectomics/computational referee. Index only; scope after R#2.
+
+1 terminology ("mutation bias" overclaims) · 2 weighting sensitivity (equal weights, leave-one-out,
+remove recurrent genes, risk-based weights) · 3 LGD-only vs Dmis-only · 4 orthology mapping ·
+5 developmental-stage mismatch · 6 Fig 2 model/controls · 7 matched null models (expression, length,
+mutability, LOEUF, network degree) · 8 compositional confounding · 9 how expression-matched sampling
+was done · 10 FDR 0.1 too permissive; spatial permutation · 11–22 to be transcribed.
+
+**Overlap with R#2 work already done:** R#1-2 (leave-one-out) and R#1-7/9 (matched nulls) are directly
+served by the R2-M2 machinery. R#1-1 (terminology) affects wording throughout and should be resolved
+before final text is written.
 
 ---
 
 ## Cross-cutting
 
-- [ ] Locate the round-2 bundle (**not on Archon as of 2026-08-11**)
-- [ ] Confirm bundle contents: main text, methods, supplementary note, response letter, both reviewers' comments
-- [ ] Decide where the PD/HD material lands: new Supplementary Note section vs main-text figure
-- [ ] Check whether any round-1 response text needs updating for consistency with R2-Q2
-- [ ] Deprecate legacy `Parkinson.top61.gw` / `ALZ.top60.gw` and audit any figure or table built on them
+- [x] Locate the round-2 bundle — arrived 2026-08-11 in `docs/MS/`
+- [ ] Transcribe R#1 comments 11–22 into this tracker
+- [ ] Decide where PD/HD lands: new Supplementary Note section vs main-text figure
+- [ ] Check round-1 response text for consistency with the R2-M2 answer
+- [ ] Deprecate legacy `Parkinson.top61.gw` / `ALZ.top60.gw`; audit any figure/table built on them
+- [ ] Confirm `Supplementary_Tables_resub_final.xlsx` S-numbering before assigning S-PD numbers
