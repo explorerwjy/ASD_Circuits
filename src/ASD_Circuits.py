@@ -1633,8 +1633,9 @@ def batch_permutation_bias(STR_BiasMat, gene_pool, weights, n_perm=10000,
     -------
     list of DataFrame
         One bias DataFrame per permutation, each with ``EFFECT``, ``Rank``,
-        and ``Region`` columns, matching the format of
-        ``MouseSTR_AvgZ_Weighted``.
+        and ``REGION`` columns, matching the format of
+        ``MouseSTR_AvgZ_Weighted``. Structures absent from ``STR2Region()``
+        get ``"Unknown"`` rather than NaN.
     """
     rng = np.random.default_rng(seed)
     k = len(weights)
@@ -1662,7 +1663,7 @@ def batch_permutation_bias(STR_BiasMat, gene_pool, weights, n_perm=10000,
         df = pd.DataFrame({'Structure': structures, 'EFFECT': effects}).set_index('Structure')
         df = df.sort_values('EFFECT', ascending=False)
         df['Rank'] = np.arange(1, len(df) + 1)
-        df['Region'] = [str2reg.get(s, 'Unknown') for s in df.index]
+        df['REGION'] = [str2reg.get(s, 'Unknown') for s in df.index]
         results.append(df)
 
     return results
