@@ -33,9 +33,13 @@ __pycache__/
 **/drafts/
 
 # docs/ tracks prose only (.md via the whitelist above), so design docs and plans
-# are visible in the repo and from Claude Code remote. The manuscript tree stays
-# ignored: it is ~227 MB of .docx drafts and copyrighted PDF reprints.
-docs/MS/
+# are visible in the repo and from Claude Code remote. The manuscript tree is ~227 MB
+# of .docx drafts and copyrighted PDF reprints, so ignore its contents -- but keep our
+# own markdown working files (rebuttal drafts, trackers) tracked. Note the trailing /*:
+# git cannot re-include a file whose parent DIRECTORY is excluded, so `docs/MS/` alone
+# would make the negation below a no-op.
+docs/MS/*
+!docs/MS/*.md
 
 # Validation and test files (not for publication)
 notebook_validation/
