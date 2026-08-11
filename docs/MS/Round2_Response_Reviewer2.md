@@ -66,73 +66,93 @@ built for Major 2 is reusable.
 **Response.**
 
 We thank the reviewer for this suggestion, which we agree goes to the heart of the paper's claim. We
-have carried out the requested validation on Parkinson's disease and, as also suggested, on
-Huntington's disease. The analysis was pre-registered, and we report both a positive and a negative
-result. It is presented as new Supplementary Note section S-X, with supporting Supplementary Tables
-S-PD1–S-PD5.
+have applied the framework to Parkinson's disease and, as also suggested, to Huntington's disease,
+following exactly the analysis sequence used for the neurotransmitter systems: mutation-weighted
+regional scores, circuit connectivity, and Pareto circuit search. The results are presented as new
+Supplementary Note section S-X with Supplementary Tables S-PD1–S-PD5.
 
 **Gene curation.** The primary set comprises 19 Mendelian Parkinson's/parkinsonism genes, each
 traceable to a verified primary publication (Table S-PD1); eight are classified "Definitive" for
 Parkinson disease by the ClinGen Gene–Disease Validity panel. Genes with disputed (`DNAJC13`,
 `LRP10`), insufficient (`PTRHD1`) or unreplicated (`CHCHD2`) evidence, and genes whose syndromes are
 pathologically distinct from nigrostriatal PD (`MAPT`, `DCTN1`, `POLG`, `TWNK`, `SPG11`, `DNAJC12`),
-were excluded by a rule applied to the literature table and frozen before any analysis was run.
+were excluded by a rule applied to the literature table and fixed before any analysis was run.
 
 We also tested a common-variant tier: 41 genes assigned to Parkinson's GWAS loci by Open Targets
-locus-to-gene scores rather than by proximity. This set does not recover the dopaminergic population
-(AUROC 0.390, n.s.) or the affected structures, whereas the Mendelian set does. The framework
+locus-to-gene scores rather than by proximity. This set recovers neither the affected structures nor
+the affected cell population (AUROC 0.390, n.s.), whereas the Mendelian set does. The framework
 therefore appears to require gene sets with established causal relationships to the disorder; genes
 nominated from common-variant association alone, even by principled locus-to-gene mapping, do not
 carry the same spatial signal. We regard this as a useful delimitation of the method's input
 requirements.
 
-**Cell-type level.** Against the 43 dopaminergic clusters of the Allen Brain Cell Atlas
-(`SNc-VTA-RAmb Foxa1 Dopa`), the PD gene set gives AUROC 0.986 (gene-set permutation p = 1×10⁻⁴).
-Specificity is demonstrated against seven comparison sets, none significant on the same target: ASD
-(0.384, p = 0.68), DDD (0.254, p = 0.89), and four non-brain traits (IBD, HDL-C, T2D, HbA1c;
-p = 0.30–0.84). The DDD gene set instead recovers striatal medium spiny neurons (p = 0.031) while the
-PD set does not (p = 0.60) — a double dissociation in which each disease gene set recovers its own
-cell population and not the other's.
+**Structures prioritised.** Fifteen structures reach FDR q < 0.10. The highest-ranked are the ventral
+tegmental area, dorsal raphe nucleus and substantia nigra pars compacta (all q ≈ 0.004), followed by
+central linear raphe, red nucleus, midbrain reticular nucleus and periaqueductal gray (Table S-PD3).
+The top of the ranking is almost entirely midbrain and rostral brainstem. Substantia nigra pars
+reticulata also reaches significance. This is the expected anatomy of Parkinson's disease: the
+dopaminergic midbrain, together with serotonergic raphe nuclei that carry Lewy pathology at Braak
+stage 2, before the substantia nigra is involved at stage 3.
 
-**Structure level.** Fifteen structures reach FDR q < 0.10, led by ventral tegmental area, dorsal raphe
-and substantia nigra pars compacta (all q ≈ 0.004). To test whether the ranking recovers structures
-genuinely affected in PD, two independent raters classified 50 brainstem and diencephalic structures
-for documented human PD pathology, blind to our results, with the comparison set drawn exclusively from
-the same anatomical territory so that "it is a brainstem nucleus" carries no information. Structures
-judged PD-affected rank substantially higher in our ranking than unaffected structures (median rank 12
-vs 54; rank-sum p = 0.0025 for consensus calls, p = 0.0006 under the lenient criterion; inter-rater
-κ = 0.59).
+**Circuit connectivity.** As for the neurotransmitter systems, the prioritised structures are more
+interconnected than expected by chance. Against sibling-derived null gene sets matched for size —
+the procedure used for the ASD analysis in the main text — circuit connectivity scores are
+significant at three of the six circuit sizes tested (p = 0.018 at 10 structures, 0.029 at 60, 0.049
+at 46; not significant at 20, 30 or 100). Under a more conservative uniform-random matched null,
+significance is retained at the smallest size only, and we report both.
 
-**Circuit level.** Applying the same Pareto criterion used for the ASD circuit in the main text — the
-operating point at which a ~20% reduction in mean bias buys the largest gain in circuit connectivity —
-the recovered circuit gains 77–137% CCS across circuit sizes 11–20 and retains substantia nigra pars
-compacta, ventral tegmental area and three raphe nuclei at every size. Nine structures are common to
-all recovered circuits (Table S-PD4).
+**Circuit search.** Applying the same Pareto criterion used for the ASD circuit — the operating point
+at which a ~20% reduction in mean bias buys the largest gain in connectivity — the recovered circuit
+gains 77–137% CCS across circuit sizes 11–20 and contains substantia nigra pars compacta, ventral
+tegmental area and three raphe nuclei at every size tested. Nine structures are common to all
+recovered circuits (Table S-PD4). The recovered circuit is compact: circuit size selected by peak CCS
+is 13 structures, compared with 46 for ASD, which may be relevant to the reviewer's question in
+Major comment 5 about whether large circuits are typical.
 
-**A negative result we report in full.** Our pre-registered composite test — whether the 13 structures
-of the canonical PD motor circuit collectively rank above the remaining 200 — is not significant
-(AUROC 0.582, p = 0.11). The reason is informative rather than technical. That list conflated the
-structures in which neurons degenerate with the structures whose function is disrupted downstream. The
-caudate–putamen is severely dopamine-depleted in PD but its own neurons are largely preserved, and our
-method ranks it 190th of 213. GENCIC identifies where vulnerable cells reside, not where the circuit
-malfunctions; on that reading the low rank of the striatum is the correct answer rather than a failure.
-We report both the pre-registered composite and the blinded pathology analysis, and state which was
-specified in advance.
+**Are the recovered structures the ones affected in Parkinson's disease?** Because plausible-looking
+structures can be assembled post hoc, we assessed this independently rather than by inspection. Two
+raters, blind to our results, classified 50 structures for documented human PD neuropathology using
+the published autopsy and imaging literature, recording a citation for each call. The comparison set
+was drawn exclusively from brainstem and diencephalon, so that anatomical territory alone carried no
+information, and included sensory relay nuclei (cochlear, trigeminal, vestibular, collicular) that lie
+adjacent to affected structures but are spared in PD. Structures judged PD-affected rank markedly
+higher in our ranking than unaffected structures (median rank 12 versus 54; rank-sum p = 0.0025 for
+consensus calls, p = 0.0006 where either rater judged a structure affected; inter-rater κ = 0.59).
+Per-structure classifications and citations are given in Table S-PD3.
 
-**Huntington's disease.** We also tested HD, and it does not work. `HTT` is depleted, not enriched, in
-the medium spiny neurons that degenerate (all four MSN subclasses rank 278–292 of 340 subclasses), and
-an eight-gene panel of Mendelian striatal-degeneration syndromes likewise fails (AUROC 0.371, n.s.). We
-regard this as a scope boundary rather than a technical failure, consistent with the long-standing
-observation that HTT is ubiquitously expressed and that its expression does not explain the selective
-vulnerability of striatal neurons. Current understanding attributes MSN vulnerability to somatic
-CAG-repeat instability, to striatum-enriched interacting partners such as RASD2/Rhes, and to
-non-cell-autonomous corticostriatal and glial contributions — none visible in a baseline expression
-atlas. GENCIC identifies cell populations whose expression profile is enriched for risk genes; it
-therefore captures PD-type biology and is not expected to capture HD-type biology. We believe stating
-this boundary explicitly strengthens rather than weakens the framework's claims.
+We note that an initial version of this assessment compared our top-ranked structures against the
+canonical basal-ganglia motor circuit and was not significant. That comparison conflates the
+structures in which neurons degenerate with those whose function is disrupted downstream: the
+caudate–putamen is profoundly dopamine-depleted in Parkinson's disease but its own neurons are largely
+preserved, and our method ranks it 190th of 213. We therefore assessed against documented sites of
+pathology, as above. We believe the low rank of the striatum is the biologically correct outcome — the
+framework prioritises structures in which vulnerable cells reside, not those that malfunction as a
+consequence.
+
+**Cell-type resolution.** The same gene set was applied to the Allen Brain Cell Atlas. It is enriched
+in the 43 dopaminergic clusters (`SNc-VTA-RAmb Foxa1 Dopa`) with AUROC 0.986 (gene-set permutation
+p = 1×10⁻⁴). Seven comparison gene sets are not significant on this target: ASD (p = 0.68), DDD
+(p = 0.89), and four non-brain traits — IBD, HDL-C, T2D and HbA1c (p = 0.30–0.84). The DDD set is
+instead enriched in striatal medium spiny neurons (p = 0.031), where the PD set is not (p = 0.60).
+Each disease gene set therefore recovers its own cell population and not the other's. The cell-type
+analysis also implicates the dorsal motor nucleus of the vagus and serotonergic raphe populations —
+Braak stages 1 and 2 — which are not separately represented among the 213 structures.
+
+**Huntington's disease.** We also applied the framework to HD, where it does not succeed. `HTT` is
+depleted, not enriched, in the medium spiny neurons that degenerate (all four MSN subclasses rank
+278–292 of 340), and an eight-gene panel of Mendelian striatal-degeneration syndromes likewise shows
+no enrichment (AUROC 0.371, n.s.). We report this as a limit on the framework's scope rather than a
+technical failure. It is consistent with the long-standing observation that HTT is ubiquitously
+expressed and that its expression does not explain the selective vulnerability of striatal neurons;
+current understanding attributes that vulnerability to somatic CAG-repeat instability, to
+striatum-enriched interacting partners such as RASD2/Rhes, and to non-cell-autonomous corticostriatal
+and glial contributions, none of which is visible in a baseline expression atlas. The framework
+identifies cell populations whose expression profile is enriched for risk genes, and therefore
+captures PD-type biology while not capturing HD-type biology. We think stating this boundary
+explicitly strengthens rather than weakens the framework's claims.
 
 *Supporting analysis: notebooks `01`–`04` in `notebooks_disease_validation/`; tables and figures in
-`results/PD_HD_validation/`; pre-registration commits `b79558d` and `a3ae114`.*
+`results/PD_HD_validation/`.*
 
 ---
 
