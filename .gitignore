@@ -48,3 +48,6 @@ notebook_rebuttal/*
 
 # Astro agent directory
 .astro/
+
+# SDD scratch workspace (ledger, briefs, review packages)
+.superpowers/

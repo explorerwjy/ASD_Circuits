@@ -13,7 +13,12 @@
 ## Global Constraints
 
 - Conda env `gencic` must be active for every command: `conda activate gencic`.
-- Random seed is **42** everywhere. No unseeded `np.random` calls. Prefer `np.random.default_rng(42)`.
+- Random seed base is **42**. No unseeded `np.random` calls; use `np.random.default_rng(seed)`.
+  Null generation derives a per-gene-set seed (`42 + zlib.crc32(geneset.encode()) % 10000`) so
+  two gene sets of equal size do not draw byte-identical nulls — PD sets and their negative
+  controls must not share Monte Carlo noise. Human ruling 2026-08-05, following CLAUDE.md's
+  `base_seed + job_index` convention over a flat 42. Everything else (notebooks, permutation
+  tests, samplers called directly) still uses 42.
 - All data paths relative to project root or loaded from `config/`. Never reference `/home/jw3514/Work/ASD_Circuits/` or `/mnt/data0/`.
 - **DN gene weights are for cell-type (CT) analysis ONLY.** Using them for STR_ISH produces corrupted results.
 - Notebooks are jupytext-paired `.py:percent`. **Never use NotebookEdit** — edit the `.py`, then `jupytext --sync <file>.py`. First cell is always `%load_ext autoreload` / `%autoreload 2`.
