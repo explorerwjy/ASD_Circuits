@@ -158,6 +158,10 @@ data_files:
   infomat_ipsi: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
   infomat_ipsi_short: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.Short.3900.csv"
   infomat_ipsi_long: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.Long.3900.csv"
+  # Raw connection-weight matrix (WeightMat) -- paired with infomat_ipsi, same connectome
+  weightmat_ipsi: "dat/allen-mouse-conn/ConnectomeScoringMat/WeightMat.Ipsi.csv"
+  # Open Targets disease-target association exports (notebook 05 gene-set robustness arm)
+  opentargets_pd: "dat/Genetics/OpenTargets/OT-MONDO_0021095-associated-targets-8_12_2026-v26_06.tsv"
   # Null connectivity scores (RankScore permutations)
   rankscore_ipsi: "dat/allen-mouse-conn/RankScores/RankScore.Ipsi.Cont.npy"
   rankscore_ipsi_short: "dat/allen-mouse-conn/RankScores/RankScore.Ipsi.Short.3900.Cont.npy"
