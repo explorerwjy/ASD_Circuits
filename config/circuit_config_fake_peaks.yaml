@@ -1,0 +1,98 @@
+# Configuration file for GENCIC Circuit Search Pipeline
+# Usage: snakemake -s Snakefile.circuit --configfile config/circuit_config.yaml --cores 10
+
+# ============================================================================
+# Input Data Files
+# ============================================================================
+
+# Bias dataframe: CSV file with mutation bias for each brain structure
+# Must have index column with structure names and 'EFFECT' column with bias values
+Input_str_bias:
+  PD_FAKE_cherrypicked:
+    name: "PD_FAKE_cherrypicked"
+    bias_df: "results/PD_HD_validation/PD_FAKE_cherrypicked_bias.csv"
+    description: "DIAGNOSTIC ONLY -- deliberately cherry-picked, not a real gene set"
+  PD_HighConf_DA:
+    name: "PD_HighConf_DA"
+    bias_df: "results/STR_ISH/PD_HighConf_DA_bias_addP_random.csv"
+    description: "19 literature-backed Mendelian PD genes; uniform-null bias"
+  PD_HighConf_DA_SibMut:
+    name: "PD_HighConf_DA_SibMut"
+    bias_df: "results/STR_ISH/PD_HighConf_DA_SibMut_bias_addP_sibling.csv"
+    description: "same gene set, mutability-weighted sibling null (ASD procedure)"
+
+
+# Connectivity matrices from Allen Mouse Brain Connectome
+weight_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/WeightMat.Ipsi.csv"
+info_mat: "dat/allen-mouse-conn/ConnectomeScoringMat/InfoMat.Ipsi.csv"
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+
+# Base output directory for all circuit search results
+# Will be organized as: {output_dir}/{dataset_name}/
+output_dir: "results/CircuitSearch"
+
+# ============================================================================
+# Circuit Search Parameters
+# ============================================================================
+
+# Circuit sizes to search (list of integers)
+# Size 46 is the primary CCS peak; 40, 45, 50 demonstrate robustness
+# Size 32 = number of structures at FDR<0.10 (SubSampleSib null)
+# Size 37 = number of structures at FDR<0.10 (sibling mutability null)
+circuit_sizes:
+  - 6
+  - 26
+
+# Number of top-ranked structures to consider as candidates
+# Default: 213 (structures with significant bias)
+top_n: 213
+
+# Minimum bias threshold: Use the bias value at this rank as minimum
+# Default: 50 (use 50th ranked structure's bias as cutoff)
+# This reduces computation by skipping low-bias circuits
+min_bias_rank: 50
+
+# Number of SA optimization runs per bias limit
+# Default: 10 (each run may find a different optimal circuit)
+sa_runtimes: 25
+
+# Number of SA steps per run (speed vs quality tradeoff)
+# Default: 50000 (higher = better quality but slower, lower = faster but may miss optimal)
+# Recommended range: 10000 (fast) to 100000 (thorough)
+sa_steps: 50000
+
+# Circuit scoring measure
+# Options: "SI" (Shannon Information) or "Connectivity"
+# Default: "SI"
+measure: "SI"
+
+# Number of parallel cores for execution
+# Default: 10
+n_cores: 20
+
+# Verbose output during SA runs
+# Default: False (suppress individual run details during pipeline execution)
+# Set to True for debugging
+verbose: False
+
+# ============================================================================
+# Example Configurations for Different Analyses
+# ============================================================================
+
+# Example 1: Quick test with single size
+# circuit_sizes: [46]
+# min_bias_rank: 30
+# sa_runtimes: 25
+
+# Example 2: Comprehensive search across multiple sizes
+# circuit_sizes: [33, 46, 60, 75]
+# min_bias_rank: 50
+# sa_runtimes: 25
+
+# Example 3: High-resolution Pareto front
+# circuit_sizes: [46]
+# min_bias_rank: 100  # Include more low-bias points
+# sa_runtimes: 25     # More runs for better optimization

@@ -55,3 +55,6 @@ notebook_rebuttal/*
 
 # SDD scratch workspace (ledger, briefs, review packages)
 .superpowers/
+
+# graphify tool output (5 MB of cache/graph artifacts)
+graphify-out/
